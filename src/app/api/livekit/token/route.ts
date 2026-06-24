@@ -46,8 +46,8 @@ export async function POST(request: Request) {
     }
 
     const sessionId =
-      sessionIdFromRoomName(roomName) ??
-      tokenRequest.participantMetadata ??
+      tokenRequest.participantMetadata?.trim() ||
+      sessionIdFromRoomName(roomName) ||
       "unknown";
 
     const roomConfig = new RoomConfiguration({

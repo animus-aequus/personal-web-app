@@ -5,6 +5,7 @@ import {
   useSession,
   useSessionMessages,
   type ReceivedMessage,
+  type UseSessionReturn,
 } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Mic, MicOff } from "lucide-react";
@@ -17,7 +18,7 @@ import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { MessageInput } from "@/components/chat/message-input";
 import { MessageList } from "@/components/chat/message-list";
 import { Button } from "@/components/ui/button";
-import { livekitRoomName } from "@/lib/livekit/room";
+import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import {
   type ChatMessage,
@@ -57,31 +58,72 @@ function uiMessageToChatMessage(message: UIMessage): ChatMessage | null {
   };
 }
 
-function VoiceControls({
-  sessionId,
-  onDisconnect,
-}: {
+function VoicePanel({ session }: { session: UseSessionReturn }) {
+  const { messages: sessionMessages } = useSessionMessages(session);
+  const liveTranscript = latestUserTranscript(sessionMessages);
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          Voice: {session.connectionState}
+          {session.isConnected ? " · connected" : ""}
+        </span>
+        <StartAudioButton session={session} />
+      </div>
+      <AgentAudioVisualizerBar />
+      {liveTranscript ? (
+        <p className="truncate text-xs text-muted-foreground">
+          Hearing: {liveTranscript}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+type TextChatAreaProps = {
   sessionId: string;
-  onDisconnect: () => void;
-}) {
+  voiceConnectionId: string | null;
+  voiceMessages: ChatMessage[];
+  voiceEnabled: boolean;
+  onVoiceDisconnect: () => void;
+};
+
+/**
+ * Mounted only after sessionId exists so useChat + DefaultChatTransport are
+ * created with the correct sessionId (useChat keeps the initial transport).
+ */
+function TextChatArea({
+  sessionId,
+  voiceConnectionId,
+  voiceMessages,
+  voiceEnabled,
+  onVoiceDisconnect,
+}: TextChatAreaProps) {
   const tokenSource = useMemo(
     () => TokenSource.endpoint("/api/livekit/token"),
     [],
   );
 
+  const livekitRoom = voiceConnectionId
+    ? livekitVoiceRoomName(sessionId, voiceConnectionId)
+    : livekitRoomName(sessionId);
+
   const session = useSession(tokenSource, {
-    roomName: livekitRoomName(sessionId),
+    roomName: livekitRoom,
+    participantMetadata: sessionId,
     agentName: LIVEKIT_AGENT_NAME,
   });
 
   const { start, end } = session;
-  const { messages: sessionMessages } = useSessionMessages(session);
 
   useVoiceChatSync(session);
 
-  const liveTranscript = latestUserTranscript(sessionMessages);
-
   useEffect(() => {
+    if (!voiceEnabled) {
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {
@@ -96,7 +138,7 @@ function VoiceControls({
           return;
         }
         console.error("LiveKit session failed to start", error);
-        onDisconnect();
+        onVoiceDisconnect();
       }
     })();
 
@@ -104,46 +146,8 @@ function VoiceControls({
       cancelled = true;
       void end();
     };
-  }, [start, end, onDisconnect, session.room]);
+  }, [voiceEnabled, voiceConnectionId, start, end, onVoiceDisconnect, session.room]);
 
-  return (
-    <AgentSessionProvider session={session}>
-      <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-        <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>
-            Voice: {session.connectionState}
-            {session.isConnected ? " · connected" : ""}
-          </span>
-          <StartAudioButton session={session} />
-        </div>
-        <AgentAudioVisualizerBar />
-        {liveTranscript ? (
-          <p className="truncate text-xs text-muted-foreground">
-            Hearing: {liveTranscript}
-          </p>
-        ) : null}
-      </div>
-    </AgentSessionProvider>
-  );
-}
-
-type TextChatAreaProps = {
-  sessionId: string;
-  voiceMessages: ChatMessage[];
-  voiceEnabled: boolean;
-  onVoiceDisconnect: () => void;
-};
-
-/**
- * Mounted only after sessionId exists so useChat + DefaultChatTransport are
- * created with the correct sessionId (useChat keeps the initial transport).
- */
-function TextChatArea({
-  sessionId,
-  voiceMessages,
-  voiceEnabled,
-  onVoiceDisconnect,
-}: TextChatAreaProps) {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -182,11 +186,9 @@ function TextChatArea({
       <MessageList messages={mergedMessages} isLoading={isLoading} />
 
       {voiceEnabled ? (
-        <VoiceControls
-          key={sessionId}
-          sessionId={sessionId}
-          onDisconnect={onVoiceDisconnect}
-        />
+        <AgentSessionProvider session={session}>
+          <VoicePanel session={session} />
+        </AgentSessionProvider>
       ) : null}
 
       <MessageInput onSend={handleSend} isLoading={isLoading} />
@@ -204,10 +206,23 @@ export function ChatPanel() {
   );
   const [bootstrapping, setBootstrapping] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
+    null,
+  );
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
   const handleVoiceDisconnect = useCallback(() => {
     setVoiceEnabled(false);
+  }, []);
+
+  const handleVoiceToggle = useCallback(() => {
+    setVoiceEnabled((enabled) => {
+      if (enabled) {
+        return false;
+      }
+      setVoiceConnectionId(crypto.randomUUID());
+      return true;
+    });
   }, []);
 
   useEffect(() => {
@@ -271,7 +286,7 @@ export function ChatPanel() {
           aria-pressed={voiceEnabled}
           aria-label={voiceEnabled ? "Turn voice off" : "Turn voice on"}
           disabled={!sessionId || bootstrapping}
-          onClick={() => setVoiceEnabled((current) => !current)}
+          onClick={handleVoiceToggle}
         >
           {voiceEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
         </Button>
@@ -287,6 +302,7 @@ export function ChatPanel() {
         <TextChatArea
           key={sessionId}
           sessionId={sessionId}
+          voiceConnectionId={voiceConnectionId}
           voiceMessages={voiceMessages}
           voiceEnabled={voiceEnabled}
           onVoiceDisconnect={handleVoiceDisconnect}
