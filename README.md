@@ -1,6 +1,8 @@
-# Personal Voice Agent — Web Frontend
+# Personal Assistant — Web UI
 
-Next.js PoC for the [personal-voice-agent](../personal-voice-agent) backend: multi-turn text chat and LiveKit voice in one session.
+Next.js chat application with text messaging and LiveKit voice. Server Route Handlers proxy to a compatible agent API and mint LiveKit tokens.
+
+**Agent-oriented docs:** [`docs/architecture.md`](docs/architecture.md) · [`docs/project_structure.md`](docs/project_structure.md) · [`docs/agent_api_contract.md`](docs/agent_api_contract.md)
 
 ## Stack
 
@@ -24,16 +26,7 @@ npm install
 npm run dev
 ```
 
-3. Run the backend and LiveKit worker (separate terminals):
-
-```bash
-# FastAPI
-cd ../personal-voice-agent
-uv run uvicorn app.api:app --reload --port 8000
-
-# LiveKit worker
-uv run python -m app.livekit.worker dev
-```
+3. Configure `AGENT_API_BASE_URL` (and optional `WEB_API_KEY`) to point at a running compatible agent API. For LiveKit voice, also set `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, and agent dispatch name variables — see table below.
 
 4. Open [http://localhost:3000](http://localhost:3000)
 
@@ -41,20 +34,21 @@ uv run python -m app.livekit.worker dev
 
 | Variable | Purpose |
 |----------|---------|
-| `AGENT_API_BASE_URL` | FastAPI base URL (default `http://localhost:8000`) |
-| `WEB_API_KEY` | Optional proxy key for backend REST |
+| `AGENT_API_BASE_URL` | Agent API base URL (default `http://localhost:8000`) |
+| `WEB_API_KEY` | Optional proxy key for agent API REST |
 | `LIVEKIT_URL` | LiveKit Cloud WebSocket URL |
 | `LIVEKIT_API_KEY` | LiveKit API key (server-only) |
 | `LIVEKIT_API_SECRET` | LiveKit API secret (server-only) |
-| `NEXT_PUBLIC_LIVEKIT_AGENT_NAME` | Agent dispatch name (default `personal-voice-agent`) |
+| `LIVEKIT_AGENT_NAME` | Agent dispatch name for token route (server) |
+| `NEXT_PUBLIC_LIVEKIT_AGENT_NAME` | Agent name for `useSession` (client; default `personal-voice-agent`) |
 
-## Routes
+## Routes (this app)
 
 | Path | Role |
 |------|------|
 | `/` | Chat UI (messages, input, voice toggle) |
-| `POST /api/session` | Proxy session bootstrap |
-| `POST /api/chat` | Proxy chat → FastAPI (AI SDK SSE) |
+| `POST /api/session` | Proxy session bootstrap to agent API |
+| `POST /api/chat` | Proxy chat; AI SDK SSE response |
 | `POST /api/livekit/token` | Mint LiveKit room token |
 
-Voice rooms use the name `web-{session_id}` so text and voice share DynamoDB state on the backend.
+Voice uses room names `web-{session_id}--{connection_id}` per connect; room metadata carries `session_id` so text and voice can share server-side conversation state. Details: [`docs/agent_api_contract.md`](docs/agent_api_contract.md).

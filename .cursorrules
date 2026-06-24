@@ -1,0 +1,13 @@
+# Cursor rules
+
+Project-specific agent instructions live in **`.cursor/rules/*.mdc`** (scoped by topic).
+
+Reference docs (this repo):
+
+- `docs/project_structure.md` — module map, where to edit
+- `docs/architecture.md` — UI/BFF flows and architectural decisions
+- `docs/agent_api_contract.md` — outbound agent API + LiveKit contract
+
+**Optional monorepo:** if a compatible agent API repo is open at `../personal-voice-agent`, read its `docs/` only when changing worker behaviour, LangGraph, or telephony — not for UI-only tasks.
+
+Do not duplicate long architecture prose here.

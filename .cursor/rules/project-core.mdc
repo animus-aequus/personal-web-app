@@ -1,0 +1,39 @@
+---
+description: Core project context and doc index for all agent work in this frontend repo
+alwaysApply: true
+---
+
+# Personal Website — frontend + BFF
+
+Next.js chat UI and BFF. Scheduling, LLM, and voice STT/TTS belong in a **separate agent API service** — do not add them here.
+
+## Before you edit
+
+| If you are… | Read first |
+|-------------|------------|
+| Any non-trivial change | `docs/project_structure.md` |
+| UI/BFF flows, session, voice+text merge | `docs/architecture.md` |
+| Route Handlers or `agent-client.ts` | `docs/agent_api_contract.md` + rule `next-api-routes` |
+| LiveKit / voice UI | rule `livekit-voice` |
+| Chat components / Zustand store | rule `chat-ui` |
+| Agent graph, worker, telephony, calendar | optional: agent API repo `docs/` if present in workspace (see `.cursorrules`) |
+
+After architectural changes, update the relevant `docs/` file in the same session.
+
+## Stack
+
+Next.js 16 · React 19 · TypeScript · Tailwind · shadcn/ui · Vercel AI SDK · LiveKit React SDK · Zustand
+
+## Layering (mandatory)
+
+`Browser UI` → `Route Handlers (BFF)` → compatible agent API (HTTP + LiveKit worker)
+
+Never put LLM, calendar, or Deepgram logic in UI or Route Handlers. See `docs/project_structure.md`.
+
+## Conventions
+
+- Minimal diffs; match existing style; no drive-by refactors
+- Dependencies: `npm install` / `npm run dev`
+- Do not commit unless explicitly asked
+- Do not add tests or markdown files unless requested
+- Entry page: `src/app/page.tsx` → `ChatPanel`

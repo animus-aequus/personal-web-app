@@ -1,0 +1,60 @@
+---
+description: Chat UI, useChat transport, Zustand message store, and merge logic
+globs: src/components/chat/**,src/lib/stores/**
+alwaysApply: false
+---
+
+# Chat UI and client state
+
+Read `docs/architecture.md` (Message merge, Session identity) before non-trivial changes.
+
+## Components
+
+| File | Role |
+|------|------|
+| `chat-panel.tsx` | Bootstrap session, voice toggle, `TextChatArea`, `useChat`, `useSession`, merge |
+| `message-list.tsx` | Renders `ChatMessage[]` |
+| `message-input.tsx` | Text send callback |
+
+## Session bootstrap
+
+- `ChatPanel` POSTs `/api/session` when Zustand has no `sessionId`
+- `TextChatArea` mounts only when `sessionId` exists, with `key={sessionId}`
+- **Why:** `useChat` + `DefaultChatTransport` bind `sessionId` at creation time
+
+## Text chat (`useChat`)
+
+```tsx
+new DefaultChatTransport({ api: "/api/chat", body: { sessionId } })
+```
+
+- Map AI SDK `UIMessage` → `ChatMessage` with `source: "text"`
+- Loading state from `status === "submitted" | "streaming"`
+
+## Zustand store (`chat-store.ts`)
+
+- Persist key: `personal-agent-chat`
+- Fields: `sessionId`, `messages`, `voiceMessageIds` (dedup set for voice rows)
+- `addVoiceMessage` — idempotent by message id
+- Voice messages always have `source: "voice"`
+
+## Merge in `chat-panel.tsx`
+
+```tsx
+[...voiceMessages, ...textMessages].sort((a, b) => a.timestamp - b.timestamp)
+```
+
+- `voiceMessages`: filtered from store (`source === "voice"`)
+- Do not write voice turns from `useSessionMessages` into the store
+
+## Voice toggle handler
+
+- Enable: set new `voiceConnectionId` + `voiceEnabled true` in same toggle
+- Disable: `voiceEnabled false` → effect cleanup calls `session.end()`
+- On `start()` failure: `onVoiceDisconnect()` resets toggle
+
+## Do not
+
+- Mount/unmount `useSession` when toggling voice (see rule `livekit-voice`)
+- Use session transcriptions as persisted chat history
+- Create `useChat` before `sessionId` is known

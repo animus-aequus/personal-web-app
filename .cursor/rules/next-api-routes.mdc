@@ -1,0 +1,48 @@
+---
+description: Next.js Route Handlers — BFF proxy to agent API and LiveKit token minting
+globs: src/app/api/**
+alwaysApply: false
+---
+
+# Next.js API routes (BFF)
+
+Read `docs/architecture.md` (Request lifecycle, Authentication) before non-trivial changes.
+
+## Routes
+
+| Route | Purpose |
+|-------|---------|
+| `POST /api/session` | Proxy → agent API `POST /api/v1/sessions`; returns `session_id` |
+| `POST /api/chat` | Proxy → agent API `POST /api/v1/chat`; wraps reply in AI SDK SSE |
+| `POST /api/livekit/token` | Mint LiveKit JWT + `RoomAgentDispatch` (server-only secrets) |
+
+Shared client: `src/lib/agent-client.ts` (`AGENT_API_BASE_URL`, optional `WEB_API_KEY` header).
+
+## Chat route pattern
+
+- Input: AI SDK transport body with `sessionId` / `session_id` and `messages[]`
+- Extract last user text part; reject if missing
+- Call `sendAgentChat(sessionId, userText)` — **no streaming from backend**
+- Emit single assistant text via `createUIMessageStream` for `useChat` compatibility
+
+## Session route pattern
+
+- Accept optional `{ session_id }` for resume
+- Forward to `createAgentSession()`
+- Return JSON with `Cache-Control: no-store`
+
+## LiveKit token route
+
+- Parse `TokenSourceRequest` from LiveKit client
+- Resolve chat `sessionId` from `participantMetadata` first, then room name parser
+- Set `RoomConfiguration.metadata` to `{"session_id": sessionId}`
+- Attach `RoomAgentDispatch` with `LIVEKIT_AGENT_NAME`
+- Never log or return API secrets
+
+## Do not
+
+- Expose `WEB_API_KEY`, LiveKit secrets, or Bedrock credentials to the browser
+- Call Google Calendar or LangGraph from Route Handlers
+- Change AI SDK stream shape without updating `chat-panel.tsx` transport expectations
+
+For LiveKit room naming and voice reconnect semantics, see rule `livekit-voice`.

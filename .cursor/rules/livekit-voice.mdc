@@ -1,0 +1,58 @@
+---
+description: LiveKit voice session, room naming, chat_sync, and Agents UI wrappers
+globs: src/lib/livekit/**,src/components/agents-ui/**,src/app/api/livekit/**
+alwaysApply: false
+---
+
+# LiveKit voice (frontend)
+
+Read `docs/architecture.md` (Web voice, Architectural decisions) first.
+
+Worker-side STT/TTS and barge-in: agent API repo `docs/architecture.md` (LiveKit section) if in workspace — see `.cursorrules`.
+
+## Room naming (`lib/livekit/room.ts`)
+
+- Base prefix: `web-`
+- **Each voice connect:** `web-{sessionId}--{connectionId}` via `livekitVoiceRoomName()`
+- Pass `participantMetadata: sessionId` to `useSession` so token route resolves the chat thread
+- **Do not** reuse the same room name after disconnect — LiveKit will not re-dispatch the agent
+
+## Session lifecycle (`chat-panel.tsx`)
+
+- `useSession` lives for the `sessionId` lifetime (not mounted only when voice is on)
+- On voice enable: new `voiceConnectionId` (`crypto.randomUUID()`), then effect runs `start()`
+- After `start()`: `await session.room.startAudio()` for browser autoplay unlock
+- On voice disable / cleanup: `await end()`
+- **Do not** mount/unmount `useSession` on the voice toggle
+
+## Transcript sync (`voice-chat-sync.ts`)
+
+Data topic: `chat_sync`
+
+| Payload type | UI action |
+|--------------|-----------|
+| `voice_user` | `addVoiceMessage({ id: turnId, role: user, … })` |
+| `voice_assistant` | `addVoiceMessage({ id: turnId-assistant, role: assistant, … })` |
+
+This is the **source of truth** for voice rows in the chat list. `useSessionMessages` / `userTranscript` is live preview only (“Hearing: …”).
+
+## Agents UI wrappers
+
+| File | Role |
+|------|------|
+| `agent-session-provider.tsx` | `SessionProvider` + `RoomAudioRenderer` |
+| `start-audio-button.tsx` | LiveKit `StartAudio` fallback |
+| `agent-audio-visualizer-bar.tsx` | `BarVisualizer` when agent speaks |
+
+Render `AgentSessionProvider` only while `voiceEnabled` (children need session context).
+
+## Token route (`api/livekit/token`)
+
+- `sessionId` from `participantMetadata` before parsing room name suffix
+- `RoomConfiguration` metadata + agent dispatch on every mint
+
+## Do not
+
+- Duplicate `PersonalAgent` or scheduling logic in the frontend
+- Populate chat history from room transcriptions or partial STT events
+- Skip new `voiceConnectionId` on voice re-enable
