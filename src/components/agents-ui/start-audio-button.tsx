@@ -1,41 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  StartAudio,
+  type UseSessionReturn,
+} from "@livekit/components-react";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type StartAudioButtonProps = {
+  session: UseSessionReturn;
   label?: string;
 };
 
-/** Browser autoplay policies may block audio until user interaction. */
-export function StartAudioButton({ label = "Enable audio" }: StartAudioButtonProps) {
-  const [needsUnlock, setNeedsUnlock] = useState(false);
-
-  useEffect(() => {
-    const audio = document.createElement("audio");
-    audio.src =
-      "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-    audio
-      .play()
-      .then(() => setNeedsUnlock(false))
-      .catch(() => setNeedsUnlock(true));
-  }, []);
-
-  if (!needsUnlock) {
-    return null;
-  }
-
+/** Shown when the browser blocks LiveKit audio until user interaction. */
+export function StartAudioButton({
+  session,
+  label = "Enable audio",
+}: StartAudioButtonProps) {
   return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onClick={() => {
-        setNeedsUnlock(false);
-      }}
-    >
-      {label}
-    </Button>
+    <StartAudio
+      room={session.room}
+      label={label}
+      className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+    />
   );
 }

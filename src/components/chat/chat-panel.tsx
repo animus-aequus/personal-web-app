@@ -4,6 +4,7 @@ import { useChat } from "@ai-sdk/react";
 import {
   useSession,
   useSessionMessages,
+  type ReceivedMessage,
 } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Mic, MicOff } from "lucide-react";
@@ -17,6 +18,7 @@ import { MessageInput } from "@/components/chat/message-input";
 import { MessageList } from "@/components/chat/message-list";
 import { Button } from "@/components/ui/button";
 import { livekitRoomName } from "@/lib/livekit/room";
+import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import {
   type ChatMessage,
   useChatStore,
@@ -24,6 +26,16 @@ import {
 
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
+
+function latestUserTranscript(messages: ReceivedMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.type === "userTranscript" && message.message.trim()) {
+      return message.message.trim();
+    }
+  }
+  return null;
+}
 
 function uiMessageToChatMessage(message: UIMessage): ChatMessage | null {
   const text = message.parts
@@ -62,40 +74,37 @@ function VoiceControls({
     agentName: LIVEKIT_AGENT_NAME,
   });
 
-  const { messages: voiceMessages } = useSessionMessages(session);
-  const addVoiceMessage = useChatStore((state) => state.addVoiceMessage);
+  const { start, end } = session;
+  const { messages: sessionMessages } = useSessionMessages(session);
+
+  useVoiceChatSync(session);
+
+  const liveTranscript = latestUserTranscript(sessionMessages);
 
   useEffect(() => {
-    for (const message of voiceMessages) {
-      if (message.type === "userTranscript") {
-        addVoiceMessage({
-          id: message.id,
-          role: "user",
-          content: message.message,
-          timestamp: message.timestamp,
-        });
-      }
-      if (message.type === "agentTranscript") {
-        addVoiceMessage({
-          id: message.id,
-          role: "assistant",
-          content: message.message,
-          timestamp: message.timestamp,
-        });
-      }
-    }
-  }, [voiceMessages, addVoiceMessage]);
+    let cancelled = false;
 
-  useEffect(() => {
-    void session.start().catch((error) => {
-      console.error("LiveKit session failed to start", error);
-      onDisconnect();
-    });
+    void (async () => {
+      try {
+        await start();
+        if (cancelled) {
+          return;
+        }
+        await session.room.startAudio();
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        console.error("LiveKit session failed to start", error);
+        onDisconnect();
+      }
+    })();
 
     return () => {
-      void session.end();
+      cancelled = true;
+      void end();
     };
-  }, [session, onDisconnect]);
+  }, [start, end, onDisconnect, session.room]);
 
   return (
     <AgentSessionProvider session={session}>
@@ -105,11 +114,83 @@ function VoiceControls({
             Voice: {session.connectionState}
             {session.isConnected ? " · connected" : ""}
           </span>
-          <StartAudioButton />
+          <StartAudioButton session={session} />
         </div>
         <AgentAudioVisualizerBar />
+        {liveTranscript ? (
+          <p className="truncate text-xs text-muted-foreground">
+            Hearing: {liveTranscript}
+          </p>
+        ) : null}
       </div>
     </AgentSessionProvider>
+  );
+}
+
+type TextChatAreaProps = {
+  sessionId: string;
+  voiceMessages: ChatMessage[];
+  voiceEnabled: boolean;
+  onVoiceDisconnect: () => void;
+};
+
+/**
+ * Mounted only after sessionId exists so useChat + DefaultChatTransport are
+ * created with the correct sessionId (useChat keeps the initial transport).
+ */
+function TextChatArea({
+  sessionId,
+  voiceMessages,
+  voiceEnabled,
+  onVoiceDisconnect,
+}: TextChatAreaProps) {
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: { sessionId },
+      }),
+    [sessionId],
+  );
+
+  const { messages, sendMessage, status } = useChat({
+    id: sessionId,
+    transport,
+  });
+
+  const handleSend = useCallback(
+    async (text: string) => {
+      await sendMessage({ text });
+    },
+    [sendMessage],
+  );
+
+  const mergedMessages = useMemo(() => {
+    const textMessages = messages
+      .map(uiMessageToChatMessage)
+      .filter((message): message is ChatMessage => message !== null);
+
+    return [...voiceMessages, ...textMessages].sort(
+      (a, b) => a.timestamp - b.timestamp,
+    );
+  }, [messages, voiceMessages]);
+
+  const isLoading = status === "submitted" || status === "streaming";
+
+  return (
+    <>
+      <MessageList messages={mergedMessages} isLoading={isLoading} />
+
+      {voiceEnabled ? (
+        <VoiceControls
+          key={sessionId}
+          sessionId={sessionId}
+          onDisconnect={onVoiceDisconnect}
+        />
+      ) : null}
+
+      <MessageInput onSend={handleSend} isLoading={isLoading} />
+    </>
   );
 }
 
@@ -117,9 +198,14 @@ export function ChatPanel() {
   const sessionId = useChatStore((state) => state.sessionId);
   const setSessionId = useChatStore((state) => state.setSessionId);
   const storeMessages = useChatStore((state) => state.messages);
+  const voiceMessages = useMemo(
+    () => storeMessages.filter((message) => message.source === "voice"),
+    [storeMessages],
+  );
   const [bootstrapping, setBootstrapping] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+
   const handleVoiceDisconnect = useCallback(() => {
     setVoiceEnabled(false);
   }, []);
@@ -129,7 +215,7 @@ export function ChatPanel() {
 
     async function bootstrapSession() {
       if (sessionId) {
-        setBootstrapping(false);
+        setBootstrapping((current) => (current ? false : current));
         return;
       }
 
@@ -165,44 +251,6 @@ export function ChatPanel() {
     };
   }, [sessionId, setSessionId]);
 
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        body: () => ({ sessionId }),
-      }),
-    [sessionId],
-  );
-
-  const { messages, sendMessage, status } = useChat({
-    transport,
-  });
-
-  const handleSend = useCallback(
-    async (text: string) => {
-      if (!sessionId) {
-        return;
-      }
-      await sendMessage({ text });
-    },
-    [sessionId, sendMessage],
-  );
-
-  const mergedMessages = useMemo(() => {
-    const textMessages = messages
-      .map(uiMessageToChatMessage)
-      .filter((message): message is ChatMessage => message !== null);
-    const voiceMessages = storeMessages.filter(
-      (message) => message.source === "voice",
-    );
-
-    return [...voiceMessages, ...textMessages].sort(
-      (a, b) => a.timestamp - b.timestamp,
-    );
-  }, [messages, storeMessages]);
-
-  const isLoading = status === "submitted" || status === "streaming";
-
   return (
     <div className="mx-auto flex h-full w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
       <header className="flex items-center justify-between gap-3">
@@ -235,20 +283,17 @@ export function ChatPanel() {
         </p>
       ) : null}
 
-      <MessageList messages={mergedMessages} isLoading={isLoading} />
-
-      {sessionId && voiceEnabled ? (
-        <VoiceControls
+      {sessionId && !bootstrapping && !bootstrapError ? (
+        <TextChatArea
+          key={sessionId}
           sessionId={sessionId}
-          onDisconnect={handleVoiceDisconnect}
+          voiceMessages={voiceMessages}
+          voiceEnabled={voiceEnabled}
+          onVoiceDisconnect={handleVoiceDisconnect}
         />
-      ) : null}
-
-      <MessageInput
-        onSend={handleSend}
-        disabled={!sessionId || bootstrapping || !!bootstrapError}
-        isLoading={isLoading}
-      />
+      ) : (
+        <MessageList messages={voiceMessages} isLoading={bootstrapping} />
+      )}
     </div>
   );
 }

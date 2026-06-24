@@ -1,5 +1,5 @@
 const AGENT_API_BASE_URL =
-  process.env.AGENT_API_BASE_URL ?? "http://localhost:8080";
+  process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
 
 function agentHeaders(): HeadersInit {

@@ -5,8 +5,9 @@ import { BarVisualizer, useAgent, useSessionContext } from "@livekit/components-
 export function AgentAudioVisualizerBar() {
   const session = useSessionContext();
   const agent = useAgent(session);
+
   const audioTrack =
-    agent.isConnected && agent.microphoneTrack
+    agent.isConnected && agent.state === "speaking" && agent.microphoneTrack
       ? agent.microphoneTrack
       : session.local.microphoneTrack;
 

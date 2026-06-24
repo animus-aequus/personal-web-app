@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import {
+  RoomAudioRenderer,
   SessionProvider,
   type UseSessionReturn,
 } from "@livekit/components-react";
@@ -17,5 +18,10 @@ export function AgentSessionProvider({
   session,
   children,
 }: AgentSessionProviderProps) {
-  return <SessionProvider session={session}>{children}</SessionProvider>;
+  return (
+    <SessionProvider session={session}>
+      <RoomAudioRenderer room={session.room} />
+      {children}
+    </SessionProvider>
+  );
 }

@@ -29,7 +29,7 @@ npm run dev
 ```bash
 # FastAPI
 cd ../personal-voice-agent
-uv run uvicorn app.api:app --reload --port 8080
+uv run uvicorn app.api:app --reload --port 8000
 
 # LiveKit worker
 uv run python -m app.livekit.worker dev
@@ -41,7 +41,7 @@ uv run python -m app.livekit.worker dev
 
 | Variable | Purpose |
 |----------|---------|
-| `AGENT_API_BASE_URL` | FastAPI base URL (default `http://localhost:8080`) |
+| `AGENT_API_BASE_URL` | FastAPI base URL (default `http://localhost:8000`) |
 | `WEB_API_KEY` | Optional proxy key for backend REST |
 | `LIVEKIT_URL` | LiveKit Cloud WebSocket URL |
 | `LIVEKIT_API_KEY` | LiveKit API key (server-only) |
