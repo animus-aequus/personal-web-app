@@ -129,22 +129,6 @@
   }
 }
 
-/* LiveKit BarVisualizer */
-.lk-audio-bar-visualizer {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.375rem;
-  width: 100%;
-}
-.lk-audio-bar {
-  background-color: oklch(0.35 0.03 75 / 40%);
-  border-radius: 9999px;
-}
-.lk-audio-bar.lk-highlighted,
-.lk-audio-bar[data-lk-highlighted="true"] {
-  background-color: oklch(0.72 0.12 75);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

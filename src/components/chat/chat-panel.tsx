@@ -7,11 +7,10 @@ import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { AgentAudioVisualizerBar } from "@/components/agents-ui/agent-audio-visualizer-bar";
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
+import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
-import { ChatInputBar } from "@/components/chat/chat-input-bar";
 import { MessageList } from "@/components/chat/message-list";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
@@ -24,6 +23,7 @@ const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
+const CHAT_FADE_MS = 350;
 
 /** Stable per-session text timestamps; survives re-renders without refs in render. */
 const textMessageTimestamps = new Map<string, number>();
@@ -172,6 +172,30 @@ function TextChatArea({
 
   const isLoading = status === "submitted" || status === "streaming";
   const showGreeting = mergedMessages.length === 0 && !voiceEnabled;
+  const [voiceRevealReady, setVoiceRevealReady] = useState(false);
+  const userTrack = session.isConnected ? session.local.microphoneTrack : undefined;
+
+  useEffect(() => {
+    if (!voiceEnabled) {
+      return;
+    }
+    const timer = setTimeout(() => setVoiceRevealReady(true), CHAT_FADE_MS);
+    return () => {
+      clearTimeout(timer);
+      setVoiceRevealReady(false);
+    };
+  }, [voiceEnabled]);
+
+  const voiceChromeReady = voiceEnabled && voiceRevealReady;
+
+  const handleVoiceToggle = useCallback(() => {
+    if (voiceEnabled) {
+      setVoiceRevealReady(false);
+      setTimeout(() => onVoiceToggle(), CHAT_FADE_MS);
+      return;
+    }
+    onVoiceToggle();
+  }, [voiceEnabled, onVoiceToggle]);
 
   return (
     <AgentSessionProvider session={session}>
@@ -180,7 +204,7 @@ function TextChatArea({
         <ChatGreeting visible={showGreeting} />
 
         <motion.div
-          className="relative flex min-h-0 flex-1 flex-col"
+          className="relative flex min-h-0 flex-1 flex-col pb-24"
           initial={false}
           animate={{
             opacity: voiceEnabled ? 0 : 1,
@@ -193,24 +217,14 @@ function TextChatArea({
           <MessageList messages={mergedMessages} isLoading={isLoading} />
         </motion.div>
 
-        {voiceEnabled ? (
-          <div className="fixed inset-x-0 bottom-10 z-20 flex flex-col items-center gap-10 px-4">
-            <AgentAudioVisualizerBar />
-            <ChatInputBar
-              onSend={handleSend}
-              onVoiceToggle={onVoiceToggle}
-              voiceEnabled={true}
-              isLoading={isLoading}
-            />
-          </div>
-        ) : (
-          <ChatInputBar
-            onSend={handleSend}
-            onVoiceToggle={onVoiceToggle}
-            voiceEnabled={false}
-            isLoading={isLoading}
-          />
-        )}
+        <ChatControlBar
+          onSend={handleSend}
+          onVoiceToggle={handleVoiceToggle}
+          voiceEnabled={voiceEnabled}
+          voiceChromeReady={voiceChromeReady}
+          userTrack={userTrack}
+          isLoading={isLoading}
+        />
       </div>
     </AgentSessionProvider>
   );
@@ -305,13 +319,14 @@ export function ChatPanel() {
           onVoiceToggle={handleVoiceToggle}
         />
       ) : (
-        <div className="relative flex h-dvh min-h-0 flex-col">
+        <div className="relative flex h-dvh min-h-0 flex-col pb-24">
           <ChatGreeting visible={voiceMessages.length === 0} />
           <MessageList messages={voiceMessages} isLoading={bootstrapping} />
-          <ChatInputBar
+          <ChatControlBar
             onSend={() => {}}
             onVoiceToggle={handleVoiceToggle}
             voiceEnabled={voiceEnabled}
+            voiceChromeReady={false}
             disabled={inputDisabled}
             isLoading={bootstrapping}
           />
