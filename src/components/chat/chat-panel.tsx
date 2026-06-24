@@ -1,23 +1,18 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import {
-  useSession,
-  useSessionMessages,
-  type ReceivedMessage,
-  type UseSessionReturn,
-} from "@livekit/components-react";
+import { useSession } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Mic, MicOff } from "lucide-react";
 import { TokenSource } from "livekit-client";
+import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentAudioVisualizerBar } from "@/components/agents-ui/agent-audio-visualizer-bar";
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
-import { MessageInput } from "@/components/chat/message-input";
+import { ChatGreeting } from "@/components/chat/chat-greeting";
+import { ChatInputBar } from "@/components/chat/chat-input-bar";
 import { MessageList } from "@/components/chat/message-list";
-import { Button } from "@/components/ui/button";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import {
@@ -28,17 +23,25 @@ import {
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
 
-function latestUserTranscript(messages: ReceivedMessage[]): string | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.type === "userTranscript" && message.message.trim()) {
-      return message.message.trim();
-    }
+const EASE = [0.4, 0, 0.2, 1] as const;
+
+/** Stable per-session text timestamps; survives re-renders without refs in render. */
+const textMessageTimestamps = new Map<string, number>();
+
+function stableTextTimestamp(sessionId: string, messageId: string): number {
+  const key = `${sessionId}\0${messageId}`;
+  const existing = textMessageTimestamps.get(key);
+  if (existing !== undefined) {
+    return existing;
   }
-  return null;
+  const timestamp = Date.now();
+  textMessageTimestamps.set(key, timestamp);
+  return timestamp;
 }
 
-function uiMessageToChatMessage(message: UIMessage): ChatMessage | null {
+function uiMessageToChatMessage(
+  message: UIMessage,
+): Omit<ChatMessage, "timestamp"> | null {
   const text = message.parts
     .filter((part) => part.type === "text")
     .map((part) => part.text)
@@ -54,31 +57,7 @@ function uiMessageToChatMessage(message: UIMessage): ChatMessage | null {
     role: message.role === "user" ? "user" : "assistant",
     content: text,
     source: "text",
-    timestamp: Date.now(),
   };
-}
-
-function VoicePanel({ session }: { session: UseSessionReturn }) {
-  const { messages: sessionMessages } = useSessionMessages(session);
-  const liveTranscript = latestUserTranscript(sessionMessages);
-
-  return (
-    <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          Voice: {session.connectionState}
-          {session.isConnected ? " · connected" : ""}
-        </span>
-        <StartAudioButton session={session} />
-      </div>
-      <AgentAudioVisualizerBar />
-      {liveTranscript ? (
-        <p className="truncate text-xs text-muted-foreground">
-          Hearing: {liveTranscript}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 type TextChatAreaProps = {
@@ -87,6 +66,7 @@ type TextChatAreaProps = {
   voiceMessages: ChatMessage[];
   voiceEnabled: boolean;
   onVoiceDisconnect: () => void;
+  onVoiceToggle: () => void;
 };
 
 /**
@@ -99,6 +79,7 @@ function TextChatArea({
   voiceMessages,
   voiceEnabled,
   onVoiceDisconnect,
+  onVoiceToggle,
 }: TextChatAreaProps) {
   const tokenSource = useMemo(
     () => TokenSource.endpoint("/api/livekit/token"),
@@ -115,8 +96,6 @@ function TextChatArea({
     agentName: LIVEKIT_AGENT_NAME,
   });
 
-  const { start, end } = session;
-
   useVoiceChatSync(session);
 
   useEffect(() => {
@@ -125,14 +104,15 @@ function TextChatArea({
     }
 
     let cancelled = false;
+    const { start, end, room } = session;
 
     void (async () => {
       try {
-        await start();
+        await start({ tracks: { microphone: { enabled: true } } });
         if (cancelled) {
           return;
         }
-        await session.room.startAudio();
+        await room.startAudio();
       } catch (error) {
         if (cancelled) {
           return;
@@ -146,7 +126,9 @@ function TextChatArea({
       cancelled = true;
       void end();
     };
-  }, [voiceEnabled, voiceConnectionId, start, end, onVoiceDisconnect, session.room]);
+    // session identity changes on every render (connection state); including it loops start/end.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceEnabled + voiceConnectionId only
+  }, [voiceEnabled, voiceConnectionId, onVoiceDisconnect]);
 
   const transport = useMemo(
     () =>
@@ -171,28 +153,66 @@ function TextChatArea({
 
   const mergedMessages = useMemo(() => {
     const textMessages = messages
-      .map(uiMessageToChatMessage)
+      .map((message) => {
+        const base = uiMessageToChatMessage(message);
+        if (!base) {
+          return null;
+        }
+        return {
+          ...base,
+          timestamp: stableTextTimestamp(sessionId, message.id),
+        };
+      })
       .filter((message): message is ChatMessage => message !== null);
 
     return [...voiceMessages, ...textMessages].sort(
       (a, b) => a.timestamp - b.timestamp,
     );
-  }, [messages, voiceMessages]);
+  }, [messages, voiceMessages, sessionId]);
 
   const isLoading = status === "submitted" || status === "streaming";
+  const showGreeting = mergedMessages.length === 0 && !voiceEnabled;
 
   return (
-    <>
-      <MessageList messages={mergedMessages} isLoading={isLoading} />
+    <AgentSessionProvider session={session}>
+      <StartAudioButton session={session} label="Enable audio" className="sr-only" />
+      <div className="relative flex h-dvh min-h-0 flex-col">
+        <ChatGreeting visible={showGreeting} />
 
-      {voiceEnabled ? (
-        <AgentSessionProvider session={session}>
-          <VoicePanel session={session} />
-        </AgentSessionProvider>
-      ) : null}
+        <motion.div
+          className="relative flex min-h-0 flex-1 flex-col"
+          initial={false}
+          animate={{
+            opacity: voiceEnabled ? 0 : 1,
+            y: voiceEnabled ? 8 : 0,
+          }}
+          transition={{ duration: 0.35, ease: EASE }}
+          style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
+          aria-hidden={voiceEnabled}
+        >
+          <MessageList messages={mergedMessages} isLoading={isLoading} />
+        </motion.div>
 
-      <MessageInput onSend={handleSend} isLoading={isLoading} />
-    </>
+        {voiceEnabled ? (
+          <div className="fixed inset-x-0 bottom-10 z-20 flex flex-col items-center gap-10 px-4">
+            <AgentAudioVisualizerBar />
+            <ChatInputBar
+              onSend={handleSend}
+              onVoiceToggle={onVoiceToggle}
+              voiceEnabled={true}
+              isLoading={isLoading}
+            />
+          </div>
+        ) : (
+          <ChatInputBar
+            onSend={handleSend}
+            onVoiceToggle={onVoiceToggle}
+            voiceEnabled={false}
+            isLoading={isLoading}
+          />
+        )}
+      </div>
+    </AgentSessionProvider>
   );
 }
 
@@ -266,36 +286,12 @@ export function ChatPanel() {
     };
   }, [sessionId, setSessionId]);
 
-  return (
-    <div className="mx-auto flex h-full w-full max-w-3xl flex-col gap-4 p-4 md:p-6">
-      <header className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Personal Assistant</h1>
-          <p className="text-xs text-muted-foreground">
-            {bootstrapping
-              ? "Starting session…"
-              : sessionId
-                ? `Session ${sessionId.slice(0, 8)}…`
-                : "No session"}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant={voiceEnabled ? "default" : "outline"}
-          size="icon"
-          aria-pressed={voiceEnabled}
-          aria-label={voiceEnabled ? "Turn voice off" : "Turn voice on"}
-          disabled={!sessionId || bootstrapping}
-          onClick={handleVoiceToggle}
-        >
-          {voiceEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-        </Button>
-      </header>
+  const inputDisabled = !sessionId || bootstrapping || Boolean(bootstrapError);
 
+  return (
+    <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col">
       {bootstrapError ? (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {bootstrapError}
-        </p>
+        <p className="px-4 py-3 text-sm text-destructive">{bootstrapError}</p>
       ) : null}
 
       {sessionId && !bootstrapping && !bootstrapError ? (
@@ -306,9 +302,20 @@ export function ChatPanel() {
           voiceMessages={voiceMessages}
           voiceEnabled={voiceEnabled}
           onVoiceDisconnect={handleVoiceDisconnect}
+          onVoiceToggle={handleVoiceToggle}
         />
       ) : (
-        <MessageList messages={voiceMessages} isLoading={bootstrapping} />
+        <div className="relative flex h-dvh min-h-0 flex-col">
+          <ChatGreeting visible={voiceMessages.length === 0} />
+          <MessageList messages={voiceMessages} isLoading={bootstrapping} />
+          <ChatInputBar
+            onSend={() => {}}
+            onVoiceToggle={handleVoiceToggle}
+            voiceEnabled={voiceEnabled}
+            disabled={inputDisabled}
+            isLoading={bootstrapping}
+          />
+        </div>
       )}
     </div>
   );

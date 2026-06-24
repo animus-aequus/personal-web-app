@@ -11,18 +11,20 @@ import { cn } from "@/lib/utils";
 type StartAudioButtonProps = {
   session: UseSessionReturn;
   label?: string;
+  className?: string;
 };
 
 /** Shown when the browser blocks LiveKit audio until user interaction. */
 export function StartAudioButton({
   session,
   label = "Enable audio",
+  className,
 }: StartAudioButtonProps) {
   return (
     <StartAudio
       room={session.room}
       label={label}
-      className={cn(buttonVariants({ variant: "secondary", size: "sm" }))}
+      className={cn(buttonVariants({ variant: "secondary", size: "sm" }), className)}
     />
   );
 }
