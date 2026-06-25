@@ -6,19 +6,27 @@ import {
   type FormEvent,
   type KeyboardEvent,
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 
 import { AgentWaveVisualizer } from "@/components/agents-ui/agent-wave-visualizer";
-import { UserAudioVisualizerRadial } from "@/components/agents-ui/user-audio-visualizer-radial";
+import { UserRadialDots } from "@/components/agents-ui/user-radial-dots";
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-core";
+import {
+  CHAT_CONTROL,
+  computeControlBarGeometry,
+  measureTextareaHeight,
+  textSlotWidthForBar,
+} from "@/lib/chat/control-bar-geometry";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
-const BAR_MAX_PX = 672;
-const MIC_SIZE = 56;
+const MORPH_TRANSITION = {
+  duration: CHAT_CONTROL.MORPH_MS,
+  ease: EASE,
+} as const;
 
 type ChatControlBarProps = {
   onSend: (message: string) => Promise<void> | void;
@@ -39,27 +47,64 @@ export function ChatControlBar({
   disabled,
   isLoading,
 }: ChatControlBarProps) {
-  const collapsed = voiceEnabled;
-  const showRadial = voiceEnabled && voiceChromeReady;
-
   const [value, setValue] = useState("");
+  const [textHeight, setTextHeight] = useState<number>(CHAT_CONTROL.TEXT_LINE_PX);
+  const [barMaxWidth, setBarMaxWidth] = useState<number>(CHAT_CONTROL.BAR_MAX_PX);
+
+  const anchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const adjustHeight = useCallback(() => {
+  const geometry = computeControlBarGeometry(
+    voiceEnabled,
+    voiceChromeReady,
+    voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textHeight,
+    barMaxWidth,
+  );
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) {
+      return;
+    }
+
+    const syncBarMaxWidth = () => {
+      setBarMaxWidth(
+        Math.min(anchor.clientWidth, CHAT_CONTROL.BAR_MAX_PX),
+      );
+    };
+
+    syncBarMaxWidth();
+    const observer = new ResizeObserver(syncBarMaxWidth);
+    observer.observe(anchor);
+    return () => observer.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (voiceEnabled) {
+      return;
+    }
     const textarea = textareaRef.current;
     if (!textarea) {
       return;
     }
-    textarea.style.height = "auto";
-    const maxHeight = 96;
-    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
-  }, []);
+    setTextHeight(
+      measureTextareaHeight(textarea, textSlotWidthForBar(barMaxWidth)),
+    );
+  }, [voiceEnabled, barMaxWidth]);
 
-  useEffect(() => {
-    if (!voiceEnabled) {
-      adjustHeight();
-    }
-  }, [value, voiceEnabled, adjustHeight]);
+  const handleTextChange = useCallback(
+    (nextValue: string) => {
+      setValue(nextValue);
+      const textarea = textareaRef.current;
+      if (!textarea || voiceEnabled) {
+        return;
+      }
+      setTextHeight(
+        measureTextareaHeight(textarea, textSlotWidthForBar(barMaxWidth)),
+      );
+    },
+    [voiceEnabled, barMaxWidth],
+  );
 
   const submit = async () => {
     const trimmed = value.trim();
@@ -67,9 +112,7 @@ export function ChatControlBar({
       return;
     }
     setValue("");
-    if (textareaRef.current) {
-      textareaRef.current.style.height = "auto";
-    }
+    setTextHeight(CHAT_CONTROL.TEXT_LINE_PX);
     await onSend(trimmed);
   };
 
@@ -85,106 +128,128 @@ export function ChatControlBar({
     }
   };
 
-  const micButton = (
-    <button
-      type="button"
-      onClick={onVoiceToggle}
-      disabled={disabled}
-      aria-pressed={voiceEnabled}
-      aria-label={voiceEnabled ? "End voice conversation" : "Start voice conversation"}
-      className={cn(
-        "flex shrink-0 items-center justify-center rounded-full transition-colors",
-        voiceEnabled
-          ? "size-14 bg-primary text-primary-foreground shadow-lg hover:bg-primary/90"
-          : "size-10 text-foreground/80 hover:bg-muted/60 hover:text-foreground",
-        disabled && "opacity-50",
-      )}
-    >
-      <Mic className={cn("size-5", voiceEnabled && "size-6")} />
-    </button>
-  );
-
   return (
-    <div
-      className="fixed inset-x-0 bottom-6 z-20 flex flex-col items-center px-4"
-    >
-      <AnimatePresence>
-        {showRadial ? (
-          <motion.div
-            key="agent-wave"
-            className="mb-10"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.35, ease: EASE }}
-          >
-            <AgentWaveVisualizer />
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
+    <div className="fixed inset-x-0 bottom-6 z-20 px-4">
+      <div
+        ref={anchorRef}
+        className="mx-auto flex w-full max-w-2xl flex-col items-center"
+      >
+        <AnimatePresence>
+          {geometry.showRadial ? (
+            <motion.div
+              key="agent-wave"
+              className="mb-10"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.35, ease: EASE }}
+            >
+              <AgentWaveVisualizer />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
-      <AnimatePresence>
-        {showRadial ? (
-          <motion.div
-            key="radial"
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.92 }}
-            transition={{ duration: 0.35, ease: EASE }}
-          >
-            <UserAudioVisualizerRadial track={userTrack}>
-              {micButton}
-            </UserAudioVisualizerRadial>
-          </motion.div>
-        ) : (
+        <motion.div
+          className="relative flex items-center justify-center"
+          initial={false}
+          animate={{
+            width: geometry.wrapperWidth,
+            height: geometry.wrapperHeight,
+          }}
+          transition={MORPH_TRANSITION}
+        >
+          <AnimatePresence>
+            {geometry.showRadial ? (
+              <motion.div
+                key="radial-dots"
+                className="pointer-events-none absolute inset-0"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35, ease: EASE }}
+              >
+                <UserRadialDots track={userTrack} />
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
           <motion.form
-            key="bar"
             onSubmit={onSubmit}
-            className="mx-auto flex items-center overflow-hidden bg-card shadow-lg"
+            className="relative shrink-0 overflow-hidden rounded-full"
             initial={false}
             animate={{
-              width: collapsed ? MIC_SIZE : "100%",
-              maxWidth: collapsed ? MIC_SIZE : BAR_MAX_PX,
-              height: collapsed ? MIC_SIZE : "auto",
-              borderRadius: MIC_SIZE / 2,
-              paddingLeft: collapsed ? 0 : 8,
-              paddingRight: collapsed ? 0 : 8,
-              paddingTop: collapsed ? 0 : 8,
-              paddingBottom: collapsed ? 0 : 8,
+              width: geometry.shellWidth,
+              height: geometry.shellHeight,
             }}
-            transition={{ duration: 0.45, ease: EASE }}
+            transition={MORPH_TRANSITION}
           >
             <motion.div
-              className="flex min-w-0 flex-1 items-center"
+              className="absolute inset-0 rounded-full bg-card shadow-lg"
+              initial={false}
+              animate={{ opacity: geometry.shellBackgroundOpacity }}
+              transition={MORPH_TRANSITION}
+              aria-hidden
+            />
+
+            <motion.div
+              className="absolute overflow-hidden"
               initial={false}
               animate={{
-                opacity: collapsed ? 0 : 1,
-                width: collapsed ? 0 : "auto",
+                left: CHAT_CONTROL.BAR_PADDING,
+                top: geometry.textSlotTop,
+                width: geometry.textSlotWidth,
+                opacity: voiceEnabled ? 0 : 1,
               }}
-              transition={{ duration: 0.3, ease: EASE }}
-              style={{ pointerEvents: collapsed ? "none" : "auto" }}
+              transition={MORPH_TRANSITION}
+              style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
             >
               <textarea
                 ref={textareaRef}
                 value={value}
-                onChange={(event) => setValue(event.target.value)}
+                onChange={(event) => handleTextChange(event.target.value)}
                 onKeyDown={onKeyDown}
                 placeholder="Ask anything…"
-                disabled={disabled || isLoading || collapsed}
+                disabled={disabled || isLoading || voiceEnabled}
                 rows={1}
-                className="min-h-[24px] max-h-24 w-full min-w-0 resize-none bg-transparent py-1 pl-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                style={{
+                  height: textHeight,
+                  maxHeight: CHAT_CONTROL.TEXT_MAX_PX,
+                }}
+                className="w-full resize-none bg-transparent py-1 pl-4 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
               />
             </motion.div>
-            {collapsed ? (
-              <div className="flex size-full items-center justify-center">
-                {micButton}
-              </div>
-            ) : (
-              micButton
-            )}
+
+            <motion.button
+              type="button"
+              onClick={onVoiceToggle}
+              disabled={disabled}
+              aria-pressed={voiceEnabled}
+              aria-label={
+                voiceEnabled
+                  ? "End voice conversation"
+                  : "Start voice conversation"
+              }
+              className={cn(
+                "absolute z-10 flex items-center justify-center rounded-full",
+                voiceEnabled
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "text-foreground/80 hover:bg-muted/60 hover:text-foreground",
+                disabled && "opacity-50",
+              )}
+              initial={false}
+              animate={{
+                width: geometry.micSize,
+                height: geometry.micSize,
+                left: geometry.micLeft,
+                top: geometry.micTop,
+              }}
+              transition={MORPH_TRANSITION}
+            >
+              <Mic className={cn("size-5", voiceEnabled && "size-6")} />
+            </motion.button>
           </motion.form>
-        )}
-      </AnimatePresence>
+        </motion.div>
+      </div>
     </div>
   );
 }

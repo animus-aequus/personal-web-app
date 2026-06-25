@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useMemo } from "react";
+import { useMemo } from "react";
 
 import {
   useMultibandTrackVolume,
@@ -10,50 +10,57 @@ import {
 import { useAgentAudioVisualizerRadialAnimator } from "@/hooks/use-agent-audio-visualizer-radial";
 import { cn } from "@/lib/utils";
 
-const BAR_COUNT = 24;
-const RADIUS = 52;
+export const USER_RADIAL_BAR_COUNT = 24;
+export const USER_RADIAL_RADIUS = 52;
 
-type UserAudioVisualizerRadialProps = {
+export function userRadialClusterSize(): number {
+  const dotSize = (USER_RADIAL_RADIUS * Math.PI) / USER_RADIAL_BAR_COUNT;
+  return USER_RADIAL_RADIUS * 2 + dotSize;
+}
+
+type UserRadialDotsProps = {
   track: TrackReferenceOrPlaceholder | undefined;
-  children: ReactNode;
   className?: string;
 };
 
-export function UserAudioVisualizerRadial({
-  track,
-  children,
-  className,
-}: UserAudioVisualizerRadialProps) {
+/** Radial ring only — mount around a centered mic without replacing the control shell. */
+export function UserRadialDots({ track, className }: UserRadialDotsProps) {
   const volumeBands = useMultibandTrackVolume(track, {
-    bands: BAR_COUNT,
+    bands: USER_RADIAL_BAR_COUNT,
     loPass: 100,
     hiPass: 200,
   });
 
   const highlightedIndices = useAgentAudioVisualizerRadialAnimator(
     track ? "speaking" : "listening",
-    BAR_COUNT,
+    USER_RADIAL_BAR_COUNT,
     track ? 1000 : 500,
   );
 
   const bands = useMemo(
-    () => (track ? volumeBands : new Array(BAR_COUNT).fill(0)),
+    () => (track ? volumeBands : new Array(USER_RADIAL_BAR_COUNT).fill(0)),
     [track, volumeBands],
   );
 
-  const dotSize = useMemo(() => (RADIUS * Math.PI) / BAR_COUNT, []);
+  const dotSize = useMemo(
+    () => (USER_RADIAL_RADIUS * Math.PI) / USER_RADIAL_BAR_COUNT,
+    [],
+  );
+
+  const clusterSize = userRadialClusterSize();
 
   return (
     <div
       className={cn(
-        "relative flex items-center justify-center text-primary",
+        "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-primary",
         className,
       )}
-      style={{ width: RADIUS * 2 + dotSize, height: RADIUS * 2 + dotSize }}
+      style={{ width: clusterSize, height: clusterSize }}
+      aria-hidden
     >
       <div className="absolute inset-0 flex items-center justify-center">
         {bands.map((band, idx) => {
-          const angle = (idx / BAR_COUNT) * Math.PI * 2;
+          const angle = (idx / USER_RADIAL_BAR_COUNT) * Math.PI * 2;
           const isHighlighted = highlightedIndices.includes(idx);
           const scaleY = 1 + band * 3.5;
           const active = band > 0.04 || isHighlighted;
@@ -68,13 +75,12 @@ export function UserAudioVisualizerRadial({
               style={{
                 width: dotSize,
                 height: dotSize,
-                transform: `rotate(${angle}rad) translateY(-${RADIUS}px) scaleY(${scaleY})`,
+                transform: `rotate(${angle}rad) translateY(-${USER_RADIAL_RADIUS}px) scaleY(${scaleY})`,
               }}
             />
           );
         })}
       </div>
-      <div className="relative z-10">{children}</div>
     </div>
   );
 }
