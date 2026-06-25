@@ -10,8 +10,8 @@ type MessageListProps = {
 
 export function MessageList({ messages, isLoading }: MessageListProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 md:px-6">
-      <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
         {messages.map((message) => (
           <article
             key={message.id}

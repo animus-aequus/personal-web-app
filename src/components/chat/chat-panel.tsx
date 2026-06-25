@@ -303,9 +303,11 @@ export function ChatPanel() {
   const inputDisabled = !sessionId || bootstrapping || Boolean(bootstrapError);
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-3xl flex-col">
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
       {bootstrapError ? (
-        <p className="px-4 py-3 text-sm text-destructive">{bootstrapError}</p>
+        <p className="mx-auto w-full max-w-3xl px-4 py-3 text-sm text-destructive">
+          {bootstrapError}
+        </p>
       ) : null}
 
       {sessionId && !bootstrapping && !bootstrapError ? (
