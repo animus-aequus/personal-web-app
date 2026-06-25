@@ -16,10 +16,10 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
           <article
             key={message.id}
             className={cn(
-              "max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+              "max-w-[85%] text-sm leading-relaxed",
               message.role === "user"
-                ? "ml-auto bg-primary text-primary-foreground"
-                : "mr-auto bg-muted/50 text-foreground",
+                ? "ml-auto rounded-2xl bg-muted/50 px-4 py-3 text-foreground"
+                : "mr-auto text-foreground",
             )}
           >
             <p className="whitespace-pre-wrap">{message.content}</p>
