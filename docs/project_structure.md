@@ -29,6 +29,9 @@ personal-website/                 # this repo
 | `components/chat/message-list.tsx` | Renders merged message list |
 | `components/chat/message-input.tsx` | Text input + send |
 | `components/agents-ui/*` | Thin LiveKit Agents UI wrappers |
+| `components/visualizer/agent-aura.tsx` | three.js/R3F background aura (reasoning + streaming) |
+| `components/visualizer/voice-aura-bridge.tsx` | Voice agent state + TTS volume → aura phase |
+| `lib/stores/agent-activity-store.ts` | Ephemeral aura `phase` + transient `audioLevel` |
 | `components/ui/*` | shadcn/ui primitives |
 | `lib/agent-client.ts` | Server-side agent API client |
 | `lib/livekit/room.ts` | LiveKit room naming helpers |
@@ -43,6 +46,7 @@ personal-website/                 # this repo
 | Chat UI / voice toggle / merge logic | `src/components/chat/chat-panel.tsx` |
 | Message list / input styling | `src/components/chat/message-*.tsx` |
 | LiveKit session UI (audio, visualizer) | `src/components/agents-ui/*` |
+| Background aura / agent activity state | `src/components/visualizer/*`, `src/lib/stores/agent-activity-store.ts` |
 | Voice transcript sync | `src/lib/livekit/voice-chat-sync.ts` |
 | LiveKit room naming | `src/lib/livekit/room.ts` |
 | Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts` |

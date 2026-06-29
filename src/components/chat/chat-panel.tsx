@@ -12,6 +12,8 @@ import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { MessageList } from "@/components/chat/message-list";
+import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
+import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
   endVoiceSession,
@@ -175,6 +177,26 @@ function TextChatArea({
   }, [messages, voiceMessages, sessionId]);
 
   const isLoading = status === "submitted" || status === "streaming";
+
+  const setAuraPhase = useAgentActivityStore((store) => store.setPhase);
+
+  // Text chat owns the aura phase unless voice mode is active (then the
+  // VoiceAuraBridge takes over). Reset to idle when this area unmounts.
+  useEffect(() => {
+    if (voiceEnabled) {
+      return;
+    }
+    setAuraPhase(
+      status === "submitted"
+        ? "thinking"
+        : status === "streaming"
+          ? "responding"
+          : "idle",
+    );
+  }, [voiceEnabled, status, setAuraPhase]);
+
+  useEffect(() => () => setAuraPhase("idle"), [setAuraPhase]);
+
   const showGreeting = mergedMessages.length === 0 && !voiceEnabled;
   const [voiceRevealReady, setVoiceRevealReady] = useState(false);
   const userTrack = session.isConnected ? session.local.microphoneTrack : undefined;
@@ -206,6 +228,7 @@ function TextChatArea({
 
   return (
     <AgentSessionProvider session={session}>
+      <VoiceAuraBridge active={voiceEnabled} />
       <StartAudioButton session={session} label="Enable audio" className="sr-only" />
       <div className="relative flex h-dvh min-h-0 flex-col">
         <ChatGreeting visible={showGreeting} />
