@@ -13,6 +13,10 @@ import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { MessageList } from "@/components/chat/message-list";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
+import {
+  endVoiceSession,
+  publishVoiceModeExit,
+} from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import {
   type ChatMessage,
@@ -104,7 +108,7 @@ function TextChatArea({
     }
 
     let cancelled = false;
-    const { start, end, room } = session;
+    const { start, end } = session;
 
     void (async () => {
       try {
@@ -112,7 +116,7 @@ function TextChatArea({
         if (cancelled) {
           return;
         }
-        await room.startAudio();
+        await session.room.startAudio();
       } catch (error) {
         if (cancelled) {
           return;
@@ -124,7 +128,7 @@ function TextChatArea({
 
     return () => {
       cancelled = true;
-      void end();
+      void endVoiceSession(session.room, end);
     };
     // session identity changes on every render (connection state); including it loops start/end.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceEnabled + voiceConnectionId only
@@ -191,11 +195,14 @@ function TextChatArea({
   const handleVoiceToggle = useCallback(() => {
     if (voiceEnabled) {
       setVoiceRevealReady(false);
+      void publishVoiceModeExit(session.room).catch((error) => {
+        console.warn("Voice mode exit signal failed", error);
+      });
       setTimeout(() => onVoiceToggle(), CHAT_FADE_MS);
       return;
     }
     onVoiceToggle();
-  }, [voiceEnabled, onVoiceToggle]);
+  }, [voiceEnabled, onVoiceToggle, session.room]);
 
   return (
     <AgentSessionProvider session={session}>

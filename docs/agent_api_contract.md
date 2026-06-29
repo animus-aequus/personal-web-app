@@ -60,6 +60,14 @@ Voice replies stream to TTS sentence-by-sentence for low time-to-first-audio. Th
 
 This app consumes `chat_sync` in `src/lib/livekit/voice-chat-sync.ts` — not room transcriptions.
 
+Before leaving voice mode, the browser publishes on data topic **`voice_control`**:
+
+```json
+{ "type": "voice_mode_exit" }
+```
+
+The worker commits any in-flight assistant reply (same partial/full rules as barge-in) and mirrors it via `voice_assistant`. No `voice_user` row is added. Implemented in `src/lib/livekit/voice-control.ts` (sent before `session.end()`).
+
 ## Related docs
 
 - How this app uses the contract: [`architecture.md`](architecture.md)
