@@ -13,7 +13,7 @@ Read `docs/architecture.md` (Request lifecycle, Authentication) before non-trivi
 | Route | Purpose |
 |-------|---------|
 | `POST /api/session` | Proxy → agent API `POST /api/v1/sessions`; returns `session_id` |
-| `POST /api/chat` | Proxy → agent API `POST /api/v1/chat`; wraps reply in AI SDK SSE |
+| `POST /api/chat` | Proxy → agent API `POST /api/v1/chat/stream` (SSE); re-emits deltas as AI SDK UI message stream |
 | `POST /api/livekit/token` | Mint LiveKit JWT + `RoomAgentDispatch` (server-only secrets) |
 
 Shared client: `src/lib/agent-client.ts` (`AGENT_API_BASE_URL`, optional `WEB_API_KEY` header).
@@ -22,8 +22,8 @@ Shared client: `src/lib/agent-client.ts` (`AGENT_API_BASE_URL`, optional `WEB_AP
 
 - Input: AI SDK transport body with `sessionId` / `session_id` and `messages[]`
 - Extract last user text part; reject if missing
-- Call `sendAgentChat(sessionId, userText)` — **no streaming from backend**
-- Emit single assistant text via `createUIMessageStream` for `useChat` compatibility
+- Call `streamAgentChat(sessionId, userText)` — async generator consuming the backend SSE stream
+- Forward each delta as `text-delta` inside `createUIMessageStream` (mapping to AI SDK protocol lives here, not in the agent)
 
 ## Session route pattern
 

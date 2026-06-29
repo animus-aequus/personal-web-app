@@ -10,27 +10,49 @@ const CHAT_SYNC_TOPIC = "chat_sync";
 
 type VoiceChatSyncPayload =
   | { type: "voice_user"; turnId: string; text: string }
-  | { type: "voice_assistant"; turnId: string; text: string };
+  | {
+      type: "voice_assistant";
+      turnId: string;
+      text: string;
+      interrupted?: boolean;
+    };
 
 function parseChatSyncPayload(raw: Uint8Array): VoiceChatSyncPayload | null {
   try {
     const text = new TextDecoder().decode(raw);
-    const data = JSON.parse(text) as VoiceChatSyncPayload;
+    const data = JSON.parse(text) as Record<string, unknown>;
     if (
-      (data.type === "voice_user" || data.type === "voice_assistant") &&
-      typeof data.turnId === "string" &&
-      typeof data.text === "string" &&
-      data.text.trim()
+      data.type !== "voice_user" &&
+      data.type !== "voice_assistant"
     ) {
-      return data;
+      return null;
     }
+    if (
+      typeof data.turnId !== "string" ||
+      typeof data.text !== "string" ||
+      !data.text.trim()
+    ) {
+      return null;
+    }
+    if (data.type === "voice_user") {
+      return {
+        type: "voice_user",
+        turnId: data.turnId,
+        text: data.text,
+      };
+    }
+    return {
+      type: "voice_assistant",
+      turnId: data.turnId,
+      text: data.text,
+      interrupted: data.interrupted === true,
+    };
   } catch {
     return null;
   }
-  return null;
 }
 
-/** Sync voice chat rows from worker llm_node via LiveKit data channel. */
+/** Sync voice chat rows from worker via LiveKit data channel (conversation_item_added → chat_sync). */
 export function useVoiceChatSync(session: UseSessionReturn) {
   const addVoiceMessage = useChatStore((state) => state.addVoiceMessage);
 
@@ -68,6 +90,7 @@ export function useVoiceChatSync(session: UseSessionReturn) {
         id: `${message.turnId}-assistant`,
         role: "assistant",
         content: message.text.trim(),
+        interrupted: message.interrupted,
       });
     };
 

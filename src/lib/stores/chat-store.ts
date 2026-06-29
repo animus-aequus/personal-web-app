@@ -11,6 +11,8 @@ export type ChatMessage = {
   content: string;
   source: MessageSource;
   timestamp: number;
+  /** Voice assistant row stopped by user barge-in (verified partial only). */
+  interrupted?: boolean;
 };
 
 type ChatStore = {
@@ -42,7 +44,22 @@ export const useChatStore = create<ChatStore>()(
         })),
       addVoiceMessage: (message) => {
         const { voiceMessageIds } = get();
+        const timestamp = message.timestamp ?? Date.now();
         if (voiceMessageIds.has(message.id)) {
+          // Upsert: e.g. interrupted voice turn replaces full generated text
+          // with the actually-spoken transcript (same turnId-assistant id).
+          set((state) => ({
+            messages: state.messages.map((row) =>
+              row.id === message.id
+                ? {
+                    ...row,
+                    content: message.content,
+                    timestamp,
+                    interrupted: message.interrupted ?? row.interrupted,
+                  }
+                : row,
+            ),
+          }));
           return;
         }
         const nextIds = new Set(voiceMessageIds);
@@ -54,7 +71,7 @@ export const useChatStore = create<ChatStore>()(
             {
               ...message,
               source: "voice",
-              timestamp: message.timestamp ?? Date.now(),
+              timestamp,
             },
           ],
         }));

@@ -5,7 +5,7 @@ import {
 } from "ai";
 import { NextResponse } from "next/server";
 
-import { sendAgentChat } from "@/lib/agent-client";
+import { streamAgentChat } from "@/lib/agent-client";
 
 export const revalidate = 0;
 export const maxDuration = 120;
@@ -46,15 +46,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "message is required" }, { status: 400 });
     }
 
-    const { reply } = await sendAgentChat(sessionId, userText);
-
     const stream = createUIMessageStream({
-      execute: ({ writer }) => {
+      execute: async ({ writer }) => {
         const textId = "assistant-text";
         writer.write({ type: "text-start", id: textId });
-        writer.write({ type: "text-delta", id: textId, delta: reply });
-        writer.write({ type: "text-end", id: textId });
+        try {
+          for await (const delta of streamAgentChat(sessionId, userText)) {
+            writer.write({ type: "text-delta", id: textId, delta });
+          }
+        } finally {
+          writer.write({ type: "text-end", id: textId });
+        }
       },
+      onError: (error) =>
+        error instanceof Error ? error.message : "Chat failed",
     });
 
     return createUIMessageStreamResponse({ stream });
