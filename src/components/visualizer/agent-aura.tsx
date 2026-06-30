@@ -94,9 +94,16 @@ const FRAGMENT_SHADER = /* glsl */ `
     );
     float n = fbm(p * 1.7 + warp * warpAmt + vec2(t * 0.022, 0.0));
 
+    // Distance from a ROUNDED rectangle border (signed-distance to a round box)
+    // so the glow curves smoothly around the corners instead of creasing where
+    // the x and y bands meet. Identical to min-of-edges along the straight runs.
+    float cornerR = 0.08;
+    vec2 q = abs(uv - 0.5) - (vec2(0.5) - cornerR);
+    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - cornerR;
+    float edge = -sd; // 0 at the rounded border, grows inward
+
     // Irregular, organic border thickness driven by the same field, so the
     // glow swells and recedes around the perimeter instead of a uniform band.
-    float edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
     float thick = 0.17 + 0.12 * n;
     float band = pow(1.0 - clamp(edge / thick, 0.0, 1.0), 2.3);
 
@@ -191,12 +198,11 @@ function AuraQuad({ reduceMotion }: { reduceMotion: boolean }) {
       return;
     }
 
-    // Self-heal after a hot-reload that changed the uniform set: the persisted
-    // `useState` object can keep stale keys, which would throw every frame.
-    // Check the most-recently-added uniform so newly introduced ones are caught.
+    // Dev-only: recover from Fast Refresh leaving stale uniform keys in `useState`.
     if (
-      material.uniforms.uPresence === undefined ||
-      material.uniforms.uColorShift === undefined
+      process.env.NODE_ENV === "development" &&
+      (material.uniforms.uPresence === undefined ||
+        material.uniforms.uColorShift === undefined)
     ) {
       const fresh = createUniforms();
       fresh.uResolution.value.set(size.width, size.height);

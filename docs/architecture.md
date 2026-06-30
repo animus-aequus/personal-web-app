@@ -41,8 +41,8 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 ### Text chat
 
 1. User sends via `MessageInput` → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId }`.
-2. Route Handler calls `sendAgentChat()` → agent API `POST /api/v1/chat`.
-3. Reply wrapped in AI SDK SSE (`createUIMessageStream`) for `useChat`.
+2. Route Handler calls `streamAgentChat()` → agent API `POST /api/v1/chat/stream`.
+3. Token deltas re-emitted as AI SDK SSE (`createUIMessageStream`) for `useChat`.
 4. Messages mapped with `source: "text"`.
 
 ### Web voice (LiveKit)
@@ -53,7 +53,7 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`).
 5. Worker (agent API) handles STT/TTS and publishes `voice_user` / `voice_assistant` on `chat_sync`.
 6. `useVoiceChatSync` writes voice rows to Zustand.
-7. Voice off → effect cleanup calls `session.end()`.
+7. Voice off → browser publishes `voice_mode_exit` on `voice_control`, then effect cleanup calls `session.end()`.
 
 Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` stays the same.
 
@@ -93,9 +93,9 @@ Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` —
 
 ### AI SDK streaming adapter
 
-**Decision:** `/api/chat` emits AI SDK SSE with one text delta even when the agent API returns a single JSON `{ reply }`.
+**Decision:** `/api/chat` proxies agent API `POST /api/v1/chat/stream` and re-emits plain SSE deltas as the Vercel AI SDK UI message stream.
 
-**Why:** `useChat` expects the Vercel AI SDK transport shape.
+**Why:** `useChat` expects the AI SDK transport shape; the agent API streams token-by-token over its own SSE protocol (see `agent_api_contract.md`).
 
 ### Background aura via a normalized activity phase
 
@@ -110,7 +110,7 @@ Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` —
 | Session hook | `chat-panel.tsx` | `useSession`, lifecycle, merge |
 | Session context | `agent-session-provider.tsx` | `SessionProvider` + `RoomAudioRenderer` |
 | Audio unlock | `start-audio-button.tsx` | `StartAudio` fallback |
-| Visualizer | `agent-audio-visualizer-bar.tsx` | `BarVisualizer` |
+| Visualizer | `agent-wave-visualizer.tsx` | Agent wave + user radial dots in control bar |
 | Room naming | `lib/livekit/room.ts` | `livekitVoiceRoomName`, parsers |
 | Data sync | `lib/livekit/voice-chat-sync.ts` | `chat_sync` → Zustand |
 
@@ -120,7 +120,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 
 | Piece | Location | Role |
 |-------|----------|------|
-| Aura renderer | `components/visualizer/agent-aura.tsx` | R3F `<Canvas>` + fullscreen shader quad; eases intensity, shimmer, audio-reactive pulse |
+| Aura renderer | `components/visualizer/agent-aura.tsx` | R3F `<Canvas>` + fullscreen shader quad; rounded border glow, integrated shimmer/colour phases, audio-reactive pulse |
 | Activity state | `lib/stores/agent-activity-store.ts` | Ephemeral (not persisted) `phase` + transient `audioLevel` |
 | Text bridge | `chat-panel.tsx` (`TextChatArea`) | Maps `useChat().status` → `phase` when voice is off |
 | Voice bridge | `components/visualizer/voice-aura-bridge.tsx` | Maps `useVoiceAssistant().state` + live TTS volume → `phase` / `audioLevel` when voice is on |

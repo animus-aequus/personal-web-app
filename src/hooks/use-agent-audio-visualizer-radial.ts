@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentState } from "@livekit/components-react";
 
 function findGcdLessThan(columns: number, max: number = columns): number {
@@ -46,22 +46,27 @@ export function useAgentAudioVisualizerRadialAnimator(
   interval: number,
 ): number[] {
   const [index, setIndex] = useState(0);
-  const [sequence, setSequence] = useState<number[][]>([[]]);
+
+  const sequence = useMemo(() => {
+    if (state === "thinking") {
+      return generateListeningSequenceBar(barCount);
+    }
+    if (state === "connecting" || state === "initializing") {
+      return generateConnectingSequenceBar(barCount);
+    }
+    if (state === "listening") {
+      return generateListeningSequenceBar(barCount);
+    }
+    if (state === undefined || state === "speaking") {
+      return [new Array(barCount).fill(0).map((_, idx) => idx)];
+    }
+    return [[]];
+  }, [state, barCount]);
 
   useEffect(() => {
-    if (state === "thinking") {
-      setSequence(generateListeningSequenceBar(barCount));
-    } else if (state === "connecting" || state === "initializing") {
-      setSequence(generateConnectingSequenceBar(barCount));
-    } else if (state === "listening") {
-      setSequence(generateListeningSequenceBar(barCount));
-    } else if (state === undefined || state === "speaking") {
-      setSequence([new Array(barCount).fill(0).map((_, idx) => idx)]);
-    } else {
-      setSequence([[]]);
-    }
-    setIndex(0);
-  }, [state, barCount]);
+    const frame = requestAnimationFrame(() => setIndex(0));
+    return () => cancelAnimationFrame(frame);
+  }, [sequence]);
 
   const animationFrameId = useRef<number | null>(null);
   useEffect(() => {

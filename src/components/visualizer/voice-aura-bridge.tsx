@@ -45,6 +45,7 @@ export function VoiceAuraBridge({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (!active) {
+      setAudioLevel(0);
       return;
     }
     setAudioLevel(state === "speaking" ? Math.min(volume, 1) : 0);

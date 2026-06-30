@@ -42,7 +42,7 @@ This is the **source of truth** for voice rows in the chat list. `useSessionMess
 |------|------|
 | `agent-session-provider.tsx` | `SessionProvider` + `RoomAudioRenderer` |
 | `start-audio-button.tsx` | LiveKit `StartAudio` fallback |
-| `agent-audio-visualizer-bar.tsx` | `BarVisualizer` when agent speaks |
+| `agent-wave-visualizer.tsx` | Agent wave when voice is active |
 
 Render `AgentSessionProvider` only while `voiceEnabled` (children need session context).
 
