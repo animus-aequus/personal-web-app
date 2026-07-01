@@ -27,6 +27,7 @@ const EASE = [0.4, 0, 0.2, 1] as const;
 const MORPH_TRANSITION = {
   duration: CHAT_CONTROL.MORPH_MS,
   ease: EASE,
+  borderRadius: { duration: 0 },
 } as const;
 
 type ChatControlBarProps = {
@@ -52,6 +53,7 @@ export function ChatControlBar({
   const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
     height: CHAT_CONTROL.TEXT_LINE_PX,
     scrollable: false,
+    multiLine: false,
   }));
   const [barMaxWidth, setBarMaxWidth] = useState<number>(CHAT_CONTROL.BAR_MAX_PX);
 
@@ -63,7 +65,13 @@ export function ChatControlBar({
     voiceChromeReady,
     voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textMetrics.height,
     barMaxWidth,
+    !voiceEnabled && textMetrics.multiLine,
   );
+
+  const barPadding =
+    !voiceEnabled && textMetrics.multiLine
+      ? CHAT_CONTROL.BAR_PADDING_MULTILINE
+      : CHAT_CONTROL.BAR_PADDING;
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
@@ -92,9 +100,12 @@ export function ChatControlBar({
       return;
     }
     setTextMetrics(
-      measureTextareaMetrics(textarea, textSlotWidthForBar(barMaxWidth)),
+      measureTextareaMetrics(
+        textarea,
+        textSlotWidthForBar(barMaxWidth, barPadding),
+      ),
     );
-  }, [voiceEnabled, barMaxWidth, value]);
+  }, [voiceEnabled, barMaxWidth, value, barPadding]);
 
   const handleTextChange = useCallback((nextValue: string) => {
     setValue(nextValue);
@@ -168,18 +179,22 @@ export function ChatControlBar({
 
           <motion.form
             onSubmit={onSubmit}
-            className="relative shrink-0 overflow-hidden rounded-full"
+            className="relative shrink-0 overflow-hidden"
             initial={false}
             animate={{
               width: geometry.shellWidth,
               height: geometry.shellHeight,
+              borderRadius: geometry.borderRadius,
             }}
             transition={MORPH_TRANSITION}
           >
             <motion.div
-              className="absolute inset-0 rounded-full bg-card shadow-lg"
+              className="absolute inset-0 bg-card shadow-lg"
               initial={false}
-              animate={{ opacity: geometry.shellBackgroundOpacity }}
+              animate={{
+                opacity: geometry.shellBackgroundOpacity,
+                borderRadius: geometry.borderRadius,
+              }}
               transition={MORPH_TRANSITION}
               aria-hidden
             />
@@ -188,7 +203,7 @@ export function ChatControlBar({
               className="absolute overflow-hidden"
               initial={false}
               animate={{
-                left: CHAT_CONTROL.BAR_PADDING,
+                left: barPadding,
                 top: geometry.textSlotTop,
                 width: geometry.textSlotWidth,
                 opacity: voiceEnabled ? 0 : 1,
