@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic } from "lucide-react";
+import { Mic, Send } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -18,12 +18,17 @@ import {
   CHAT_CONTROL,
   computeControlBarGeometry,
   measureTextareaMetrics,
+  textButtonSize,
   textSlotWidthForBar,
   type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
+const SEND_TRANSITION = {
+  duration: 0.25,
+  ease: EASE,
+} as const;
 const MORPH_TRANSITION = {
   duration: CHAT_CONTROL.MORPH_MS,
   ease: EASE,
@@ -56,9 +61,13 @@ export function ChatControlBar({
     multiLine: false,
   }));
   const [barMaxWidth, setBarMaxWidth] = useState<number>(CHAT_CONTROL.BAR_MAX_PX);
+  const [isDesktop, setIsDesktop] = useState(false);
 
   const anchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const buttonSize = textButtonSize(isDesktop);
+  const showSendButton = !voiceEnabled && value.length > 0;
 
   const geometry = computeControlBarGeometry(
     voiceEnabled,
@@ -66,12 +75,19 @@ export function ChatControlBar({
     voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textMetrics.height,
     barMaxWidth,
     !voiceEnabled && textMetrics.multiLine,
+    showSendButton,
+    buttonSize,
   );
 
-  const barPadding =
-    !voiceEnabled && textMetrics.multiLine
-      ? CHAT_CONTROL.BAR_PADDING_MULTILINE
-      : CHAT_CONTROL.BAR_PADDING;
+  useLayoutEffect(() => {
+    const mediaQuery = window.matchMedia(
+      `(min-width: ${CHAT_CONTROL.DESKTOP_MIN_PX}px)`,
+    );
+    const syncDesktop = () => setIsDesktop(mediaQuery.matches);
+    syncDesktop();
+    mediaQuery.addEventListener("change", syncDesktop);
+    return () => mediaQuery.removeEventListener("change", syncDesktop);
+  }, []);
 
   useLayoutEffect(() => {
     const anchor = anchorRef.current;
@@ -102,10 +118,10 @@ export function ChatControlBar({
     setTextMetrics(
       measureTextareaMetrics(
         textarea,
-        textSlotWidthForBar(barMaxWidth, barPadding),
+        textSlotWidthForBar(barMaxWidth, buttonSize, showSendButton),
       ),
     );
-  }, [voiceEnabled, barMaxWidth, value, barPadding]);
+  }, [voiceEnabled, barMaxWidth, value, showSendButton, buttonSize]);
 
   const handleTextChange = useCallback((nextValue: string) => {
     setValue(nextValue);
@@ -199,67 +215,116 @@ export function ChatControlBar({
               aria-hidden
             />
 
-            <motion.div
-              className="absolute overflow-hidden"
-              initial={false}
-              animate={{
-                left: barPadding,
-                top: geometry.textSlotTop,
-                width: geometry.textSlotWidth,
-                opacity: voiceEnabled ? 0 : 1,
-              }}
-              transition={MORPH_TRANSITION}
-              style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
-            >
-              <textarea
-                ref={textareaRef}
-                value={value}
-                onChange={(event) => handleTextChange(event.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="Ask anything…"
-                disabled={disabled || isLoading || voiceEnabled}
-                rows={1}
-                style={{
-                  height: textMetrics.height,
-                  maxHeight: CHAT_CONTROL.TEXT_MAX_PX,
-                }}
+            {voiceEnabled ? (
+              <motion.button
+                type="button"
+                onClick={onVoiceToggle}
+                disabled={disabled}
+                aria-pressed={voiceEnabled}
+                aria-label="End voice conversation"
                 className={cn(
-                  "w-full resize-none bg-transparent py-1 pl-4 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50",
-                  textMetrics.scrollable
-                    ? "overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                    : "overflow-hidden",
+                  "absolute z-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90",
+                  disabled && "opacity-50",
                 )}
-              />
-            </motion.div>
+                initial={false}
+                animate={{
+                  width: geometry.micSize,
+                  height: geometry.micSize,
+                  left: geometry.micLeft,
+                  top: geometry.micTop,
+                }}
+                transition={MORPH_TRANSITION}
+              >
+                <Mic className="size-6" />
+              </motion.button>
+            ) : (
+              <>
+                <motion.div
+                  className="absolute overflow-hidden"
+                  initial={false}
+                  animate={{
+                    left: geometry.textSlotLeft,
+                    top: geometry.textSlotTop,
+                    width: geometry.textSlotWidth,
+                  }}
+                  transition={MORPH_TRANSITION}
+                >
+                  <textarea
+                    ref={textareaRef}
+                    value={value}
+                    onChange={(event) => handleTextChange(event.target.value)}
+                    onKeyDown={onKeyDown}
+                    placeholder="Ask anything…"
+                    disabled={disabled || isLoading}
+                    rows={1}
+                    style={{
+                      height: textMetrics.height,
+                      maxHeight: CHAT_CONTROL.TEXT_MAX_PX,
+                    }}
+                    className={cn(
+                      "w-full resize-none bg-transparent text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50",
+                      textMetrics.scrollable
+                        ? "overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                        : "overflow-hidden",
+                    )}
+                  />
+                </motion.div>
 
-            <motion.button
-              type="button"
-              onClick={onVoiceToggle}
-              disabled={disabled}
-              aria-pressed={voiceEnabled}
-              aria-label={
-                voiceEnabled
-                  ? "End voice conversation"
-                  : "Start voice conversation"
-              }
-              className={cn(
-                "absolute z-10 flex items-center justify-center rounded-full",
-                voiceEnabled
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "text-foreground/80 hover:bg-muted/60 hover:text-foreground",
-                disabled && "opacity-50",
-              )}
-              initial={false}
-              animate={{
-                width: geometry.micSize,
-                height: geometry.micSize,
-                left: geometry.micLeft,
-                top: geometry.micTop,
-              }}
-              transition={MORPH_TRANSITION}
-            >
-              <Mic className={cn("size-5", voiceEnabled && "size-6")} />
-            </motion.button>
+                <motion.button
+                  type="button"
+                  onClick={onVoiceToggle}
+                  disabled={disabled}
+                  aria-pressed={voiceEnabled}
+                  aria-label="Start voice conversation"
+                  className={cn(
+                    "absolute z-10 flex items-center justify-center rounded-full text-foreground/80 hover:bg-muted/60 hover:text-foreground",
+                    disabled && "opacity-50",
+                  )}
+                  initial={false}
+                  animate={{
+                    width: geometry.micSize,
+                    height: geometry.micSize,
+                    left: geometry.micLeft,
+                    top: geometry.micTop,
+                  }}
+                  transition={MORPH_TRANSITION}
+                >
+                  <Mic className={cn(isDesktop ? "size-4" : "size-5")} />
+                </motion.button>
+
+                <AnimatePresence>
+                  {showSendButton ? (
+                    <motion.button
+                      key="send"
+                      type="submit"
+                      disabled={disabled || isLoading}
+                      aria-label="Send message"
+                      className={cn(
+                        "absolute z-10 flex items-center justify-center rounded-full bg-primary hover:bg-primary/90",
+                        (disabled || isLoading) && "opacity-50",
+                      )}
+                      style={{
+                        left: geometry.sendLeft,
+                        top: geometry.sendTop,
+                        width: geometry.sendSize,
+                        height: geometry.sendSize,
+                      }}
+                      initial={{ x: buttonSize, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: buttonSize, opacity: 0 }}
+                      transition={SEND_TRANSITION}
+                    >
+                      <Send
+                        className={cn(
+                          "text-black",
+                          isDesktop ? "size-4" : "size-5",
+                        )}
+                      />
+                    </motion.button>
+                  ) : null}
+                </AnimatePresence>
+              </>
+            )}
           </motion.form>
         </motion.div>
       </div>
