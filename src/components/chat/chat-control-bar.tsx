@@ -17,8 +17,9 @@ import type { TrackReferenceOrPlaceholder } from "@livekit/components-core";
 import {
   CHAT_CONTROL,
   computeControlBarGeometry,
-  measureTextareaHeight,
+  measureTextareaMetrics,
   textSlotWidthForBar,
+  type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
 import { cn } from "@/lib/utils";
 
@@ -48,7 +49,10 @@ export function ChatControlBar({
   isLoading,
 }: ChatControlBarProps) {
   const [value, setValue] = useState("");
-  const [textHeight, setTextHeight] = useState<number>(CHAT_CONTROL.TEXT_LINE_PX);
+  const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
+    height: CHAT_CONTROL.TEXT_LINE_PX,
+    scrollable: false,
+  }));
   const [barMaxWidth, setBarMaxWidth] = useState<number>(CHAT_CONTROL.BAR_MAX_PX);
 
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -57,7 +61,7 @@ export function ChatControlBar({
   const geometry = computeControlBarGeometry(
     voiceEnabled,
     voiceChromeReady,
-    voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textHeight,
+    voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textMetrics.height,
     barMaxWidth,
   );
 
@@ -87,24 +91,14 @@ export function ChatControlBar({
     if (!textarea) {
       return;
     }
-    setTextHeight(
-      measureTextareaHeight(textarea, textSlotWidthForBar(barMaxWidth)),
+    setTextMetrics(
+      measureTextareaMetrics(textarea, textSlotWidthForBar(barMaxWidth)),
     );
-  }, [voiceEnabled, barMaxWidth]);
+  }, [voiceEnabled, barMaxWidth, value]);
 
-  const handleTextChange = useCallback(
-    (nextValue: string) => {
-      setValue(nextValue);
-      const textarea = textareaRef.current;
-      if (!textarea || voiceEnabled) {
-        return;
-      }
-      setTextHeight(
-        measureTextareaHeight(textarea, textSlotWidthForBar(barMaxWidth)),
-      );
-    },
-    [voiceEnabled, barMaxWidth],
-  );
+  const handleTextChange = useCallback((nextValue: string) => {
+    setValue(nextValue);
+  }, []);
 
   const submit = async () => {
     const trimmed = value.trim();
@@ -112,7 +106,6 @@ export function ChatControlBar({
       return;
     }
     setValue("");
-    setTextHeight(CHAT_CONTROL.TEXT_LINE_PX);
     await onSend(trimmed);
   };
 
@@ -212,10 +205,15 @@ export function ChatControlBar({
                 disabled={disabled || isLoading || voiceEnabled}
                 rows={1}
                 style={{
-                  height: textHeight,
+                  height: textMetrics.height,
                   maxHeight: CHAT_CONTROL.TEXT_MAX_PX,
                 }}
-                className="w-full resize-none bg-transparent py-1 pl-4 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50"
+                className={cn(
+                  "w-full resize-none bg-transparent py-1 pl-4 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus:outline-none disabled:opacity-50",
+                  textMetrics.scrollable
+                    ? "overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                    : "overflow-hidden",
+                )}
               />
             </motion.div>
 

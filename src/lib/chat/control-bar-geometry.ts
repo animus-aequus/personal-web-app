@@ -83,25 +83,29 @@ export function textSlotWidthForBar(barMaxWidth: number): number {
   return Math.max(0, barMaxWidth - BAR_PADDING * 2 - MIC_TEXT);
 }
 
-export function measureTextareaHeight(
+export type TextareaMetrics = {
+  height: number;
+  scrollable: boolean;
+};
+
+export function measureTextareaMetrics(
   element: HTMLTextAreaElement,
   slotWidthPx: number,
   singleLinePx: number = CHAT_CONTROL.TEXT_LINE_PX,
   maxPx: number = CHAT_CONTROL.TEXT_MAX_PX,
-): number {
+): TextareaMetrics {
   const previousHeight = element.style.height;
   const previousWidth = element.style.width;
 
   element.style.width = `${slotWidthPx}px`;
   element.style.height = "0px";
 
-  const measured = Math.max(
-    singleLinePx,
-    Math.min(element.scrollHeight, maxPx),
-  );
+  const contentHeight = element.scrollHeight;
+  const height = Math.max(singleLinePx, Math.min(contentHeight, maxPx));
+  const scrollable = contentHeight > maxPx;
 
   element.style.width = previousWidth;
   element.style.height = previousHeight;
 
-  return measured;
+  return { height, scrollable };
 }
