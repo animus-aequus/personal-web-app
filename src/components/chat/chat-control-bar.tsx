@@ -29,6 +29,12 @@ const SEND_TRANSITION = {
   duration: 0.25,
   ease: EASE,
 } as const;
+const SEND_LAYOUT_TRANSITION = {
+  duration: CHAT_CONTROL.MORPH_MS,
+  ease: EASE,
+  x: SEND_TRANSITION,
+  opacity: SEND_TRANSITION,
+} as const;
 const MORPH_TRANSITION = {
   duration: CHAT_CONTROL.MORPH_MS,
   ease: EASE,
@@ -62,6 +68,7 @@ export function ChatControlBar({
   }));
   const [barMaxWidth, setBarMaxWidth] = useState<number>(CHAT_CONTROL.BAR_MAX_PX);
   const [isDesktop, setIsDesktop] = useState(false);
+  const [stackedLayoutLatch, setStackedLayoutLatch] = useState(false);
 
   const anchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -69,12 +76,17 @@ export function ChatControlBar({
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
 
+  const stackedLayout =
+    !voiceEnabled &&
+    value.length > 0 &&
+    (textMetrics.multiLine || stackedLayoutLatch);
+
   const geometry = computeControlBarGeometry(
     voiceEnabled,
     voiceChromeReady,
     voiceEnabled ? CHAT_CONTROL.TEXT_LINE_PX : textMetrics.height,
     barMaxWidth,
-    !voiceEnabled && textMetrics.multiLine,
+    !voiceEnabled && stackedLayout,
     showSendButton,
     buttonSize,
   );
@@ -115,13 +127,26 @@ export function ChatControlBar({
     if (!textarea) {
       return;
     }
-    setTextMetrics(
-      measureTextareaMetrics(
-        textarea,
-        textSlotWidthForBar(barMaxWidth, buttonSize, showSendButton),
+    const metrics = measureTextareaMetrics(
+      textarea,
+      textSlotWidthForBar(
+        barMaxWidth,
+        buttonSize,
+        showSendButton,
+        stackedLayout,
       ),
     );
-  }, [voiceEnabled, barMaxWidth, value, showSendButton, buttonSize]);
+    setStackedLayoutLatch((current) => {
+      if (value.length === 0) {
+        return false;
+      }
+      if (metrics.multiLine) {
+        return true;
+      }
+      return current;
+    });
+    setTextMetrics(metrics);
+  }, [voiceEnabled, barMaxWidth, value, showSendButton, buttonSize, stackedLayout]);
 
   const handleTextChange = useCallback((nextValue: string) => {
     setValue(nextValue);
@@ -305,14 +330,17 @@ export function ChatControlBar({
                       )}
                       style={{
                         left: geometry.sendLeft,
-                        top: geometry.sendTop,
                         width: geometry.sendSize,
                         height: geometry.sendSize,
                       }}
-                      initial={{ x: buttonSize, opacity: 0 }}
-                      animate={{ x: 0, opacity: 1 }}
+                      initial={{ x: buttonSize, opacity: 0, top: geometry.sendTop }}
+                      animate={{
+                        x: 0,
+                        opacity: 1,
+                        top: geometry.sendTop,
+                      }}
                       exit={{ x: buttonSize, opacity: 0 }}
-                      transition={SEND_TRANSITION}
+                      transition={SEND_LAYOUT_TRANSITION}
                     >
                       <Send
                         className={cn(
