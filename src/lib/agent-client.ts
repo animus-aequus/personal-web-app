@@ -36,10 +36,34 @@ export async function createAgentSession(
   return response.json();
 }
 
-type AgentStreamEvent =
+/**
+ * SSE frame payload from agent API `POST /api/v1/chat/stream`.
+ * Canonical spec: `docs/agent_api_contract.md` ("/chat/stream" SSE protocol).
+ * Text chat only — voice and future channels use separate contracts.
+ */
+export type AgentStreamEvent =
   | { type: "delta"; text: string }
   | { type: "done" }
   | { type: "error"; message?: string };
+
+function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === "delta") {
+    return typeof record.text === "string";
+  }
+  if (record.type === "done") {
+    return true;
+  }
+  if (record.type === "error") {
+    return (
+      record.message === undefined || typeof record.message === "string"
+    );
+  }
+  return false;
+}
 
 function parseSseData(rawEvent: string): AgentStreamEvent | null {
   const dataLine = rawEvent
@@ -53,7 +77,8 @@ function parseSseData(rawEvent: string): AgentStreamEvent | null {
     return null;
   }
   try {
-    return JSON.parse(payload) as AgentStreamEvent;
+    const parsed: unknown = JSON.parse(payload);
+    return isAgentStreamEvent(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -113,6 +138,11 @@ export async function* streamAgentChat(
       }
     }
   } finally {
+    try {
+      await reader.cancel();
+    } catch {
+      // Stream may already be closed after a normal `done` or client abort.
+    }
     reader.releaseLock();
   }
 }
