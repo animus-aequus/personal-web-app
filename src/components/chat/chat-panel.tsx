@@ -12,7 +12,13 @@ import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { MessageList } from "@/components/chat/message-list";
+import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
+import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
+import {
+  endVoiceSession,
+  publishVoiceModeExit,
+} from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import {
   type ChatMessage,
@@ -104,7 +110,7 @@ function TextChatArea({
     }
 
     let cancelled = false;
-    const { start, end, room } = session;
+    const { start, end } = session;
 
     void (async () => {
       try {
@@ -112,7 +118,7 @@ function TextChatArea({
         if (cancelled) {
           return;
         }
-        await room.startAudio();
+        await session.room.startAudio();
       } catch (error) {
         if (cancelled) {
           return;
@@ -124,7 +130,7 @@ function TextChatArea({
 
     return () => {
       cancelled = true;
-      void end();
+      void endVoiceSession(session.room, end);
     };
     // session identity changes on every render (connection state); including it loops start/end.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceEnabled + voiceConnectionId only
@@ -171,6 +177,26 @@ function TextChatArea({
   }, [messages, voiceMessages, sessionId]);
 
   const isLoading = status === "submitted" || status === "streaming";
+
+  const setAuraPhase = useAgentActivityStore((store) => store.setPhase);
+
+  // Text chat owns the aura phase unless voice mode is active (then the
+  // VoiceAuraBridge takes over). Reset to idle when this area unmounts.
+  useEffect(() => {
+    if (voiceEnabled) {
+      return;
+    }
+    setAuraPhase(
+      status === "submitted"
+        ? "thinking"
+        : status === "streaming"
+          ? "responding"
+          : "idle",
+    );
+  }, [voiceEnabled, status, setAuraPhase]);
+
+  useEffect(() => () => setAuraPhase("idle"), [setAuraPhase]);
+
   const showGreeting = mergedMessages.length === 0 && !voiceEnabled;
   const [voiceRevealReady, setVoiceRevealReady] = useState(false);
   const userTrack = session.isConnected ? session.local.microphoneTrack : undefined;
@@ -191,14 +217,18 @@ function TextChatArea({
   const handleVoiceToggle = useCallback(() => {
     if (voiceEnabled) {
       setVoiceRevealReady(false);
+      void publishVoiceModeExit(session.room).catch((error) => {
+        console.warn("Voice mode exit signal failed", error);
+      });
       setTimeout(() => onVoiceToggle(), CHAT_FADE_MS);
       return;
     }
     onVoiceToggle();
-  }, [voiceEnabled, onVoiceToggle]);
+  }, [voiceEnabled, onVoiceToggle, session.room]);
 
   return (
     <AgentSessionProvider session={session}>
+      <VoiceAuraBridge active={voiceEnabled} />
       <StartAudioButton session={session} label="Enable audio" className="sr-only" />
       <div className="relative flex h-dvh min-h-0 flex-col">
         <ChatGreeting visible={showGreeting} />

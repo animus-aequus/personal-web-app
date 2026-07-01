@@ -9,6 +9,7 @@ Next.js chat application with text messaging and LiveKit voice. Server Route Han
 - Next.js 16 (App Router), TypeScript, Tailwind, shadcn/ui
 - Vercel AI SDK (`useChat`) for text UI
 - LiveKit React SDK + lightweight Agents UI wrappers
+- Three.js + `@react-three/fiber` for the agent activity aura (background visualizer)
 - Zustand for unified message history (text + voice)
 
 ## Setup

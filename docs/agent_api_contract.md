@@ -11,14 +11,27 @@ Base path: `/api/v1` on the agent API host.
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | `POST` | `/sessions` | `{ "session_id": string \| null }` | `{ "session_id", "thread_id", … }` |
-| `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` |
+| `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
+| `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` of assistant text deltas (see below) |
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
+
+### `/chat/stream` SSE protocol
+
+The agent API streams **plain, AI-SDK-agnostic** Server-Sent Events. One JSON object per `data:` frame:
+
+```
+data: {"type":"delta","text":"…"}
+data: {"type":"done"}
+data: {"type":"error","message":"…"}
+```
+
+Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. The BFF (`/api/chat`) maps these to the Vercel AI SDK UI message stream (`text-start` / `text-delta` / `text-end`); the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
 
 This app maps:
 
 - `POST /api/session` → `/api/v1/sessions` via `createAgentSession()`
-- `POST /api/chat` → `/api/v1/chat` via `sendAgentChat()`
+- `POST /api/chat` → `/api/v1/chat/stream` via `streamAgentChat()` (async generator of deltas), re-emitted as a UI message stream for `useChat`
 
 Shared chat `session_id` must map to backend `thread_id = web:{session_id}` so text and voice share checkpoint state.
 
@@ -38,9 +51,22 @@ Worker publishes chat rows on data topic **`chat_sync`**:
 ```json
 { "type": "voice_user", "turnId": "…", "text": "…" }
 { "type": "voice_assistant", "turnId": "…", "text": "…" }
+{ "type": "voice_assistant", "turnId": "…", "text": "…", "interrupted": true }
 ```
 
+`interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.
+
+Voice replies stream to TTS sentence-by-sentence for low time-to-first-audio. The worker publishes `voice_assistant` once per turn with the full text on normal completion. On barge-in, if LiveKit supplies a verified partial (playback-aligned) transcript, that text is published (with `interrupted: true`), committed to graph state with `additional_kwargs.playback_interrupted`, and annotated for the LLM at invoke time only; otherwise the full generated reply is kept for chat and graph (audio still stops immediately).
+
 This app consumes `chat_sync` in `src/lib/livekit/voice-chat-sync.ts` — not room transcriptions.
+
+Before leaving voice mode, the browser publishes on data topic **`voice_control`**:
+
+```json
+{ "type": "voice_mode_exit" }
+```
+
+The worker commits any in-flight assistant reply (same partial/full rules as barge-in) and mirrors it via `voice_assistant`. No `voice_user` row is added. Implemented in `src/lib/livekit/voice-control.ts` (sent before `session.end()`).
 
 ## Related docs
 
