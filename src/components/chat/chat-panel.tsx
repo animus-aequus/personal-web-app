@@ -31,6 +31,19 @@ const LIVEKIT_AGENT_NAME =
 const EASE = [0.4, 0, 0.2, 1] as const;
 const CHAT_FADE_MS = 350;
 
+function ChatScrollFade() {
+  return (
+    <div
+      data-chat-scroll-fade
+      aria-hidden
+      className="pointer-events-none fixed inset-x-0 bottom-24 z-[15] h-8"
+      style={{
+        background: "linear-gradient(to top, rgb(0 0 0) 0%, transparent 100%)",
+      }}
+    />
+  );
+}
+
 /** Stable per-session text timestamps; survives re-renders without refs in render. */
 const textMessageTimestamps = new Map<string, number>();
 
@@ -247,6 +260,8 @@ function TextChatArea({
           <MessageList messages={mergedMessages} isLoading={isLoading} />
         </motion.div>
 
+        {!voiceEnabled ? <ChatScrollFade /> : null}
+
         <ChatControlBar
           onSend={handleSend}
           onVoiceToggle={handleVoiceToggle}
@@ -354,6 +369,7 @@ export function ChatPanel() {
         <div className="relative flex h-dvh min-h-0 flex-col pb-24">
           <ChatGreeting visible={voiceMessages.length === 0} />
           <MessageList messages={voiceMessages} isLoading={bootstrapping} />
+          {!voiceEnabled ? <ChatScrollFade /> : null}
           <ChatControlBar
             onSend={() => {}}
             onVoiceToggle={handleVoiceToggle}
