@@ -13,6 +13,8 @@ import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
+import { mergeMessagesById } from "@/lib/chat/history-api";
+import { useChatHistory } from "@/lib/chat/use-chat-history";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
@@ -81,8 +83,13 @@ function uiMessageToChatMessage(
 
 type TextChatAreaProps = {
   sessionId: string;
+  historyRows: ChatMessage[];
+  hasMoreHistory: boolean;
+  isLoadingOlder: boolean;
+  historyStatus: ReturnType<typeof useChatHistory>["status"];
+  onLoadOlder: () => void;
+  onVoiceMessage: ReturnType<typeof useChatHistory>["appendLive"];
   voiceConnectionId: string | null;
-  voiceMessages: ChatMessage[];
   voiceEnabled: boolean;
   onVoiceDisconnect: () => void;
   onVoiceToggle: () => void;
@@ -94,8 +101,13 @@ type TextChatAreaProps = {
  */
 function TextChatArea({
   sessionId,
+  historyRows,
+  hasMoreHistory,
+  isLoadingOlder,
+  historyStatus,
+  onLoadOlder,
+  onVoiceMessage,
   voiceConnectionId,
-  voiceMessages,
   voiceEnabled,
   onVoiceDisconnect,
   onVoiceToggle,
@@ -115,7 +127,7 @@ function TextChatArea({
     agentName: LIVEKIT_AGENT_NAME,
   });
 
-  useVoiceChatSync(session);
+  useVoiceChatSync(session, onVoiceMessage);
 
   useEffect(() => {
     if (!voiceEnabled) {
@@ -124,6 +136,7 @@ function TextChatArea({
 
     let cancelled = false;
     const { start, end } = session;
+    const room = session.room;
 
     void (async () => {
       try {
@@ -131,7 +144,7 @@ function TextChatArea({
         if (cancelled) {
           return;
         }
-        await session.room.startAudio();
+        await room.startAudio();
       } catch (error) {
         if (cancelled) {
           return;
@@ -143,7 +156,7 @@ function TextChatArea({
 
     return () => {
       cancelled = true;
-      void endVoiceSession(session.room, end);
+      void endVoiceSession(room, end);
     };
     // session identity changes on every render (connection state); including it loops start/end.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceEnabled + voiceConnectionId only
@@ -184,17 +197,13 @@ function TextChatArea({
       })
       .filter((message): message is ChatMessage => message !== null);
 
-    return [...voiceMessages, ...textMessages].sort(
-      (a, b) => a.timestamp - b.timestamp,
-    );
-  }, [messages, voiceMessages, sessionId]);
+    return mergeMessagesById(historyRows, textMessages);
+  }, [historyRows, messages, sessionId]);
 
   const isLoading = status === "submitted" || status === "streaming";
 
   const setAuraPhase = useAgentActivityStore((store) => store.setPhase);
 
-  // Text chat owns the aura phase unless voice mode is active (then the
-  // VoiceAuraBridge takes over). Reset to idle when this area unmounts.
   useEffect(() => {
     if (voiceEnabled) {
       return;
@@ -257,7 +266,14 @@ function TextChatArea({
           style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
           aria-hidden={voiceEnabled}
         >
-          <MessageList messages={mergedMessages} isLoading={isLoading} />
+          <MessageList
+            messages={mergedMessages}
+            isLoading={isLoading}
+            onLoadOlder={onLoadOlder}
+            hasMoreHistory={hasMoreHistory}
+            isLoadingOlder={isLoadingOlder}
+            historyStatus={historyStatus}
+          />
         </motion.div>
 
         {!voiceEnabled ? <ChatScrollFade /> : null}
@@ -276,13 +292,19 @@ function TextChatArea({
 }
 
 export function ChatPanel() {
+  const hasHydrated = useChatStore((state) => state.hasHydrated);
   const sessionId = useChatStore((state) => state.sessionId);
   const setSessionId = useChatStore((state) => state.setSessionId);
-  const storeMessages = useChatStore((state) => state.messages);
-  const voiceMessages = useMemo(
-    () => storeMessages.filter((message) => message.source === "voice"),
-    [storeMessages],
-  );
+  const {
+    rows: historyRows,
+    status: historyStatus,
+    hasMore: hasMoreHistory,
+    error: historyError,
+    loadInitial,
+    loadOlder,
+    appendLive,
+    reset: resetHistory,
+  } = useChatHistory();
   const [bootstrapping, setBootstrapping] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
@@ -305,26 +327,47 @@ export function ChatPanel() {
   }, []);
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
+
     let cancelled = false;
 
     async function bootstrapSession() {
-      if (sessionId) {
-        setBootstrapping((current) => (current ? false : current));
-        return;
-      }
+      setBootstrapping(true);
+      setBootstrapError(null);
+      resetHistory();
 
       try {
-        const response = await fetch("/api/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        if (!response.ok) {
-          throw new Error(await response.text());
+        let activeSessionId = useChatStore.getState().sessionId;
+
+        if (!activeSessionId) {
+          const response = await fetch("/api/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
+          const data = (await response.json()) as { session_id: string };
+          activeSessionId = data.session_id;
+          if (!cancelled) {
+            setSessionId(activeSessionId);
+          }
+        } else {
+          const response = await fetch("/api/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: activeSessionId }),
+          });
+          if (!response.ok) {
+            throw new Error(await response.text());
+          }
         }
-        const data = (await response.json()) as { session_id: string };
-        if (!cancelled) {
-          setSessionId(data.session_id);
+
+        if (!cancelled && activeSessionId) {
+          await loadInitial(activeSessionId);
         }
       } catch (error) {
         if (!cancelled) {
@@ -343,9 +386,19 @@ export function ChatPanel() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, setSessionId]);
+  }, [hasHydrated, loadInitial, resetHistory, setSessionId]);
 
-  const inputDisabled = !sessionId || bootstrapping || Boolean(bootstrapError);
+  const historyReady =
+    historyStatus === "ready" ||
+    historyStatus === "loading_more" ||
+    historyStatus === "exhausted" ||
+    historyStatus === "error";
+
+  const inputDisabled =
+    !sessionId || bootstrapping || Boolean(bootstrapError) || !historyReady;
+
+  const showTextChat =
+    sessionId && !bootstrapping && !bootstrapError && historyReady;
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden">
@@ -354,21 +407,31 @@ export function ChatPanel() {
           {bootstrapError}
         </p>
       ) : null}
+      {historyError && !bootstrapError ? (
+        <p className="mx-auto w-full max-w-3xl px-4 py-1 text-sm text-destructive">
+          {historyError}
+        </p>
+      ) : null}
 
-      {sessionId && !bootstrapping && !bootstrapError ? (
+      {showTextChat ? (
         <TextChatArea
           key={sessionId}
           sessionId={sessionId}
+          historyRows={historyRows}
+          hasMoreHistory={hasMoreHistory}
+          isLoadingOlder={historyStatus === "loading_more"}
+          historyStatus={historyStatus}
+          onLoadOlder={loadOlder}
+          onVoiceMessage={appendLive}
           voiceConnectionId={voiceConnectionId}
-          voiceMessages={voiceMessages}
           voiceEnabled={voiceEnabled}
           onVoiceDisconnect={handleVoiceDisconnect}
           onVoiceToggle={handleVoiceToggle}
         />
       ) : (
         <div className="relative flex h-dvh min-h-0 flex-col pb-24">
-          <ChatGreeting visible={voiceMessages.length === 0} />
-          <MessageList messages={voiceMessages} isLoading={bootstrapping} />
+          <ChatGreeting visible />
+          <MessageList messages={[]} isLoading={bootstrapping} />
           {!voiceEnabled ? <ChatScrollFade /> : null}
           <ChatControlBar
             onSend={() => {}}

@@ -17,85 +17,33 @@ export type ChatMessage = {
 
 type ChatStore = {
   sessionId: string | null;
-  messages: ChatMessage[];
-  voiceMessageIds: Set<string>;
+  hasHydrated: boolean;
   setSessionId: (sessionId: string) => void;
-  addMessage: (message: Omit<ChatMessage, "timestamp"> & { timestamp?: number }) => void;
-  addVoiceMessage: (message: Omit<ChatMessage, "source" | "timestamp"> & { timestamp?: number }) => void;
-  clearMessages: () => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
 };
 
 export const useChatStore = create<ChatStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       sessionId: null,
-      messages: [],
-      voiceMessageIds: new Set<string>(),
+      hasHydrated: false,
       setSessionId: (sessionId) => set({ sessionId }),
-      addMessage: (message) =>
-        set((state) => ({
-          messages: [
-            ...state.messages,
-            {
-              ...message,
-              timestamp: message.timestamp ?? Date.now(),
-            },
-          ],
-        })),
-      addVoiceMessage: (message) => {
-        const { voiceMessageIds } = get();
-        const timestamp = message.timestamp ?? Date.now();
-        if (voiceMessageIds.has(message.id)) {
-          // Upsert: e.g. interrupted voice turn replaces full generated text
-          // with the actually-spoken transcript (same turnId-assistant id).
-          set((state) => ({
-            messages: state.messages.map((row) =>
-              row.id === message.id
-                ? {
-                    ...row,
-                    content: message.content,
-                    timestamp,
-                    interrupted: message.interrupted ?? row.interrupted,
-                  }
-                : row,
-            ),
-          }));
-          return;
-        }
-        const nextIds = new Set(voiceMessageIds);
-        nextIds.add(message.id);
-        set((state) => ({
-          voiceMessageIds: nextIds,
-          messages: [
-            ...state.messages,
-            {
-              ...message,
-              source: "voice",
-              timestamp,
-            },
-          ],
-        }));
-      },
-      clearMessages: () => set({ messages: [], voiceMessageIds: new Set<string>() }),
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
     {
       name: "personal-agent-chat",
       partialize: (state) => ({
         sessionId: state.sessionId,
-        messages: state.messages,
-        voiceMessageIds: Array.from(state.voiceMessageIds),
       }),
       merge: (persisted, current) => {
-        const data = persisted as Partial<{
-          sessionId: string | null;
-          messages: ChatMessage[];
-          voiceMessageIds: string[];
-        }>;
+        const data = persisted as Partial<{ sessionId: string | null }>;
         return {
           ...current,
-          ...data,
-          voiceMessageIds: new Set(data.voiceMessageIds ?? []),
+          sessionId: data.sessionId ?? null,
         };
+      },
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
       },
     },
   ),
