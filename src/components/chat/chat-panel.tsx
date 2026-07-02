@@ -11,8 +11,12 @@ import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provi
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
+import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
+import { mergeMessagesById } from "@/lib/chat/history-api";
+import type { HistoryStatus } from "@/lib/chat/use-chat-history";
+import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
@@ -20,10 +24,7 @@ import {
   publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
-import {
-  type ChatMessage,
-  useChatStore,
-} from "@/lib/stores/chat-store";
+import type { ChatMessage } from "@/lib/stores/chat-store";
 
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
@@ -81,8 +82,15 @@ function uiMessageToChatMessage(
 
 type TextChatAreaProps = {
   sessionId: string;
+  historyRows: ChatMessage[];
+  hasMoreHistory: boolean;
+  isLoadingOlder: boolean;
+  historyStatus: HistoryStatus;
+  onLoadOlder: () => void;
+  onVoiceMessage: (
+    message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
+  ) => void;
   voiceConnectionId: string | null;
-  voiceMessages: ChatMessage[];
   voiceEnabled: boolean;
   onVoiceDisconnect: () => void;
   onVoiceToggle: () => void;
@@ -94,8 +102,13 @@ type TextChatAreaProps = {
  */
 function TextChatArea({
   sessionId,
+  historyRows,
+  hasMoreHistory,
+  isLoadingOlder,
+  historyStatus,
+  onLoadOlder,
+  onVoiceMessage,
   voiceConnectionId,
-  voiceMessages,
   voiceEnabled,
   onVoiceDisconnect,
   onVoiceToggle,
@@ -115,7 +128,7 @@ function TextChatArea({
     agentName: LIVEKIT_AGENT_NAME,
   });
 
-  useVoiceChatSync(session);
+  useVoiceChatSync(session, onVoiceMessage);
 
   useEffect(() => {
     if (!voiceEnabled) {
@@ -124,6 +137,7 @@ function TextChatArea({
 
     let cancelled = false;
     const { start, end } = session;
+    const room = session.room;
 
     void (async () => {
       try {
@@ -131,7 +145,7 @@ function TextChatArea({
         if (cancelled) {
           return;
         }
-        await session.room.startAudio();
+        await room.startAudio();
       } catch (error) {
         if (cancelled) {
           return;
@@ -143,7 +157,7 @@ function TextChatArea({
 
     return () => {
       cancelled = true;
-      void endVoiceSession(session.room, end);
+      void endVoiceSession(room, end);
     };
     // session identity changes on every render (connection state); including it loops start/end.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- voiceEnabled + voiceConnectionId only
@@ -184,17 +198,13 @@ function TextChatArea({
       })
       .filter((message): message is ChatMessage => message !== null);
 
-    return [...voiceMessages, ...textMessages].sort(
-      (a, b) => a.timestamp - b.timestamp,
-    );
-  }, [messages, voiceMessages, sessionId]);
+    return mergeMessagesById(historyRows, textMessages);
+  }, [historyRows, messages, sessionId]);
 
   const isLoading = status === "submitted" || status === "streaming";
 
   const setAuraPhase = useAgentActivityStore((store) => store.setPhase);
 
-  // Text chat owns the aura phase unless voice mode is active (then the
-  // VoiceAuraBridge takes over). Reset to idle when this area unmounts.
   useEffect(() => {
     if (voiceEnabled) {
       return;
@@ -257,7 +267,14 @@ function TextChatArea({
           style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
           aria-hidden={voiceEnabled}
         >
-          <MessageList messages={mergedMessages} isLoading={isLoading} />
+          <MessageList
+            messages={mergedMessages}
+            isLoading={isLoading}
+            onLoadOlder={onLoadOlder}
+            hasMoreHistory={hasMoreHistory}
+            isLoadingOlder={isLoadingOlder}
+            historyStatus={historyStatus}
+          />
         </motion.div>
 
         {!voiceEnabled ? <ChatScrollFade /> : null}
@@ -276,19 +293,22 @@ function TextChatArea({
 }
 
 export function ChatPanel() {
-  const sessionId = useChatStore((state) => state.sessionId);
-  const setSessionId = useChatStore((state) => state.setSessionId);
-  const storeMessages = useChatStore((state) => state.messages);
-  const voiceMessages = useMemo(
-    () => storeMessages.filter((message) => message.source === "voice"),
-    [storeMessages],
-  );
-  const [bootstrapping, setBootstrapping] = useState(true);
+  const {
+    sessionId,
+    phase,
+    error,
+    retry,
+    historyStatus,
+    rows: historyRows,
+    hasMore: hasMoreHistory,
+    loadOlder,
+    appendLive,
+  } = useChatSession();
+
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
   );
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
   const handleVoiceDisconnect = useCallback(() => {
     setVoiceEnabled(false);
@@ -304,82 +324,58 @@ export function ChatPanel() {
     });
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrapSession() {
-      if (sessionId) {
-        setBootstrapping((current) => (current ? false : current));
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-        const data = (await response.json()) as { session_id: string };
-        if (!cancelled) {
-          setSessionId(data.session_id);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setBootstrapError(
-            error instanceof Error ? error.message : "Failed to create session",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setBootstrapping(false);
-        }
-      }
-    }
-
-    void bootstrapSession();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, setSessionId]);
-
-  const inputDisabled = !sessionId || bootstrapping || Boolean(bootstrapError);
-
-  return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden">
-      {bootstrapError ? (
-        <p className="mx-auto w-full max-w-3xl px-4 py-3 text-sm text-destructive">
-          {bootstrapError}
-        </p>
-      ) : null}
-
-      {sessionId && !bootstrapping && !bootstrapError ? (
+  if (phase === "ready" && sessionId) {
+    return (
+      <div className="flex h-dvh w-full flex-col overflow-hidden">
         <TextChatArea
           key={sessionId}
           sessionId={sessionId}
+          historyRows={historyRows}
+          hasMoreHistory={hasMoreHistory}
+          isLoadingOlder={historyStatus === "loading_more"}
+          historyStatus={historyStatus}
+          onLoadOlder={loadOlder}
+          onVoiceMessage={appendLive}
           voiceConnectionId={voiceConnectionId}
-          voiceMessages={voiceMessages}
           voiceEnabled={voiceEnabled}
           onVoiceDisconnect={handleVoiceDisconnect}
           onVoiceToggle={handleVoiceToggle}
         />
-      ) : (
-        <div className="relative flex h-dvh min-h-0 flex-col pb-24">
-          <ChatGreeting visible={voiceMessages.length === 0} />
-          <MessageList messages={voiceMessages} isLoading={bootstrapping} />
-          {!voiceEnabled ? <ChatScrollFade /> : null}
-          <ChatControlBar
-            onSend={() => {}}
-            onVoiceToggle={handleVoiceToggle}
-            voiceEnabled={voiceEnabled}
-            voiceChromeReady={false}
-            disabled={inputDisabled}
-            isLoading={bootstrapping}
-          />
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
+      <div className="relative flex h-dvh min-h-0 flex-col pb-24">
+        {phase === "error" ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+            <p className="text-sm text-destructive">
+              {error ?? "Failed to start chat"}
+            </p>
+            <button
+              type="button"
+              className="text-sm text-foreground underline underline-offset-4"
+              onClick={retry}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <ChatLoadingSpinner label="Loading chat" />
+          </div>
+        )}
+        {!voiceEnabled ? <ChatScrollFade /> : null}
+        <ChatControlBar
+          onSend={() => {}}
+          onVoiceToggle={handleVoiceToggle}
+          voiceEnabled={voiceEnabled}
+          voiceChromeReady={false}
+          disabled
+          isLoading={phase === "loading"}
+        />
+      </div>
     </div>
   );
 }

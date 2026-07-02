@@ -11,10 +11,45 @@ Base path: `/api/v1` on the agent API host.
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | `POST` | `/sessions` | `{ "session_id": string \| null }` | `{ "session_id", "thread_id", … }` |
+| `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` of assistant text deltas (see below) |
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
+
+### `/sessions/{session_id}/messages` history pagination
+
+Checkpoint messages are projected into **UI rows** (one user or assistant bubble each). Consecutive assistant spans between user turns (e.g. tool narration + final reply) are merged into a single assistant row.
+
+Query parameters:
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `limit` | `10` | Page size (1–50) |
+| `before` | omitted | Message `id` cursor — return the chronologically previous page |
+
+Response:
+
+```json
+{
+  "session_id": "…",
+  "thread_id": "web:…",
+  "messages": [
+    { "id": "…", "role": "user", "content": "…", "sent_at": "…", "interrupted": false }
+  ],
+  "has_more": true,
+  "next_before": "…"
+}
+```
+
+- Without `before`: returns the **newest** `limit` rows (chronological order within the page).
+- With `before`: returns up to `limit` rows strictly **older** than the cursor row.
+- `next_before`: pass as `before` on the next request to load older history; `null` when `has_more` is false.
+- Unknown cursor: HTTP **404** `{ "error": "cursor_not_found" }`.
+
+This app maps:
+
+- `GET /api/session/messages` → `/api/v1/sessions/{session_id}/messages` via `fetchChatHistory()`
 
 ### `/chat/stream` SSE protocol
 
@@ -31,6 +66,7 @@ Text deltas arrive token-by-token as the LLM generates them, including any short
 This app maps:
 
 - `POST /api/session` → `/api/v1/sessions` via `createAgentSession()`
+- `GET /api/session/messages` → `/api/v1/sessions/{session_id}/messages` via `fetchChatHistory()`
 - `POST /api/chat` → `/api/v1/chat/stream` via `streamAgentChat()` (async generator of deltas), re-emitted as a UI message stream for `useChat`
 
 Shared chat `session_id` must map to backend `thread_id = web:{session_id}` so text and voice share checkpoint state.
