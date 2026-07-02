@@ -1,6 +1,7 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
@@ -10,13 +11,82 @@ type MessageListProps = {
   isLoading?: boolean;
 };
 
+/** Auto-follow stays active while the viewport is within this distance of the bottom. */
+const STICK_TO_BOTTOM_THRESHOLD_PX = 80;
+
+function scrollToBottom(element: HTMLDivElement) {
+  element.scrollTop = element.scrollHeight;
+}
+
+function isNearBottom(element: HTMLDivElement): boolean {
+  const distance =
+    element.scrollHeight - element.scrollTop - element.clientHeight;
+  return distance <= STICK_TO_BOTTOM_THRESHOLD_PX;
+}
+
 export function MessageList({ messages, isLoading }: MessageListProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const isInitialScrollRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
+  const programmaticScrollRef = useRef(false);
+
   const lastMessage = messages[messages.length - 1];
   const awaitingFirstToken =
     isLoading && (!lastMessage || lastMessage.role === "user");
 
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+
+    const onScroll = () => {
+      if (programmaticScrollRef.current) {
+        programmaticScrollRef.current = false;
+        lastScrollTopRef.current = element.scrollTop;
+        return;
+      }
+
+      const scrolledUp = element.scrollTop < lastScrollTopRef.current - 1;
+      lastScrollTopRef.current = element.scrollTop;
+
+      if (scrolledUp) {
+        stickToBottomRef.current = false;
+        return;
+      }
+
+      stickToBottomRef.current = isNearBottom(element);
+    };
+
+    element.addEventListener("scroll", onScroll, { passive: true });
+    return () => element.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+
+    const shouldFollow =
+      isInitialScrollRef.current || stickToBottomRef.current;
+
+    if (!shouldFollow) {
+      return;
+    }
+
+    programmaticScrollRef.current = true;
+    scrollToBottom(element);
+    lastScrollTopRef.current = element.scrollTop;
+    isInitialScrollRef.current = false;
+  }, [messages, isLoading]);
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div
+      ref={scrollRef}
+      className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
         {messages.map((message) => {
           const isInterruptedAssistant =
