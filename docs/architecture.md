@@ -8,7 +8,7 @@ This repo owns **browser UI**, **client state**, **Route Handlers**, and **LiveK
 
 ```
   Browser ─────────► Next.js (:3000)
-       │              ├── /api/session, /api/chat  ──► Agent API (HTTP)
+       │              ├── /api/session, /api/session/messages, /api/chat  ──► Agent API (HTTP)
        │              └── /api/livekit/token       ──► LiveKit JWT
        └── WebRTC ──► LiveKit Cloud ◄── agent API worker
 ```
@@ -26,17 +26,28 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 ## Session identity
 
-1. On first load, `ChatPanel` calls `POST /api/session` → agent API returns `session_id`.
-2. `sessionId` is stored in Zustand (`useChatStore`, persisted as `personal-agent-chat`).
-3. Text and voice for the same `sessionId` must share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
+1. On first load (after Zustand rehydration), `ChatPanel` calls `POST /api/session` → agent API returns `session_id`.
+2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
+3. `sessionId` alone is stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally.
+4. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
+5. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
 
 ## Request lifecycle
 
 ### Bootstrap
 
-1. Client `POST /api/session` (optional body `{ session_id }` for resume).
-2. Route Handler proxies to agent API `POST /api/v1/sessions` via `createAgentSession()` in `src/lib/agent-client.ts`.
-3. `sessionId` saved to Zustand; `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly.
+1. Wait for Zustand persist rehydration (`hasHydrated`).
+2. Client `POST /api/session` (body `{ session_id }` when resuming).
+3. Route Handler proxies to agent API `POST /api/v1/sessions` via `createAgentSession()` in `src/lib/agent-client.ts`.
+4. Client `GET /api/session/messages?sessionId=…` — loads the newest history page (10 UI rows).
+5. `sessionId` saved to Zustand; `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly.
+
+### Chat history (paginated)
+
+1. `useChatHistory` loads the newest page from `GET /api/session/messages`.
+2. Scrolling near the top triggers `loadOlder()` via an `IntersectionObserver` sentinel (prefetch margin 120px).
+3. Older pages prepend with scroll position preserved (no jump).
+4. Live text rows from `useChat` and live voice rows from `chat_sync` merge with loaded history by message `id`.
 
 ### Text chat
 
@@ -52,16 +63,17 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 3. Effect on `voiceEnabled`: `await start()` then `await session.room.startAudio()`.
 4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`).
 5. Worker (agent API) handles STT/TTS and publishes `voice_user` / `voice_assistant` on `chat_sync`.
-6. `useVoiceChatSync` writes voice rows to Zustand.
+6. `useVoiceChatSync` appends live voice rows to in-memory history state (`appendLive`).
 7. Voice off → browser publishes `voice_mode_exit` on `voice_control`, then effect cleanup calls `session.end()`.
 
 Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` stays the same.
 
 ### Message merge in UI
 
-- **Text:** `useChat` → `source: "text"`.
-- **Voice:** Zustand, `source: "voice"`, from `chat_sync` only.
-- **Display:** merged and sorted by timestamp in `TextChatArea`.
+- **History:** checkpoint-backed rows from `useChatHistory` (paginated).
+- **Text (live):** `useChat` → merged by `id` with `source: "text"`.
+- **Voice (live):** `chat_sync` → `appendLive` with `source: "voice"`.
+- **Display:** merged and sorted by `sent_at` / timestamp in `TextChatArea`.
 
 Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` — **not** the chat transcript list.
 

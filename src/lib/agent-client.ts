@@ -18,6 +18,52 @@ export type CreateSessionResponse = {
   voice_websocket_url: string;
 };
 
+export const HISTORY_PAGE_SIZE = 10;
+
+export type HistoryMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sent_at: string;
+  interrupted?: boolean;
+};
+
+export type HistoryPageResponse = {
+  session_id: string;
+  thread_id: string;
+  messages: HistoryMessage[];
+  has_more: boolean;
+  next_before: string | null;
+};
+
+export async function fetchChatHistory(
+  sessionId: string,
+  options?: { before?: string; limit?: number },
+): Promise<HistoryPageResponse> {
+  const params = new URLSearchParams();
+  const limit = options?.limit ?? HISTORY_PAGE_SIZE;
+  params.set("limit", String(limit));
+  if (options?.before) {
+    params.set("before", options.before);
+  }
+
+  const query = params.toString();
+  const url = `${AGENT_API_BASE_URL}/api/v1/sessions/${encodeURIComponent(sessionId)}/messages${query ? `?${query}` : ""}`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`History fetch failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
+
 export async function createAgentSession(
   sessionId?: string,
 ): Promise<CreateSessionResponse> {

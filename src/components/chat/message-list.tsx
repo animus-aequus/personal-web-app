@@ -1,18 +1,24 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
+import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
 
 type MessageListProps = {
   messages: ChatMessage[];
   isLoading?: boolean;
+  onLoadOlder?: () => void;
+  hasMoreHistory?: boolean;
+  isLoadingOlder?: boolean;
+  historyStatus?: HistoryStatus;
 };
 
 /** Auto-follow stays active while the viewport is within this distance of the bottom. */
 const STICK_TO_BOTTOM_THRESHOLD_PX = 80;
+const TOP_SENTINEL_ROOT_MARGIN = "120px 0px 0px 0px";
 
 function scrollToBottom(element: HTMLDivElement) {
   element.scrollTop = element.scrollHeight;
@@ -24,16 +30,41 @@ function isNearBottom(element: HTMLDivElement): boolean {
   return distance <= STICK_TO_BOTTOM_THRESHOLD_PX;
 }
 
-export function MessageList({ messages, isLoading }: MessageListProps) {
+export function MessageList({
+  messages,
+  isLoading,
+  onLoadOlder,
+  hasMoreHistory = false,
+  isLoadingOlder = false,
+  historyStatus,
+}: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const isInitialScrollRef = useRef(true);
   const lastScrollTopRef = useRef(0);
   const programmaticScrollRef = useRef(false);
+  const pendingPreserveRef = useRef<{ height: number; top: number } | null>(null);
+  const prevFirstIdRef = useRef<string | undefined>(undefined);
+  const prevLastIdRef = useRef<string | undefined>(undefined);
 
   const lastMessage = messages[messages.length - 1];
   const awaitingFirstToken =
     isLoading && (!lastMessage || lastMessage.role === "user");
+
+  const triggerLoadOlder = useCallback(() => {
+    if (!onLoadOlder || !hasMoreHistory || isLoadingOlder) {
+      return;
+    }
+    const element = scrollRef.current;
+    if (element) {
+      pendingPreserveRef.current = {
+        height: element.scrollHeight,
+        top: element.scrollTop,
+      };
+    }
+    onLoadOlder();
+  }, [hasMoreHistory, isLoadingOlder, onLoadOlder]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -63,9 +94,57 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
     return () => element.removeEventListener("scroll", onScroll);
   }, []);
 
+  useEffect(() => {
+    const root = scrollRef.current;
+    const sentinel = topSentinelRef.current;
+    if (!root || !sentinel || !onLoadOlder) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry?.isIntersecting) {
+          triggerLoadOlder();
+        }
+      },
+      {
+        root,
+        rootMargin: TOP_SENTINEL_ROOT_MARGIN,
+        threshold: 0,
+      },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadOlder, triggerLoadOlder]);
+
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) {
+      return;
+    }
+
+    const firstId = messages[0]?.id;
+    const lastId = messages[messages.length - 1]?.id;
+    const prepended =
+      firstId !== prevFirstIdRef.current &&
+      lastId === prevLastIdRef.current &&
+      prevFirstIdRef.current !== undefined;
+
+    prevFirstIdRef.current = firstId;
+    prevLastIdRef.current = lastId;
+
+    if (pendingPreserveRef.current) {
+      const { height, top } = pendingPreserveRef.current;
+      pendingPreserveRef.current = null;
+      programmaticScrollRef.current = true;
+      element.scrollTop = element.scrollHeight - height + top;
+      lastScrollTopRef.current = element.scrollTop;
+      return;
+    }
+
+    if (prepended) {
       return;
     }
 
@@ -88,6 +167,17 @@ export function MessageList({ messages, isLoading }: MessageListProps) {
       className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
+        <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
+        {isLoadingOlder ? (
+          <p className="text-center text-xs text-muted-foreground">
+            Loading older messages…
+          </p>
+        ) : null}
+        {!isLoadingOlder && hasMoreHistory && historyStatus === "ready" ? (
+          <p className="text-center text-xs text-muted-foreground">
+            Scroll up for older messages
+          </p>
+        ) : null}
         {messages.map((message) => {
           const isInterruptedAssistant =
             message.role === "assistant" && message.interrupted;
