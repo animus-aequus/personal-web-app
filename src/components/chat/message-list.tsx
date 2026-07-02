@@ -4,6 +4,7 @@ import { CirclePause } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
+import { MessageContent } from "@/components/chat/message-content";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
@@ -202,7 +203,10 @@ export function MessageList({
             >
               {isInterruptedAssistant ? (
                 <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-7 dark:border-amber-500/15">
-                  <p className="min-w-0 whitespace-pre-wrap">{message.content}</p>
+                  <MessageContent
+                    content={message.content}
+                    source={message.source}
+                  />
                   <span
                     className="absolute -right-2.5 -top-2.5 flex items-center justify-center bg-background p-1 text-amber-600/55 dark:text-amber-500/50"
                     title="Interrupted before finishing"
@@ -212,7 +216,10 @@ export function MessageList({
                   </span>
                 </div>
               ) : (
-                <p className="min-w-0 whitespace-pre-wrap">{message.content}</p>
+                <MessageContent
+                  content={message.content}
+                  source={message.source}
+                />
               )}
             </article>
           );

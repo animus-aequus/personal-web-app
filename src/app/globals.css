@@ -138,3 +138,7 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
