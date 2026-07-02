@@ -3,6 +3,7 @@
 import { CirclePause } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
+import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
@@ -54,6 +55,11 @@ export function MessageList({
 
   const triggerLoadOlder = useCallback(() => {
     if (!onLoadOlder || !hasMoreHistory || isLoadingOlder) {
+      return;
+    }
+    // Keep the first in-flight preserve snapshot; a second trigger before rows
+    // prepend must not overwrite it or scroll restoration will jump.
+    if (pendingPreserveRef.current !== null) {
       return;
     }
     const element = scrollRef.current;
@@ -169,9 +175,11 @@ export function MessageList({
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
         <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
         {isLoadingOlder ? (
-          <p className="text-center text-xs text-muted-foreground">
-            Loading older messages…
-          </p>
+          <ChatLoadingSpinner
+            size="sm"
+            className="mb-4"
+            label="Loading older messages"
+          />
         ) : null}
         {!isLoadingOlder && hasMoreHistory && historyStatus === "ready" ? (
           <p className="text-center text-xs text-muted-foreground">

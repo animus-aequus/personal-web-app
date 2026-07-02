@@ -17,34 +17,24 @@ export type ChatMessage = {
 
 type ChatStore = {
   sessionId: string | null;
-  hasHydrated: boolean;
-  setSessionId: (sessionId: string) => void;
-  setHasHydrated: (hasHydrated: boolean) => void;
+  setSessionId: (sessionId: string | null) => void;
 };
 
+/**
+ * Persists only `sessionId`. Hydration is deferred (`skipHydration`) and driven
+ * explicitly by `useChatSession` so there is a single, deterministic point where
+ * the persisted id is read — no SSR mismatch, no module-load race.
+ */
 export const useChatStore = create<ChatStore>()(
   persist(
     (set) => ({
       sessionId: null,
-      hasHydrated: false,
       setSessionId: (sessionId) => set({ sessionId }),
-      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
     }),
     {
       name: "personal-agent-chat",
-      partialize: (state) => ({
-        sessionId: state.sessionId,
-      }),
-      merge: (persisted, current) => {
-        const data = persisted as Partial<{ sessionId: string | null }>;
-        return {
-          ...current,
-          sessionId: data.sessionId ?? null,
-        };
-      },
-      onRehydrateStorage: () => (state) => {
-        state?.setHasHydrated(true);
-      },
+      partialize: (state) => ({ sessionId: state.sessionId }),
+      skipHydration: true,
     },
   ),
 );

@@ -11,10 +11,12 @@ import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provi
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
+import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
 import { mergeMessagesById } from "@/lib/chat/history-api";
-import { useChatHistory } from "@/lib/chat/use-chat-history";
+import type { HistoryStatus } from "@/lib/chat/use-chat-history";
+import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
@@ -22,10 +24,7 @@ import {
   publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
-import {
-  type ChatMessage,
-  useChatStore,
-} from "@/lib/stores/chat-store";
+import type { ChatMessage } from "@/lib/stores/chat-store";
 
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
@@ -86,9 +85,11 @@ type TextChatAreaProps = {
   historyRows: ChatMessage[];
   hasMoreHistory: boolean;
   isLoadingOlder: boolean;
-  historyStatus: ReturnType<typeof useChatHistory>["status"];
+  historyStatus: HistoryStatus;
   onLoadOlder: () => void;
-  onVoiceMessage: ReturnType<typeof useChatHistory>["appendLive"];
+  onVoiceMessage: (
+    message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
+  ) => void;
   voiceConnectionId: string | null;
   voiceEnabled: boolean;
   onVoiceDisconnect: () => void;
@@ -292,25 +293,22 @@ function TextChatArea({
 }
 
 export function ChatPanel() {
-  const hasHydrated = useChatStore((state) => state.hasHydrated);
-  const sessionId = useChatStore((state) => state.sessionId);
-  const setSessionId = useChatStore((state) => state.setSessionId);
   const {
+    sessionId,
+    phase,
+    error,
+    retry,
+    historyStatus,
     rows: historyRows,
-    status: historyStatus,
     hasMore: hasMoreHistory,
-    error: historyError,
-    loadInitial,
     loadOlder,
     appendLive,
-    reset: resetHistory,
-  } = useChatHistory();
-  const [bootstrapping, setBootstrapping] = useState(true);
+  } = useChatSession();
+
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
   );
-  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
 
   const handleVoiceDisconnect = useCallback(() => {
     setVoiceEnabled(false);
@@ -326,94 +324,9 @@ export function ChatPanel() {
     });
   }, []);
 
-  useEffect(() => {
-    if (!hasHydrated) {
-      return;
-    }
-
-    let cancelled = false;
-
-    async function bootstrapSession() {
-      setBootstrapping(true);
-      setBootstrapError(null);
-      resetHistory();
-
-      try {
-        let activeSessionId = useChatStore.getState().sessionId;
-
-        if (!activeSessionId) {
-          const response = await fetch("/api/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({}),
-          });
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-          const data = (await response.json()) as { session_id: string };
-          activeSessionId = data.session_id;
-          if (!cancelled) {
-            setSessionId(activeSessionId);
-          }
-        } else {
-          const response = await fetch("/api/session", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ session_id: activeSessionId }),
-          });
-          if (!response.ok) {
-            throw new Error(await response.text());
-          }
-        }
-
-        if (!cancelled && activeSessionId) {
-          await loadInitial(activeSessionId);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setBootstrapError(
-            error instanceof Error ? error.message : "Failed to create session",
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setBootstrapping(false);
-        }
-      }
-    }
-
-    void bootstrapSession();
-    return () => {
-      cancelled = true;
-    };
-  }, [hasHydrated, loadInitial, resetHistory, setSessionId]);
-
-  const historyReady =
-    historyStatus === "ready" ||
-    historyStatus === "loading_more" ||
-    historyStatus === "exhausted" ||
-    historyStatus === "error";
-
-  const inputDisabled =
-    !sessionId || bootstrapping || Boolean(bootstrapError) || !historyReady;
-
-  const showTextChat =
-    sessionId && !bootstrapping && !bootstrapError && historyReady;
-
-  return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden">
-      {bootstrapError ? (
-        <p className="mx-auto w-full max-w-3xl px-4 py-3 text-sm text-destructive">
-          {bootstrapError}
-        </p>
-      ) : null}
-      {historyError && !bootstrapError ? (
-        <p className="mx-auto w-full max-w-3xl px-4 py-1 text-sm text-destructive">
-          {historyError}
-        </p>
-      ) : null}
-
-      {showTextChat ? (
+  if (phase === "ready" && sessionId) {
+    return (
+      <div className="flex h-dvh w-full flex-col overflow-hidden">
         <TextChatArea
           key={sessionId}
           sessionId={sessionId}
@@ -428,21 +341,41 @@ export function ChatPanel() {
           onVoiceDisconnect={handleVoiceDisconnect}
           onVoiceToggle={handleVoiceToggle}
         />
-      ) : (
-        <div className="relative flex h-dvh min-h-0 flex-col pb-24">
-          <ChatGreeting visible />
-          <MessageList messages={[]} isLoading={bootstrapping} />
-          {!voiceEnabled ? <ChatScrollFade /> : null}
-          <ChatControlBar
-            onSend={() => {}}
-            onVoiceToggle={handleVoiceToggle}
-            voiceEnabled={voiceEnabled}
-            voiceChromeReady={false}
-            disabled={inputDisabled}
-            isLoading={bootstrapping}
-          />
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
+      <div className="relative flex h-dvh min-h-0 flex-col pb-24">
+        {phase === "error" ? (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
+            <p className="text-sm text-destructive">
+              {error ?? "Failed to start chat"}
+            </p>
+            <button
+              type="button"
+              className="text-sm text-foreground underline underline-offset-4"
+              onClick={retry}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 items-center justify-center">
+            <ChatLoadingSpinner label="Loading chat" />
+          </div>
+        )}
+        {!voiceEnabled ? <ChatScrollFade /> : null}
+        <ChatControlBar
+          onSend={() => {}}
+          onVoiceToggle={handleVoiceToggle}
+          voiceEnabled={voiceEnabled}
+          voiceChromeReady={false}
+          disabled
+          isLoading={phase === "loading"}
+        />
+      </div>
     </div>
   );
 }

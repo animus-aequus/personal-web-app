@@ -30,7 +30,13 @@ export function useChatHistory(): UseChatHistoryResult {
   const [error, setError] = useState<string | null>(null);
 
   const sessionIdRef = useRef<string | null>(null);
+  const nextBeforeRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
+
+  const syncNextBefore = useCallback((cursor: string | null) => {
+    nextBeforeRef.current = cursor;
+    setNextBefore(cursor);
+  }, []);
 
   const reset = useCallback(() => {
     sessionIdRef.current = null;
@@ -38,9 +44,9 @@ export function useChatHistory(): UseChatHistoryResult {
     setRows([]);
     setStatus("idle");
     setHasMore(false);
-    setNextBefore(null);
+    syncNextBefore(null);
     setError(null);
-  }, []);
+  }, [syncNextBefore]);
 
   const loadInitial = useCallback(async (sessionId: string) => {
     sessionIdRef.current = sessionId;
@@ -53,20 +59,21 @@ export function useChatHistory(): UseChatHistoryResult {
       const mapped = page.messages.map(historyMessageToChatMessage);
       setRows(mapped);
       setHasMore(page.has_more);
-      setNextBefore(page.next_before);
+      syncNextBefore(page.next_before);
       setStatus(page.has_more ? "ready" : "exhausted");
     } catch (err) {
       setRows([]);
       setHasMore(false);
-      setNextBefore(null);
+      syncNextBefore(null);
       setStatus("error");
       setError(err instanceof Error ? err.message : "Failed to load history");
     }
-  }, []);
+  }, [syncNextBefore]);
 
   const loadOlder = useCallback(async () => {
     const sessionId = sessionIdRef.current;
-    if (!sessionId || !nextBefore || loadingMoreRef.current) {
+    const cursor = nextBeforeRef.current;
+    if (!sessionId || !cursor || loadingMoreRef.current) {
       return;
     }
 
@@ -75,11 +82,11 @@ export function useChatHistory(): UseChatHistoryResult {
     setError(null);
 
     try {
-      const page = await fetchHistoryPage(sessionId, { before: nextBefore });
+      const page = await fetchHistoryPage(sessionId, { before: cursor });
       const mapped = page.messages.map(historyMessageToChatMessage);
       setRows((current) => prependUniqueMessages(current, mapped));
       setHasMore(page.has_more);
-      setNextBefore(page.next_before);
+      syncNextBefore(page.next_before);
       setStatus(page.has_more ? "ready" : "exhausted");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load older messages";
@@ -95,7 +102,7 @@ export function useChatHistory(): UseChatHistoryResult {
     } finally {
       loadingMoreRef.current = false;
     }
-  }, [loadInitial, nextBefore]);
+  }, [loadInitial, syncNextBefore]);
 
   const appendLive = useCallback(
     (message: Omit<ChatMessage, "timestamp"> & { timestamp?: number }) => {

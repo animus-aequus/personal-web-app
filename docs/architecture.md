@@ -36,11 +36,19 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 ### Bootstrap
 
-1. Wait for Zustand persist rehydration (`hasHydrated`).
-2. Client `POST /api/session` (body `{ session_id }` when resuming).
+`useChatSession` (`src/lib/chat/use-chat-session.ts`) is the single source of truth
+for startup. It runs one ordered sequence and exposes a coarse `phase`
+(`loading` → `ready` → `error`) that `ChatPanel` renders directly:
+
+1. Explicitly rehydrate the persisted `sessionId` (`useChatStore.persist.rehydrate()`;
+   the store uses `skipHydration: true` to avoid SSR mismatch and module-load races).
+2. Client `POST /api/session` (body `{ session_id }` when resuming, `{}` when new).
 3. Route Handler proxies to agent API `POST /api/v1/sessions` via `createAgentSession()` in `src/lib/agent-client.ts`.
-4. Client `GET /api/session/messages?sessionId=…` — loads the newest history page (10 UI rows).
-5. `sessionId` saved to Zustand; `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly.
+4. `sessionId` saved to Zustand; `useChatHistory.loadInitial()` fetches the newest history page (10 UI rows) from `GET /api/session/messages?sessionId=…`.
+5. `phase` becomes `ready` once the session exists and the first page settles (even when empty). `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly; an empty thread shows the greeting with the input enabled.
+
+A `runId` guard makes the sequence resilient to React Strict Mode double-invocation
+and retries: only the latest run may commit state.
 
 ### Chat history (paginated)
 
