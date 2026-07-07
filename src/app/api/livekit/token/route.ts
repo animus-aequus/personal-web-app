@@ -8,6 +8,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 
@@ -49,6 +50,11 @@ export async function POST(request: Request) {
       tokenRequest.participantMetadata?.trim() ||
       sessionIdFromRoomName(roomName) ||
       "unknown";
+
+    const rateLimited = await enforceRateLimit(request, "livekit", sessionId);
+    if (rateLimited) {
+      return rateLimited;
+    }
 
     const roomConfig = new RoomConfiguration({
       metadata: JSON.stringify({ session_id: sessionId }),

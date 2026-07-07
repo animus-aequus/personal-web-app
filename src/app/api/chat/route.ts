@@ -6,6 +6,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { streamAgentChat } from "@/lib/agent-client";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 export const maxDuration = 120;
@@ -38,6 +39,11 @@ export async function POST(request: Request) {
     const body = (await request.json()) as ChatRequestBody;
     const sessionId = body.sessionId ?? body.session_id;
     const userText = extractUserText(body.messages);
+
+    const rateLimited = await enforceRateLimit(request, "chat", sessionId);
+    if (rateLimited) {
+      return rateLimited;
+    }
 
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });

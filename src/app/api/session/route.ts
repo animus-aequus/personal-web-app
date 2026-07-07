@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { createAgentSession } from "@/lib/agent-client";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 
 export async function POST(request: Request) {
+  const rateLimited = await enforceRateLimit(request, "session");
+  if (rateLimited) {
+    return rateLimited;
+  }
+
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
