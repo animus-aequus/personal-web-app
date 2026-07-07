@@ -1,0 +1,17 @@
+---
+description: Security rollout — read docs/security.md for status and implemented controls
+alwaysApply: true
+---
+
+# Security documentation
+
+When working on **security**, **rate limits**, **Turnstile**, **session cookies**, **booking proxy routes**, or **Route Handler hardening**:
+
+1. Read [`docs/security.md`](../../docs/security.md) for rollout status, principles, and **Implemented controls**.
+2. After shipping a phase: update **Implemented controls** in `docs/security.md`.
+
+Cross-repo agent API context (if `personal-voice-agent` is open): `../personal-voice-agent/docs/security.md`.
+
+Do not duplicate the full rollout plan in code comments — keep durable facts in `docs/security.md` only.
+
+If `docs/tmp/.active` is `security` (tmp enabled by user), also read `docs/tmp/security/STATUS.md` per rule `docs-tmp`.

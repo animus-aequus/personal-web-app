@@ -13,6 +13,7 @@ Next.js chat UI and BFF. Scheduling, LLM, and voice STT/TTS belong in a **separa
 |-------------|------------|
 | Any non-trivial change | `docs/project_structure.md` |
 | UI/BFF flows, session, voice+text merge | `docs/architecture.md` |
+| Security rollout / Turnstile / rate limits / session cookie | `docs/security.md` |
 | Route Handlers or `agent-client.ts` | `docs/agent_api_contract.md` + rule `next-api-routes` |
 | LiveKit / voice UI | rule `livekit-voice` |
 | Chat components / Zustand store | rule `chat-ui` |
@@ -35,5 +36,6 @@ Never put LLM, calendar, or Deepgram logic in UI or Route Handlers. See `docs/pr
 - Minimal diffs; match existing style; no drive-by refactors
 - Dependencies: `npm install` / `npm run dev`
 - Do not commit unless explicitly asked
-- Do not add tests or markdown files unless requested
+- Do not add tests or markdown files unless requested — **except** `docs/tmp/**` when user enabled it (names `docs/tmp`); see rule `docs-tmp`
+- **`docs/tmp/`:** default **skip**. Use only if user names `docs/tmp` in chat, or `docs/tmp/.active` exists and the task continues that feature — then read rule `docs-tmp`
 - Entry page: `src/app/page.tsx` → `ChatPanel`

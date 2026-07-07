@@ -162,6 +162,10 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | `/api/livekit/token` only | Never in browser |
 | `AGENT_API_BASE_URL` | Server only | Default `http://localhost:8000` |
 
+**Security rollout:** BFF-side controls (rate limits, Turnstile, session cookie) are tracked in [`security.md`](security.md). Agent API booking and calendar auth: optional repo [`../personal-voice-agent/docs/security.md`](../personal-voice-agent/docs/security.md).
+
+**Agent working notes:** opt-in `docs/tmp/` (inactive by default; see `.cursor/rules/docs-tmp.mdc`).
+
 ## Environment variables
 
 | Variable | Purpose |
@@ -184,6 +188,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 
 ## Related docs
 
+- Security controls and rollout: [`security.md`](security.md)
 - Outbound API contract: [`agent_api_contract.md`](agent_api_contract.md)
 - Module map: [`project_structure.md`](project_structure.md)
 - Human onboarding: [`README.md`](README.md)

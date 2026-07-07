@@ -1,0 +1,53 @@
+---
+description: docs/tmp working notes — ONLY when user names docs/tmp or .active continuation; read this rule then
+alwaysApply: false
+globs: docs/tmp/**
+---
+
+# `docs/tmp/` — opt-in working notes
+
+**Default for every task: SKIP `docs/tmp/` entirely** — do not read `.active`, do not create files here, do not load this rule unless the conditions below are met.
+
+## When this rule applies
+
+| Condition | Action |
+|-----------|--------|
+| User message **names `docs/tmp`** (e.g. „użyj docs/tmp dla security”, „od etapu 1 pracuj z docs/tmp/security”) | **Activate** — follow [Activation](#activation) below |
+| `docs/tmp/.active` exists **and** the current task clearly continues that feature (same epic/phase) | **Continue** — follow [Continuation](#continuation) below |
+| Neither | **SKIP** — ignore this folder |
+
+**Never activate** because work „seems complex”. You may **propose** once via `AskQuestion` (Yes/No); only activate after explicit Yes or user naming `docs/tmp`.
+
+## Activation (user named `docs/tmp`)
+
+1. Read this rule (you are here).
+2. Resolve **feature** from user message (kebab-case, e.g. `security`). Ask if ambiguous.
+3. In **this repo**, write `docs/tmp/.active` — **one line**, feature name only (e.g. `security`).
+4. Create or open `docs/tmp/<feature>/STATUS.md` — use template in [`docs/tmp/README.md`](../../docs/tmp/README.md).
+5. Cross-repo: if both repos are open and the feature spans both, repeat steps 3–4 in the other repo with the **same** feature name.
+
+## Continuation (`.active` already set)
+
+1. Read `docs/tmp/.active` (one line → feature name).
+2. Read `docs/tmp/<feature>/STATUS.md` **before** editing code.
+3. Do **not** create a new `.active` or subfolder without user naming `docs/tmp` again (switching features requires new activation).
+
+## While active — agent duties
+
+**Read order:** permanent doc for the domain (e.g. `docs/security.md`) → `STATUS.md` → other files in subfolder only if `STATUS.md` links them. **On conflict, permanent docs win** — fix or trim stale tmp.
+
+**Maintain `STATUS.md`:** update `Last updated`, `Current focus`, `Done`, and **`Next agent action`** (imperative, concrete steps) at end of each session before handing off.
+
+**Do not duplicate** rollout plans, `architecture.md`, or large specs — delta and decisions only.
+
+## Teardown (user says feature done / close docs/tmp / delete tmp)
+
+1. Promote durable facts to the correct permanent doc.
+2. Delete `docs/tmp/<feature>/` and `docs/tmp/.active`.
+3. Cross-repo: tear down in both repos if both were active.
+
+## Proposal (optional, once per task)
+
+If complexity clearly benefits from tmp **and** user has not named `docs/tmp`:
+
+Use `AskQuestion`: „Czy włączyć docs/tmp/<proposed-feature> na handoff między sesjami?” — Yes/No. **No → do not mention tmp again this session** unless user brings it up.

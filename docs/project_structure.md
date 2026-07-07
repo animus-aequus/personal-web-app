@@ -88,5 +88,7 @@ useVoiceChatSync ◄── chat_sync ◄─────────────�
 ## Related docs
 
 - System design and ADRs: [`architecture.md`](architecture.md)
+- Security rollout: [`security.md`](security.md)
+- Opt-in agent working notes: [`tmp/`](tmp/) (only when `docs/tmp/.active` exists)
 - Outbound agent API contract: [`agent_api_contract.md`](agent_api_contract.md)
 - Human onboarding: [`README.md`](README.md)
