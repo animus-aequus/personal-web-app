@@ -8,7 +8,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, RateLimitRoute } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       sessionIdFromRoomName(roomName) ||
       "unknown";
 
-    const rateLimited = await enforceRateLimit(request, "livekit", sessionId);
+    const rateLimited = await enforceRateLimit(request, RateLimitRoute.Livekit, sessionId);
     if (rateLimited) {
       return rateLimited;
     }

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { createAgentSession } from "@/lib/agent-client";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 
 export async function POST(request: Request) {
-  const rateLimited = await enforceRateLimit(request, "session");
+  const rateLimited = await enforceRateLimit(request, RateLimitRoute.Session);
   if (rateLimited) {
     return rateLimited;
   }
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
     };
-    const data = await createAgentSession(body.session_id ?? undefined);
+    const data = await createAgentSession(body.session_id ?? undefined, getClientIp(request));
     return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });

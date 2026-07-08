@@ -2,12 +2,15 @@ const AGENT_API_BASE_URL =
   process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
 
-function agentHeaders(): HeadersInit {
+function agentHeaders(clientIp?: string): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (WEB_API_KEY) {
     headers["X-API-Key"] = WEB_API_KEY;
+  }
+  if (clientIp) {
+    headers["X-Forwarded-For"] = clientIp;
   }
   return headers;
 }
@@ -38,7 +41,7 @@ export type HistoryPageResponse = {
 
 export async function fetchChatHistory(
   sessionId: string,
-  options?: { before?: string; limit?: number },
+  options?: { before?: string; limit?: number; clientIp?: string },
 ): Promise<HistoryPageResponse> {
   const params = new URLSearchParams();
   const limit = options?.limit ?? HISTORY_PAGE_SIZE;
@@ -52,7 +55,7 @@ export async function fetchChatHistory(
 
   const response = await fetch(url, {
     method: "GET",
-    headers: agentHeaders(),
+    headers: agentHeaders(options?.clientIp),
     cache: "no-store",
   });
 
@@ -66,10 +69,11 @@ export async function fetchChatHistory(
 
 export async function createAgentSession(
   sessionId?: string,
+  clientIp?: string,
 ): Promise<CreateSessionResponse> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/sessions`, {
     method: "POST",
-    headers: agentHeaders(),
+    headers: agentHeaders(clientIp),
     body: JSON.stringify({ session_id: sessionId ?? null }),
     cache: "no-store",
   });
@@ -138,10 +142,11 @@ function parseSseData(rawEvent: string): AgentStreamEvent | null {
 export async function* streamAgentChat(
   sessionId: string,
   message: string,
+  clientIp?: string,
 ): AsyncGenerator<string, void, unknown> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/chat/stream`, {
     method: "POST",
-    headers: agentHeaders(),
+    headers: agentHeaders(clientIp),
     body: JSON.stringify({ session_id: sessionId, message }),
     cache: "no-store",
   });

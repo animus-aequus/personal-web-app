@@ -6,7 +6,7 @@ import {
 import { NextResponse } from "next/server";
 
 import { streamAgentChat } from "@/lib/agent-client";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 export const maxDuration = 120;
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     const sessionId = body.sessionId ?? body.session_id;
     const userText = extractUserText(body.messages);
 
-    const rateLimited = await enforceRateLimit(request, "chat", sessionId);
+    const rateLimited = await enforceRateLimit(request, RateLimitRoute.Chat, sessionId);
     if (rateLimited) {
       return rateLimited;
     }
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         const textId = "assistant-text";
         writer.write({ type: "text-start", id: textId });
         try {
-          for await (const delta of streamAgentChat(sessionId, userText)) {
+          for await (const delta of streamAgentChat(sessionId, userText, getClientIp(request))) {
             writer.write({ type: "text-delta", id: textId, delta });
           }
         } finally {

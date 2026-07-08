@@ -58,7 +58,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 8 | `/cancel` page + cancel proxy | Pending |
 | 12 | Clerk (optional) | Future |
 
-Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md).
+Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done** — see that doc for env vars.
 
 ---
 
@@ -105,6 +105,8 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `RATE_LIMIT_ABUSE_STRIKE_WINDOW_SECONDS` | Strike TTL (86400) |
 | `RATE_LIMIT_ABUSE_STRIKES_MODERATE` / `_STRICT` | Tier thresholds (2 / 5) |
 | `RATE_LIMIT_ABUSE_MODERATE_FACTOR` / `_STRICT_FACTOR` | Limit multipliers (0.5 / 0.25) |
+
+**Agent API (phase 2):** BFF forwards client IP as `X-Forwarded-For` on all agent REST calls (`agent-client.ts`) so Fargate rate limits apply per visitor.
 
 ---
 

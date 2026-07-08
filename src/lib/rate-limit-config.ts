@@ -1,13 +1,51 @@
-export type RateLimitScope =
-  | "session"
-  | "chat_session"
-  | "chat_ip"
-  | "messages_session"
-  | "messages_ip"
-  | "livekit_session"
-  | "livekit_ip";
+export enum RateLimitRoute {
+  Session = "session",
+  Chat = "chat",
+  Messages = "messages",
+  Livekit = "livekit",
+}
 
-export type AbuseTier = "normal" | "moderate" | "strict";
+export enum RateLimitScope {
+  Session = "session",
+  ChatSession = "chat_session",
+  ChatIp = "chat_ip",
+  MessagesSession = "messages_session",
+  MessagesIp = "messages_ip",
+  LivekitSession = "livekit_session",
+  LivekitIp = "livekit_ip",
+}
+
+export enum AbuseTier {
+  Normal = "normal",
+  Moderate = "moderate",
+  Strict = "strict",
+}
+
+export function sessionScopeForRoute(route: RateLimitRoute): RateLimitScope {
+  switch (route) {
+    case RateLimitRoute.Session:
+      return RateLimitScope.Session;
+    case RateLimitRoute.Chat:
+      return RateLimitScope.ChatSession;
+    case RateLimitRoute.Messages:
+      return RateLimitScope.MessagesSession;
+    case RateLimitRoute.Livekit:
+      return RateLimitScope.LivekitSession;
+  }
+}
+
+export function ipScopeForRoute(route: RateLimitRoute): RateLimitScope | undefined {
+  switch (route) {
+    case RateLimitRoute.Session:
+      return undefined;
+    case RateLimitRoute.Chat:
+      return RateLimitScope.ChatIp;
+    case RateLimitRoute.Messages:
+      return RateLimitScope.MessagesIp;
+    case RateLimitRoute.Livekit:
+      return RateLimitScope.LivekitIp;
+  }
+}
 
 export type RateLimitRouteConfig = {
   /** Per-session (or single IP for session create) limit at normal tier. */
@@ -20,10 +58,7 @@ export type RateLimitConfig = {
   enabled: boolean;
   failClosed: boolean;
   windowSeconds: number;
-  routes: Record<
-    "session" | "chat" | "messages" | "livekit",
-    RateLimitRouteConfig
-  >;
+  routes: Record<RateLimitRoute, RateLimitRouteConfig>;
   abuse: {
     strikeWindowSeconds: number;
     strikesModerate: number;
@@ -75,18 +110,18 @@ export function loadRateLimitConfig(): RateLimitConfig {
     failClosed: readBool("RATE_LIMIT_FAIL_CLOSED", process.env.NODE_ENV === "production"),
     windowSeconds,
     routes: {
-      session: {
+      [RateLimitRoute.Session]: {
         perSession: readPositiveInt("RATE_LIMIT_SESSION_PER_IP", 10),
       },
-      chat: {
+      [RateLimitRoute.Chat]: {
         perSession: readPositiveInt("RATE_LIMIT_CHAT_PER_SESSION", 60),
         perIp: readPositiveInt("RATE_LIMIT_CHAT_PER_IP", 120),
       },
-      messages: {
+      [RateLimitRoute.Messages]: {
         perSession: readPositiveInt("RATE_LIMIT_MESSAGES_PER_SESSION", 120),
         perIp: readPositiveInt("RATE_LIMIT_MESSAGES_PER_IP", 240),
       },
-      livekit: {
+      [RateLimitRoute.Livekit]: {
         perSession: readPositiveInt("RATE_LIMIT_LIVEKIT_PER_SESSION", 20),
         perIp: readPositiveInt("RATE_LIMIT_LIVEKIT_PER_IP", 40),
       },
@@ -113,12 +148,12 @@ export function abuseTierForStrikes(
   config: RateLimitConfig,
 ): AbuseTier {
   if (strikes >= config.abuse.strikesStrict) {
-    return "strict";
+    return AbuseTier.Strict;
   }
   if (strikes >= config.abuse.strikesModerate) {
-    return "moderate";
+    return AbuseTier.Moderate;
   }
-  return "normal";
+  return AbuseTier.Normal;
 }
 
 export function effectiveLimit(
@@ -127,9 +162,9 @@ export function effectiveLimit(
   config: RateLimitConfig,
 ): number {
   const factor =
-    tier === "strict"
+    tier === AbuseTier.Strict
       ? config.abuse.strictFactor
-      : tier === "moderate"
+      : tier === AbuseTier.Moderate
         ? config.abuse.moderateFactor
         : 1;
   return Math.max(1, Math.floor(baseLimit * factor));

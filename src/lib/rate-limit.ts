@@ -3,11 +3,15 @@ import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
 
 import {
+  AbuseTier,
+  RateLimitRoute,
+  RateLimitScope,
   abuseTierForStrikes,
   effectiveLimit,
+  ipScopeForRoute,
   loadRateLimitConfig,
+  sessionScopeForRoute,
   type RateLimitConfig,
-  type RateLimitScope,
 } from "@/lib/rate-limit-config";
 
 export type RateLimitCheckResult = {
@@ -15,7 +19,7 @@ export type RateLimitCheckResult = {
   retryAfterSeconds?: number;
 };
 
-type RouteKind = "session" | "chat" | "messages" | "livekit";
+export { AbuseTier, RateLimitRoute, RateLimitScope } from "@/lib/rate-limit-config";
 
 let cachedConfig: RateLimitConfig | undefined;
 let cachedRedis: Redis | undefined;
@@ -104,7 +108,7 @@ async function consumeLimit(
   scope: RateLimitScope,
   identifier: string,
   baseLimit: number,
-  tier: ReturnType<typeof abuseTierForStrikes>,
+  tier: AbuseTier,
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const limit = effectiveLimit(baseLimit, tier, config);
   const limiter = getLimiter(redis, scope, limit, config.windowSeconds);
@@ -122,7 +126,7 @@ async function consumeLimit(
 }
 
 async function checkRouteLimits(
-  route: RouteKind,
+  route: RateLimitRoute,
   ip: string,
   sessionId: string | undefined,
   config: RateLimitConfig,
@@ -138,30 +142,32 @@ async function checkRouteLimits(
     baseLimit: number;
   }> = [];
 
-  if (route === "session") {
+  if (route === RateLimitRoute.Session) {
     checks.push({
-      scope: "session",
+      scope: RateLimitScope.Session,
       identifier: ip,
       baseLimit: routeConfig.perSession,
     });
   } else if (!sessionId) {
-    if (routeConfig.perIp !== undefined) {
+    const ipScope = ipScopeForRoute(route);
+    if (ipScope !== undefined && routeConfig.perIp !== undefined) {
       checks.push({
-        scope: `${route}_ip` as RateLimitScope,
+        scope: ipScope,
         identifier: ip,
         baseLimit: routeConfig.perIp,
       });
     }
   } else {
     checks.push({
-      scope: `${route}_session` as RateLimitScope,
+      scope: sessionScopeForRoute(route),
       identifier: `${ip}:${sessionId}`,
       baseLimit: routeConfig.perSession,
     });
 
-    if (routeConfig.perIp !== undefined) {
+    const ipScope = ipScopeForRoute(route);
+    if (ipScope !== undefined && routeConfig.perIp !== undefined) {
       checks.push({
-        scope: `${route}_ip` as RateLimitScope,
+        scope: ipScope,
         identifier: ip,
         baseLimit: routeConfig.perIp,
       });
@@ -213,7 +219,7 @@ function warnMissingUpstashOnce(): void {
  */
 export async function enforceRateLimit(
   request: Request,
-  route: RouteKind,
+  route: RateLimitRoute,
   sessionId?: string | null,
 ): Promise<NextResponse | null> {
   const config = getConfig();

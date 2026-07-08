@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { fetchChatHistory } from "@/lib/agent-client";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 
 export const revalidate = 0;
 
@@ -10,7 +10,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("sessionId") ?? searchParams.get("session_id");
 
-    const rateLimited = await enforceRateLimit(request, "messages", sessionId ?? undefined);
+    const rateLimited = await enforceRateLimit(
+      request,
+      RateLimitRoute.Messages,
+      sessionId ?? undefined,
+    );
     if (rateLimited) {
       return rateLimited;
     }
@@ -29,7 +33,11 @@ export async function GET(request: Request) {
       );
     }
 
-    const data = await fetchChatHistory(sessionId, { before, limit });
+    const data = await fetchChatHistory(sessionId, {
+      before,
+      limit,
+      clientIp: getClientIp(request),
+    });
     return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });
