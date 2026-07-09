@@ -40,7 +40,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | `WEB_API_KEY` proxied to agent API (server-only) | Implemented |
 | LiveKit JWT minting (server-only secrets) | Implemented |
 | Rate limiting on Route Handlers | Implemented (Upstash; see below) |
-| Turnstile | Not implemented |
+| Turnstile | Implemented (session, chat, voice connect) |
 | Session secret cookie | Not implemented |
 | Booking confirm / cancel proxy routes | Not implemented |
 
@@ -52,7 +52,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 |-------|-------|--------|
 | 0 | Doc scaffold | **Done** |
 | 1 | Rate limiting (`/api/session`, `/api/chat`, `/api/session/messages`, `/api/livekit/token`) | **Done** |
-| 3 | Turnstile on session create + chat | Pending |
+| 3 | Turnstile on session create, chat, and voice connect | **Done** |
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | Pending |
 | 7 | `POST /api/bookings/confirm` proxy (optional) | Pending |
 | 8 | `/cancel` page + cancel proxy | Pending |
@@ -69,7 +69,7 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `POST /api/session` | yes | yes | sets cookie |
 | `POST /api/chat` | yes | yes | required |
 | `GET /api/session/messages` | yes | — | required |
-| `POST /api/livekit/token` | yes | — | required |
+| `POST /api/livekit/token` | yes | yes | required |
 
 ---
 
@@ -107,6 +107,27 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `RATE_LIMIT_ABUSE_MODERATE_FACTOR` / `_STRICT_FACTOR` | Limit multipliers (0.5 / 0.25) |
 
 **Agent API (phase 2):** BFF forwards client IP as `X-Forwarded-For` on all agent REST calls (`agent-client.ts`) so Fargate rate limits apply per visitor.
+
+### Phase 3 — Cloudflare Turnstile
+
+**Modules:** `src/lib/turnstile/turnstile-config.ts`, `src/lib/turnstile/verify-turnstile.ts`, `src/components/turnstile/turnstile-provider.tsx`
+
+**Routes verified:** `POST /api/session`, `POST /api/chat`, `POST /api/livekit/token` (each voice connect, not per utterance)
+
+**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Fresh token per protected action; widget resets after each use.
+
+**Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.”
+
+**Env:**
+
+| Variable | Purpose |
+|----------|---------|
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Browser widget (managed site key from Cloudflare) |
+| `TURNSTILE_SECRET_KEY` | Server siteverify (Route Handlers only) |
+| `TURNSTILE_DISABLED` | Skip verification when `true` (local dev) |
+| `TURNSTILE_FAIL_CLOSED` | Return 503 when enabled but secret missing in production (default on in prod) |
+
+**Local dev:** set `TURNSTILE_DISABLED=true` or omit both keys to skip verification (same pattern as rate limits without Upstash).
 
 ---
 

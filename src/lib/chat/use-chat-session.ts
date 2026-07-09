@@ -4,6 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useTurnstile } from "@/components/turnstile/turnstile-provider";
+import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
+import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
 /**
  * Coarse lifecycle for the chat surface, derived from the bootstrap sequence and
@@ -30,20 +33,33 @@ type UseChatSessionResult = {
 
 async function ensureServerSession(
   persistedId: string | null,
+  turnstileToken: string,
 ): Promise<string> {
+  const body: Record<string, string> = {};
+  if (persistedId) {
+    body.session_id = persistedId;
+  }
+  if (turnstileToken) {
+    body[TURNSTILE_TOKEN_FIELD] = turnstileToken;
+  }
+
   const response = await fetch("/api/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(persistedId ? { session_id: persistedId } : {}),
+    body: JSON.stringify(body),
   });
+
   if (!response.ok) {
+    await notifyTurnstileFailureIfNeeded(response);
     throw new Error(await response.text());
   }
+
   const data = (await response.json()) as { session_id: string };
   return data.session_id;
 }
 
 export function useChatSession(): UseChatSessionResult {
+  const { acquireToken, resetAfterUse } = useTurnstile();
   const {
     rows,
     status: historyStatus,
@@ -71,7 +87,14 @@ export function useChatSession(): UseChatSessionResult {
       await useChatStore.persist.rehydrate();
       const persistedId = useChatStore.getState().sessionId;
 
-      const activeSessionId = await ensureServerSession(persistedId);
+      const turnstileToken = await acquireToken();
+      let activeSessionId: string;
+      try {
+        activeSessionId = await ensureServerSession(persistedId, turnstileToken);
+      } finally {
+        resetAfterUse();
+      }
+
       if (runId !== runIdRef.current) {
         return;
       }
@@ -88,7 +111,7 @@ export function useChatSession(): UseChatSessionResult {
         error instanceof Error ? error.message : "Failed to start chat",
       );
     }
-  }, [loadInitial, resetHistory]);
+  }, [acquireToken, loadInitial, resetAfterUse, resetHistory]);
 
   useEffect(() => {
     void bootstrap();

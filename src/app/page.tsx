@@ -1,4 +1,5 @@
 import { ChatPanel } from "@/components/chat/chat-panel";
+import { TurnstileProvider } from "@/components/turnstile/turnstile-provider";
 import { AgentAura } from "@/components/visualizer/agent-aura";
 
 export default function Home() {
@@ -12,7 +13,9 @@ export default function Home() {
     >
       <AgentAura />
       <div className="relative z-10 flex w-full flex-1 flex-col">
-        <ChatPanel />
+        <TurnstileProvider>
+          <ChatPanel />
+        </TurnstileProvider>
       </div>
     </main>
   );

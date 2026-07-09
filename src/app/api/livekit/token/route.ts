@@ -9,6 +9,8 @@ import { NextResponse } from "next/server";
 
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
 import { enforceRateLimit, RateLimitRoute } from "@/lib/rate-limit";
+import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
+import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
 export const revalidate = 0;
 
@@ -31,10 +33,25 @@ export async function POST(request: Request) {
     const apiKey = requireEnv("LIVEKIT_API_KEY", LIVEKIT_API_KEY);
     const apiSecret = requireEnv("LIVEKIT_API_SECRET", LIVEKIT_API_SECRET);
 
-    const rawBody = await request.json();
-    const tokenRequest = TokenSourceRequest.fromJson(rawBody, {
-      ignoreUnknownFields: true,
-    });
+    const rawBody = (await request.json()) as Record<string, unknown> & {
+      [key: string]: unknown;
+    };
+    const turnstileToken =
+      typeof rawBody[TURNSTILE_TOKEN_FIELD] === "string"
+        ? rawBody[TURNSTILE_TOKEN_FIELD]
+        : undefined;
+
+    const turnstileBlocked = await enforceTurnstile(request, turnstileToken);
+    if (turnstileBlocked) {
+      return turnstileBlocked;
+    }
+
+    const tokenRequest = TokenSourceRequest.fromJson(
+      rawBody as Parameters<typeof TokenSourceRequest.fromJson>[0],
+      {
+        ignoreUnknownFields: true,
+      },
+    );
 
     const roomName =
       tokenRequest.roomName ??
