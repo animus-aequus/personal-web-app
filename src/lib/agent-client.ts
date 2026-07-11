@@ -18,7 +18,6 @@ function agentHeaders(clientIp?: string): HeadersInit {
 export type CreateSessionResponse = {
   session_id: string;
   thread_id: string;
-  voice_websocket_url: string;
 };
 
 export const HISTORY_PAGE_SIZE = 10;
