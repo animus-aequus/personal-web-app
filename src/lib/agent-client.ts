@@ -2,15 +2,23 @@ const AGENT_API_BASE_URL =
   process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
 
-function agentHeaders(clientIp?: string): HeadersInit {
+export type AgentRequestOptions = {
+  clientIp?: string;
+  sessionSecret?: string;
+};
+
+function agentHeaders(options?: AgentRequestOptions): HeadersInit {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
   if (WEB_API_KEY) {
     headers["X-API-Key"] = WEB_API_KEY;
   }
-  if (clientIp) {
-    headers["X-Forwarded-For"] = clientIp;
+  if (options?.clientIp) {
+    headers["X-Forwarded-For"] = options.clientIp;
+  }
+  if (options?.sessionSecret) {
+    headers["X-Session-Secret"] = options.sessionSecret;
   }
   return headers;
 }
@@ -18,6 +26,8 @@ function agentHeaders(clientIp?: string): HeadersInit {
 export type CreateSessionResponse = {
   session_id: string;
   thread_id: string;
+  session_secret?: string | null;
+  session_expires_at?: string | null;
 };
 
 export const HISTORY_PAGE_SIZE = 10;
@@ -40,7 +50,7 @@ export type HistoryPageResponse = {
 
 export async function fetchChatHistory(
   sessionId: string,
-  options?: { before?: string; limit?: number; clientIp?: string },
+  options?: { before?: string; limit?: number } & AgentRequestOptions,
 ): Promise<HistoryPageResponse> {
   const params = new URLSearchParams();
   const limit = options?.limit ?? HISTORY_PAGE_SIZE;
@@ -54,7 +64,7 @@ export async function fetchChatHistory(
 
   const response = await fetch(url, {
     method: "GET",
-    headers: agentHeaders(options?.clientIp),
+    headers: agentHeaders(options),
     cache: "no-store",
   });
 
@@ -67,12 +77,12 @@ export async function fetchChatHistory(
 }
 
 export async function createAgentSession(
-  sessionId?: string,
-  clientIp?: string,
+  sessionId: string | undefined,
+  options?: AgentRequestOptions,
 ): Promise<CreateSessionResponse> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/sessions`, {
     method: "POST",
-    headers: agentHeaders(clientIp),
+    headers: agentHeaders(options),
     body: JSON.stringify({ session_id: sessionId ?? null }),
     cache: "no-store",
   });
@@ -83,6 +93,23 @@ export async function createAgentSession(
   }
 
   return response.json();
+}
+
+export async function verifyAgentSession(
+  sessionId: string,
+  options?: AgentRequestOptions,
+): Promise<void> {
+  const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/sessions/verify`, {
+    method: "POST",
+    headers: agentHeaders(options),
+    body: JSON.stringify({ session_id: sessionId }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Session verify failed (${response.status}): ${detail}`);
+  }
 }
 
 /**
@@ -141,11 +168,11 @@ function parseSseData(rawEvent: string): AgentStreamEvent | null {
 export async function* streamAgentChat(
   sessionId: string,
   message: string,
-  clientIp?: string,
+  options?: AgentRequestOptions,
 ): AsyncGenerator<string, void, unknown> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/chat/stream`, {
     method: "POST",
-    headers: agentHeaders(clientIp),
+    headers: agentHeaders(options),
     body: JSON.stringify({ session_id: sessionId, message }),
     cache: "no-store",
   });

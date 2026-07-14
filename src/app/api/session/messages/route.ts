@@ -1,7 +1,13 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { fetchChatHistory } from "@/lib/agent-client";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import {
+  isSessionBindingEnabled,
+  missingSessionSecretResponse,
+  SESSION_SECRET_COOKIE,
+} from "@/lib/session-cookie";
 
 export const revalidate = 0;
 
@@ -23,6 +29,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });
     }
 
+    const cookieStore = await cookies();
+    const sessionSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
+    if (isSessionBindingEnabled() && !sessionSecret) {
+      return missingSessionSecretResponse();
+    }
+
     const before = searchParams.get("before") ?? undefined;
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? Number.parseInt(limitParam, 10) : undefined;
@@ -37,13 +49,19 @@ export async function GET(request: Request) {
       before,
       limit,
       clientIp: getClientIp(request),
+      sessionSecret,
     });
     return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "History failed";
-    const status = message.includes("(404)") ? 404 : 500;
+    let status = 500;
+    if (message.includes("(404)")) {
+      status = 404;
+    } else if (message.includes("(401)")) {
+      status = 401;
+    }
     return NextResponse.json({ error: message }, { status });
   }
 }

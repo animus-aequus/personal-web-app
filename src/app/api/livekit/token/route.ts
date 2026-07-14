@@ -5,10 +5,17 @@ import {
   RoomConfiguration,
   type VideoGrant,
 } from "livekit-server-sdk";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
+import { verifyAgentSession } from "@/lib/agent-client";
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
-import { enforceRateLimit, RateLimitRoute } from "@/lib/rate-limit";
+import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import {
+  isSessionBindingEnabled,
+  missingSessionSecretResponse,
+  SESSION_SECRET_COOKIE,
+} from "@/lib/session-cookie";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
@@ -73,6 +80,18 @@ export async function POST(request: Request) {
       return rateLimited;
     }
 
+    const cookieStore = await cookies();
+    const sessionSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
+    if (isSessionBindingEnabled()) {
+      if (!sessionSecret) {
+        return missingSessionSecretResponse();
+      }
+      await verifyAgentSession(sessionId, {
+        clientIp: getClientIp(request),
+        sessionSecret,
+      });
+    }
+
     const roomConfig = new RoomConfiguration({
       metadata: JSON.stringify({ session_id: sessionId }),
       agents: [new RoomAgentDispatch({ agentName: LIVEKIT_AGENT_NAME })],
@@ -109,6 +128,7 @@ export async function POST(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Token generation failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("(401)") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

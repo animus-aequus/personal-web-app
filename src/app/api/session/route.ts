@@ -1,7 +1,13 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { createAgentSession } from "@/lib/agent-client";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import {
+  isSessionBindingEnabled,
+  SESSION_SECRET_COOKIE,
+  sessionSecretCookieOptions,
+} from "@/lib/session-cookie";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
@@ -27,12 +33,33 @@ export async function POST(request: Request) {
       return turnstileBlocked;
     }
 
-    const data = await createAgentSession(body.session_id ?? undefined, getClientIp(request));
-    return NextResponse.json(data, {
-      headers: { "Cache-Control": "no-store" },
+    const cookieStore = await cookies();
+    const existingSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
+
+    const data = await createAgentSession(body.session_id ?? undefined, {
+      clientIp: getClientIp(request),
+      sessionSecret: existingSecret,
     });
+
+    const response = NextResponse.json(
+      { session_id: data.session_id, thread_id: data.thread_id },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+
+    const secret = data.session_secret ?? existingSecret;
+    const expiresAt = data.session_expires_at;
+    if (isSessionBindingEnabled() && secret && expiresAt) {
+      response.cookies.set(
+        SESSION_SECRET_COOKIE,
+        secret,
+        sessionSecretCookieOptions(expiresAt),
+      );
+    }
+
+    return response;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Session failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("(401)") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

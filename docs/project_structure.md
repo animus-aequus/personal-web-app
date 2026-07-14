@@ -34,6 +34,7 @@ personal-website/                 # this repo
 | `lib/stores/agent-activity-store.ts` | Ephemeral aura `phase` + transient `audioLevel` |
 | `components/ui/*` | shadcn/ui primitives |
 | `lib/agent-client.ts` | Server-side agent API client |
+| `lib/session-cookie.ts` | httpOnly session secret cookie helpers (E4) |
 | `lib/rate-limit-config.ts` | Env-driven rate limit parameters |
 | `lib/rate-limit.ts` | Upstash rate limiter + abuse escalation |
 | `lib/livekit/room.ts` | LiveKit room naming helpers |

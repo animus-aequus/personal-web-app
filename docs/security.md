@@ -41,7 +41,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | LiveKit JWT minting (server-only secrets) | Implemented |
 | Rate limiting on Route Handlers | Implemented (Upstash; see below) |
 | Turnstile | Implemented (session, chat, voice connect) |
-| Session secret cookie | Not implemented |
+| Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel proxy routes | Not implemented |
 
 ---
@@ -53,7 +53,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 0 | Doc scaffold | **Done** |
 | 1 | Rate limiting (`/api/session`, `/api/chat`, `/api/session/messages`, `/api/livekit/token`) | **Done** |
 | 3 | Turnstile on session create, chat, and voice connect | **Done** |
-| 4 | httpOnly session secret cookie; forward `X-Session-Secret` | Pending |
+| 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `POST /api/bookings/confirm` proxy (optional) | Pending |
 | 8 | `/cancel` page + cancel proxy | Pending |
 | 12 | Clerk (optional) | Future |
@@ -128,6 +128,26 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `TURNSTILE_FAIL_CLOSED` | Return 503 when enabled but secret missing in production (default on in prod) |
 
 **Local dev:** set `TURNSTILE_DISABLED=true` or omit both keys to skip verification (same pattern as rate limits without Upstash).
+
+### Phase 4 — Session secret cookie
+
+**Modules:** `src/lib/session-cookie.ts`, updates to `src/lib/agent-client.ts`, Route Handlers under `src/app/api/session/`, `chat/`, `livekit/token/`
+
+**Cookie:** `pa_session_secret` — httpOnly, `SameSite=Lax`, `Secure` in production. `Max-Age` derived from agent `session_expires_at`.
+
+**BFF behaviour:**
+
+- `POST /api/session` — forwards existing cookie as `X-Session-Secret` for resume; sets cookie when agent returns `session_secret` (fresh start) or refreshes `Max-Age` on resume
+- `POST /api/chat`, `GET /api/session/messages`, `POST /api/livekit/token` — require cookie when binding enabled; forward `X-Session-Secret` to agent API
+- LiveKit: `verifyAgentSession()` before JWT mint
+
+**Env:**
+
+| Variable | Purpose |
+|----------|---------|
+| `SESSION_BINDING_ENABLED` | Enable cookie + secret forwarding (set `true` with agent Postgres E4) |
+
+**Client:** `sessionId` remains in Zustand/localStorage; secret never exposed to JS. Fresh start after deploy replaces `sessionId` when cookie missing.
 
 ---
 

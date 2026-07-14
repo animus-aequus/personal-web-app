@@ -3,10 +3,16 @@ import {
   createUIMessageStreamResponse,
   type UIMessage,
 } from "ai";
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { streamAgentChat } from "@/lib/agent-client";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import {
+  isSessionBindingEnabled,
+  missingSessionSecretResponse,
+  SESSION_SECRET_COOKIE,
+} from "@/lib/session-cookie";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
@@ -63,12 +69,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "message is required" }, { status: 400 });
     }
 
+    const cookieStore = await cookies();
+    const sessionSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
+    if (isSessionBindingEnabled() && !sessionSecret) {
+      return missingSessionSecretResponse();
+    }
+
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = "assistant-text";
         writer.write({ type: "text-start", id: textId });
         try {
-          for await (const delta of streamAgentChat(sessionId, userText, getClientIp(request))) {
+          for await (const delta of streamAgentChat(sessionId, userText, {
+            clientIp: getClientIp(request),
+            sessionSecret,
+          })) {
             writer.write({ type: "text-delta", id: textId, delta });
           }
         } finally {
@@ -82,6 +97,7 @@ export async function POST(request: Request) {
     return createUIMessageStreamResponse({ stream });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Chat failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("(401)") ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

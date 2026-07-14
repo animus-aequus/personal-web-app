@@ -10,12 +10,21 @@ Base path: `/api/v1` on the agent API host.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| `POST` | `/sessions` | `{ "session_id": string \| null }` | `{ "session_id", "thread_id", … }` |
+| `POST` | `/sessions` | `{ "session_id": string \| null }` | `{ "session_id", "thread_id", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only |
+| `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` of assistant text deltas (see below) |
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
+
+**Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
+
+### `POST /sessions`
+
+- **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, returns `session_secret` + `session_expires_at` for BFF Set-Cookie.
+- **Resume** (cookie secret + matching `session_id`): same id; returns `session_expires_at` only (throttled touch may extend expiry).
+- Without binding: legacy stateless id normalization (pre-E4).
 
 ### `/sessions/{session_id}/messages` history pagination
 
