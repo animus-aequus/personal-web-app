@@ -250,6 +250,15 @@ function TextChatArea({
   const setOtpFromPayload = useBookingOtpStore((s) => s.setFromPayload);
 
   useEffect(() => {
+    // Only the latest data-otp part matters; older parts stay in useChat history
+    // after confirm/cancel and must not resurrect a dismissed widget.
+    let latest: {
+      bookingId: string;
+      emailMasked: string;
+      expiresAt: string;
+      attemptsLeft?: number;
+    } | null = null;
+
     for (const message of messages) {
       for (const part of message.parts) {
         if (part.type !== "data-otp") {
@@ -266,14 +275,23 @@ function TextChatArea({
           typeof data.emailMasked === "string" &&
           typeof data.expiresAt === "string"
         ) {
-          setOtpFromPayload({
+          latest = {
             bookingId: data.bookingId,
             emailMasked: data.emailMasked,
             expiresAt: data.expiresAt,
-            attemptsLeft: data.attemptsLeft ?? 5,
-          });
+            attemptsLeft: data.attemptsLeft,
+          };
         }
       }
+    }
+
+    if (latest) {
+      setOtpFromPayload({
+        bookingId: latest.bookingId,
+        emailMasked: latest.emailMasked,
+        expiresAt: latest.expiresAt,
+        attemptsLeft: latest.attemptsLeft ?? 5,
+      });
     }
   }, [messages, setOtpFromPayload]);
 

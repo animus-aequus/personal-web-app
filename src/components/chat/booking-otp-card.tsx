@@ -61,12 +61,12 @@ async function postCancel(sessionId: string, bookingId: string): Promise<Respons
 
 function finishWithSuccess(message?: string): void {
   showBookingOtpSuccessToast(message);
-  useBookingOtpStore.getState().clear();
+  useBookingOtpStore.getState().dismiss();
 }
 
 function finishWithError(message: string): void {
   showBookingOtpErrorToast(message);
-  useBookingOtpStore.getState().clear();
+  useBookingOtpStore.getState().dismiss();
 }
 
 function BookingOtpCardInner({
@@ -124,11 +124,8 @@ function BookingOtpCardInner({
       } else if (detail.includes("slot_taken")) {
         finishWithError("That time slot is no longer available.");
       } else if (detail.includes("otp_invalid")) {
-        setStatus(
-          "pending",
-          "Incorrect code. Try again.",
-          Math.max(0, active.attemptsLeft - 1),
-        );
+        showBookingOtpErrorToast("Incorrect code. Try again.");
+        setStatus("pending", undefined, Math.max(0, active.attemptsLeft - 1));
         setCode("");
       } else {
         finishWithError("Could not confirm the booking.");
@@ -209,9 +206,6 @@ function BookingOtpCardInner({
           Cancel
         </Button>
       </div>
-      {active.errorMessage ? (
-        <p className="mt-2 text-xs text-destructive">{active.errorMessage}</p>
-      ) : null}
     </div>
   );
 }
