@@ -42,7 +42,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Rate limiting on Route Handlers | Implemented (Upstash; see below) |
 | Turnstile | Implemented (session, chat, voice connect) |
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
-| Booking confirm / cancel proxy routes | Not implemented |
+| Booking confirm / cancel / pending proxy routes | **Done** (E7) |
 
 ---
 
@@ -54,11 +54,11 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 1 | Rate limiting (`/api/session`, `/api/chat`, `/api/session/messages`, `/api/livekit/token`) | **Done** |
 | 3 | Turnstile on session create, chat, and voice connect | **Done** |
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
-| 7 | `POST /api/bookings/confirm` proxy (optional) | Pending |
-| 8 | `/cancel` page + cancel proxy | Pending |
+| 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
+| 8 | `/cancel` page + cancel proxy for **confirmed** bookings | Pending |
 | 12 | Clerk (optional) | Future |
 
-Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done** — see that doc for env vars.
+Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done** — see that doc for env vars. E6/E7 (pending OTP) are **Done** on the agent API.
 
 ---
 
@@ -70,6 +70,9 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `POST /api/chat` | yes | yes | required |
 | `GET /api/session/messages` | yes | — | required |
 | `POST /api/livekit/token` | yes | yes | required |
+| `POST /api/bookings/confirm` | yes | — | required |
+| `POST /api/bookings/cancel` | yes | — | required |
+| `GET /api/bookings/pending` | yes | — | required |
 
 ---
 
@@ -102,6 +105,8 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `RATE_LIMIT_CHAT_PER_SESSION` / `_PER_IP` | Chat (60 / 120) |
 | `RATE_LIMIT_MESSAGES_PER_SESSION` / `_PER_IP` | History (120 / 240) |
 | `RATE_LIMIT_LIVEKIT_PER_SESSION` / `_PER_IP` | Voice token (20 / 40) |
+| `RATE_LIMIT_BOOKING_PER_SESSION` / `_PER_IP` | Booking pending/cancel (30 / 60) |
+| `RATE_LIMIT_BOOKING_CONFIRM_PER_SESSION` / `_PER_IP` | Booking confirm (20 / 40) |
 | `RATE_LIMIT_ABUSE_STRIKE_WINDOW_SECONDS` | Strike TTL (86400) |
 | `RATE_LIMIT_ABUSE_STRIKES_MODERATE` / `_STRICT` | Tier thresholds (2 / 5) |
 | `RATE_LIMIT_ABUSE_MODERATE_FACTOR` / `_STRICT_FACTOR` | Limit multipliers (0.5 / 0.25) |
@@ -148,6 +153,14 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `SESSION_BINDING_ENABLED` | Enable cookie + secret forwarding (set `true` with agent Postgres E4) |
 
 **Client:** `sessionId` remains in Zustand/localStorage; secret never exposed to JS. Fresh start after deploy replaces `sessionId` when cookie missing.
+
+### Phase 7 — Booking OTP proxy routes
+
+**Modules:** `src/app/api/bookings/confirm/route.ts`, `cancel/route.ts`, `pending/route.ts`, `src/lib/agent-client.ts` (confirm/cancel/pending + SSE `ui`), `src/lib/stores/booking-otp-store.ts`, `src/components/chat/booking-otp-card.tsx`
+
+**Routes:** thin proxies forwarding `X-Session-Secret` + client IP; rate limits `Booking` / `BookingConfirm`.
+
+**UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; rehydrated via `GET /api/bookings/pending` on bootstrap. LiveKit topic `ui_events`.
 
 ---
 

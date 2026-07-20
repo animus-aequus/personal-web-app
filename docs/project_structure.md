@@ -23,7 +23,8 @@ personal-website/                 # this repo
 | `app/page.tsx` | Main page — renders `ChatPanel` |
 | `app/layout.tsx` | Root layout, fonts, global styles |
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
-| `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter |
+| `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp`) |
+| `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending (E7) |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `components/chat/chat-panel.tsx` | Chat UI, voice toggle, `useSession`, merge |
 | `components/chat/message-list.tsx` | Renders merged message list |
@@ -52,7 +53,7 @@ personal-website/                 # this repo
 | Background aura / agent activity state | `src/components/visualizer/*`, `src/lib/stores/agent-activity-store.ts` |
 | Voice transcript sync | `src/lib/livekit/voice-chat-sync.ts` |
 | LiveKit room naming | `src/lib/livekit/room.ts` |
-| Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts` |
+| Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/bookings/*` |
 | LiveKit token / agent dispatch | `src/app/api/livekit/token/route.ts` |
 | Message persistence / session store | `src/lib/stores/chat-store.ts` |
 | Page shell / routing | `src/app/page.tsx`, `src/app/layout.tsx` |

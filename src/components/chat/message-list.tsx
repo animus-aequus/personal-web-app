@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageContent } from "@/components/chat/message-content";
+import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
@@ -16,6 +17,8 @@ type MessageListProps = {
   hasMoreHistory?: boolean;
   isLoadingOlder?: boolean;
   historyStatus?: HistoryStatus;
+  sessionId?: string | null;
+  showOtpInline?: boolean;
 };
 
 /** Auto-follow stays active while the viewport is within this distance of the bottom. */
@@ -39,6 +42,8 @@ export function MessageList({
   hasMoreHistory = false,
   isLoadingOlder = false,
   historyStatus,
+  sessionId,
+  showOtpInline = false,
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -224,6 +229,11 @@ export function MessageList({
             </article>
           );
         })}
+        {showOtpInline && sessionId ? (
+          <div className="mr-auto w-full max-w-sm">
+            <BookingOtpCard sessionId={sessionId} variant="inline" />
+          </div>
+        ) : null}
         {awaitingFirstToken ? (
           <p className="text-sm text-muted-foreground">Assistant is thinking…</p>
         ) : null}

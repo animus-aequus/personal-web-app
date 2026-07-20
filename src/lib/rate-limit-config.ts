@@ -3,6 +3,8 @@ export enum RateLimitRoute {
   Chat = "chat",
   Messages = "messages",
   Livekit = "livekit",
+  Booking = "booking",
+  BookingConfirm = "booking_confirm",
 }
 
 export enum RateLimitScope {
@@ -13,6 +15,10 @@ export enum RateLimitScope {
   MessagesIp = "messages_ip",
   LivekitSession = "livekit_session",
   LivekitIp = "livekit_ip",
+  BookingSession = "booking_session",
+  BookingIp = "booking_ip",
+  BookingConfirmSession = "booking_confirm_session",
+  BookingConfirmIp = "booking_confirm_ip",
 }
 
 export enum AbuseTier {
@@ -31,6 +37,10 @@ export function sessionScopeForRoute(route: RateLimitRoute): RateLimitScope {
       return RateLimitScope.MessagesSession;
     case RateLimitRoute.Livekit:
       return RateLimitScope.LivekitSession;
+    case RateLimitRoute.Booking:
+      return RateLimitScope.BookingSession;
+    case RateLimitRoute.BookingConfirm:
+      return RateLimitScope.BookingConfirmSession;
   }
 }
 
@@ -44,6 +54,10 @@ export function ipScopeForRoute(route: RateLimitRoute): RateLimitScope | undefin
       return RateLimitScope.MessagesIp;
     case RateLimitRoute.Livekit:
       return RateLimitScope.LivekitIp;
+    case RateLimitRoute.Booking:
+      return RateLimitScope.BookingIp;
+    case RateLimitRoute.BookingConfirm:
+      return RateLimitScope.BookingConfirmIp;
   }
 }
 
@@ -124,6 +138,14 @@ export function loadRateLimitConfig(): RateLimitConfig {
       [RateLimitRoute.Livekit]: {
         perSession: readPositiveInt("RATE_LIMIT_LIVEKIT_PER_SESSION", 20),
         perIp: readPositiveInt("RATE_LIMIT_LIVEKIT_PER_IP", 40),
+      },
+      [RateLimitRoute.Booking]: {
+        perSession: readPositiveInt("RATE_LIMIT_BOOKING_PER_SESSION", 30),
+        perIp: readPositiveInt("RATE_LIMIT_BOOKING_PER_IP", 60),
+      },
+      [RateLimitRoute.BookingConfirm]: {
+        perSession: readPositiveInt("RATE_LIMIT_BOOKING_CONFIRM_PER_SESSION", 20),
+        perIp: readPositiveInt("RATE_LIMIT_BOOKING_CONFIRM_PER_IP", 40),
       },
     },
     abuse: {

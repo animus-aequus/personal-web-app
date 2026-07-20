@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
+import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
@@ -19,12 +20,14 @@ import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
+import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
   endVoiceSession,
   publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
+import { useVoiceUiEvents } from "@/lib/livekit/voice-ui-events";
 import type { ChatMessage } from "@/lib/stores/chat-store";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
@@ -165,6 +168,7 @@ function TextChatArea({
   });
 
   useVoiceChatSync(session, onVoiceMessage);
+  useVoiceUiEvents(session);
 
   useEffect(() => {
     if (!voiceEnabled) {
@@ -242,6 +246,36 @@ function TextChatArea({
     id: sessionId,
     transport,
   });
+
+  const setOtpFromPayload = useBookingOtpStore((s) => s.setFromPayload);
+
+  useEffect(() => {
+    for (const message of messages) {
+      for (const part of message.parts) {
+        if (part.type !== "data-otp") {
+          continue;
+        }
+        const data = part.data as {
+          bookingId?: string;
+          emailMasked?: string;
+          expiresAt?: string;
+          attemptsLeft?: number;
+        };
+        if (
+          typeof data.bookingId === "string" &&
+          typeof data.emailMasked === "string" &&
+          typeof data.expiresAt === "string"
+        ) {
+          setOtpFromPayload({
+            bookingId: data.bookingId,
+            emailMasked: data.emailMasked,
+            expiresAt: data.expiresAt,
+            attemptsLeft: data.attemptsLeft ?? 5,
+          });
+        }
+      }
+    }
+  }, [messages, setOtpFromPayload]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -340,8 +374,18 @@ function TextChatArea({
             hasMoreHistory={hasMoreHistory}
             isLoadingOlder={isLoadingOlder}
             historyStatus={historyStatus}
+            sessionId={sessionId}
+            showOtpInline={!voiceEnabled}
           />
         </motion.div>
+
+        {voiceEnabled ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4">
+            <div className="pointer-events-auto">
+              <BookingOtpCard sessionId={sessionId} variant="overlay" />
+            </div>
+          </div>
+        ) : null}
 
         {!voiceEnabled ? <ChatScrollFade /> : null}
 

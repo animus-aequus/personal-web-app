@@ -119,6 +119,14 @@ export async function verifyAgentSession(
  */
 export type AgentStreamEvent =
   | { type: "delta"; text: string }
+  | {
+      type: "ui";
+      widget: "otp";
+      bookingId: string;
+      emailMasked: string;
+      expiresAt: string;
+      attemptsLeft?: number;
+    }
   | { type: "done" }
   | { type: "error"; message?: string };
 
@@ -129,6 +137,15 @@ function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
   const record = value as Record<string, unknown>;
   if (record.type === "delta") {
     return typeof record.text === "string";
+  }
+  if (record.type === "ui") {
+    return (
+      record.widget === "otp" &&
+      typeof record.bookingId === "string" &&
+      typeof record.emailMasked === "string" &&
+      typeof record.expiresAt === "string" &&
+      (record.attemptsLeft === undefined || typeof record.attemptsLeft === "number")
+    );
   }
   if (record.type === "done") {
     return true;
@@ -161,15 +178,13 @@ function parseSseData(rawEvent: string): AgentStreamEvent | null {
 }
 
 /**
- * Stream a chat turn from the agent API, yielding assistant text deltas as
- * they arrive. Consumes the backend's SSE protocol (delta / done / error);
- * the caller maps these to the Vercel AI SDK UI message stream.
+ * Stream a chat turn from the agent API, yielding SSE events (text deltas + UI).
  */
 export async function* streamAgentChat(
   sessionId: string,
   message: string,
   options?: AgentRequestOptions,
-): AsyncGenerator<string, void, unknown> {
+): AsyncGenerator<AgentStreamEvent, void, unknown> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/chat/stream`, {
     method: "POST",
     headers: agentHeaders(options),
@@ -203,15 +218,13 @@ export async function* streamAgentChat(
         if (!event) {
           continue;
         }
-        if (event.type === "delta") {
-          if (event.text) {
-            yield event.text;
-          }
-        } else if (event.type === "done") {
-          return;
-        } else if (event.type === "error") {
+        if (event.type === "error") {
           throw new Error(event.message ?? "Agent stream error");
         }
+        if (event.type === "done") {
+          return;
+        }
+        yield event;
       }
     }
   } finally {
@@ -221,5 +234,79 @@ export async function* streamAgentChat(
       // Stream may already be closed after a normal `done` or client abort.
     }
     reader.releaseLock();
+  }
+}
+
+export type PendingBookingResponse = {
+  booking_id: string;
+  email_masked: string;
+  expires_at: string;
+  attempts_left: number;
+  event_name: string;
+  slot_start: string;
+};
+
+export type ConfirmBookingResponse = {
+  booking_id: string;
+  status: string;
+  google_event_id?: string | null;
+};
+
+export async function fetchPendingBooking(
+  sessionId: string,
+  options?: AgentRequestOptions,
+): Promise<PendingBookingResponse | null> {
+  const url = `${AGENT_API_BASE_URL}/api/v1/bookings/pending?session_id=${encodeURIComponent(sessionId)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: agentHeaders(options),
+    cache: "no-store",
+  });
+  if (response.status === 204) {
+    return null;
+  }
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Pending booking fetch failed (${response.status}): ${detail}`);
+  }
+  return response.json();
+}
+
+export async function confirmBooking(
+  bookingId: string,
+  code: string,
+  options?: AgentRequestOptions,
+): Promise<ConfirmBookingResponse> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/bookings/${encodeURIComponent(bookingId)}/confirm`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      body: JSON.stringify({ code }),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Booking confirm failed (${response.status}): ${detail}`);
+  }
+  return response.json();
+}
+
+export async function cancelBooking(
+  bookingId: string,
+  options?: AgentRequestOptions,
+): Promise<void> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/bookings/${encodeURIComponent(bookingId)}/cancel`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok && response.status !== 204) {
+    const detail = await response.text();
+    throw new Error(`Booking cancel failed (${response.status}): ${detail}`);
   }
 }

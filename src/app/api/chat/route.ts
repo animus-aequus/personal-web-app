@@ -1,8 +1,4 @@
-import {
-  createUIMessageStream,
-  createUIMessageStreamResponse,
-  type UIMessage,
-} from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
@@ -80,11 +76,26 @@ export async function POST(request: Request) {
         const textId = "assistant-text";
         writer.write({ type: "text-start", id: textId });
         try {
-          for await (const delta of streamAgentChat(sessionId, userText, {
+          for await (const event of streamAgentChat(sessionId, userText, {
             clientIp: getClientIp(request),
             sessionSecret,
           })) {
-            writer.write({ type: "text-delta", id: textId, delta });
+            if (event.type === "delta") {
+              if (event.text) {
+                writer.write({ type: "text-delta", id: textId, delta: event.text });
+              }
+            } else if (event.type === "ui" && event.widget === "otp") {
+              writer.write({
+                type: "data-otp",
+                id: event.bookingId,
+                data: {
+                  bookingId: event.bookingId,
+                  emailMasked: event.emailMasked,
+                  expiresAt: event.expiresAt,
+                  attemptsLeft: event.attemptsLeft,
+                },
+              });
+            }
           }
         } finally {
           writer.write({ type: "text-end", id: textId });

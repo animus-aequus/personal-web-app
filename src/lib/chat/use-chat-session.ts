@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
+import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
@@ -58,6 +59,39 @@ async function ensureServerSession(
   return data.session_id;
 }
 
+async function rehydratePendingBooking(sessionId: string): Promise<void> {
+  try {
+    const response = await fetch(
+      `/api/bookings/pending?sessionId=${encodeURIComponent(sessionId)}`,
+      { cache: "no-store" },
+    );
+    if (response.status === 204) {
+      return;
+    }
+    if (!response.ok) {
+      return;
+    }
+    const data = (await response.json()) as {
+      booking_id: string;
+      email_masked: string;
+      expires_at: string;
+      attempts_left: number;
+      event_name?: string;
+      slot_start?: string;
+    };
+    useBookingOtpStore.getState().setFromPayload({
+      bookingId: data.booking_id,
+      emailMasked: data.email_masked,
+      expiresAt: data.expires_at,
+      attemptsLeft: data.attempts_left,
+      eventName: data.event_name,
+      slotStart: data.slot_start,
+    });
+  } catch {
+    // Non-fatal — OTP widget simply won't rehydrate.
+  }
+}
+
 export function useChatSession(): UseChatSessionResult {
   const { acquireToken, resetAfterUse } = useTurnstile();
   const {
@@ -82,6 +116,7 @@ export function useChatSession(): UseChatSessionResult {
     const runId = ++runIdRef.current;
     setBootstrapError(null);
     resetHistory();
+    useBookingOtpStore.getState().clear();
 
     try {
       await useChatStore.persist.rehydrate();
@@ -102,7 +137,10 @@ export function useChatSession(): UseChatSessionResult {
       useChatStore.getState().setSessionId(activeSessionId);
       setSessionId(activeSessionId);
 
-      await loadInitial(activeSessionId);
+      await Promise.all([
+        loadInitial(activeSessionId),
+        rehydratePendingBooking(activeSessionId),
+      ]);
     } catch (error) {
       if (runId !== runIdRef.current) {
         return;
@@ -114,7 +152,7 @@ export function useChatSession(): UseChatSessionResult {
   }, [acquireToken, loadInitial, resetAfterUse, resetHistory]);
 
   useEffect(() => {
-    void bootstrap();
+    (() => bootstrap())();
     return () => {
       // Invalidate the in-flight run so its late resolution cannot commit.
       runIdRef.current += 1;

@@ -14,7 +14,10 @@ Base path: `/api/v1` on the agent API host.
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
-| `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` of assistant text deltas (see below) |
+| `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` (deltas + optional UI frames; see below) |
+| `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
+| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"? }` |
+| `POST` | `/bookings/{booking_id}/cancel` | — | **204** |
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
@@ -66,17 +69,33 @@ The agent API streams **plain, AI-SDK-agnostic** Server-Sent Events. One JSON ob
 
 ```
 data: {"type":"delta","text":"…"}
+data: {"type":"ui","widget":"otp","bookingId":"…","emailMasked":"j***@example.com","expiresAt":"…","attemptsLeft":5}
 data: {"type":"done"}
 data: {"type":"error","message":"…"}
 ```
 
-Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. The BFF (`/api/chat`) maps these to the Vercel AI SDK UI message stream (`text-start` / `text-delta` / `text-end`); the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
+Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts and `ui`/`otp` → `data-otp` parts; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
+
+### Booking confirm / cancel / pending (E6/E7)
+
+Protected with `X-Session-Secret` (same session that owns the booking). Rate-limited (`BOOKING` / `BOOKING_CONFIRM`).
+
+| Endpoint | Notes |
+|----------|--------|
+| `GET /bookings/pending?session_id=` | Active non-expired PENDING for rehydration |
+| `POST /bookings/{id}/confirm` | Body `{ "code" }` — verifies OTP, writes Google event, returns CONFIRMED |
+| `POST /bookings/{id}/cancel` | Cancels PENDING only; idempotent **204** |
+
+Confirm errors (**409**): `otp_invalid`, `otp_expired`, `too_many_attempts`, `slot_taken`, `not_pending`.
 
 This app maps:
 
 - `POST /api/session` → `/api/v1/sessions` via `createAgentSession()`
 - `GET /api/session/messages` → `/api/v1/sessions/{session_id}/messages` via `fetchChatHistory()`
-- `POST /api/chat` → `/api/v1/chat/stream` via `streamAgentChat()` (async generator of deltas), re-emitted as a UI message stream for `useChat`
+- `POST /api/chat` → `/api/v1/chat/stream` via `streamAgentChat()` (events → UI message stream for `useChat`)
+- `POST /api/bookings/confirm` → `/api/v1/bookings/{id}/confirm`
+- `POST /api/bookings/cancel` → `/api/v1/bookings/{id}/cancel`
+- `GET /api/bookings/pending` → `/api/v1/bookings/pending`
 
 Shared chat `session_id` must map to backend `thread_id = web:{session_id}` so text and voice share checkpoint state.
 
@@ -97,6 +116,12 @@ Worker publishes chat rows on data topic **`chat_sync`**:
 { "type": "voice_user", "turnId": "…", "text": "…" }
 { "type": "voice_assistant", "turnId": "…", "text": "…" }
 { "type": "voice_assistant", "turnId": "…", "text": "…", "interrupted": true }
+```
+
+Worker publishes GenUI on data topic **`ui_events`**:
+
+```json
+{ "type": "booking_otp", "bookingId": "…", "emailMasked": "…", "expiresAt": "…", "attemptsLeft": 5 }
 ```
 
 `interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.
