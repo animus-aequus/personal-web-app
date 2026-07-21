@@ -399,7 +399,7 @@ function TextChatArea({
 
         {voiceEnabled ? (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4">
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto w-[min(100%,24rem)]">
               <BookingOtpCard sessionId={sessionId} variant="overlay" />
             </div>
           </div>

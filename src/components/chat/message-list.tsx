@@ -230,7 +230,7 @@ export function MessageList({
           );
         })}
         {showOtpInline && sessionId ? (
-          <div className="mr-auto w-full max-w-sm">
+          <div className="mr-auto w-[min(100%,24rem)]">
             <BookingOtpCard sessionId={sessionId} variant="inline" />
           </div>
         ) : null}

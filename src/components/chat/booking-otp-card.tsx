@@ -159,14 +159,14 @@ function BookingOtpCardInner({
   return (
     <div
       className={cn(
-        "w-full max-w-sm rounded-xl border border-border bg-background/95 p-4 shadow-sm backdrop-blur",
+        "w-[min(100%,24rem)] rounded-xl border border-border bg-background/95 p-4 shadow-sm backdrop-blur",
         className,
       )}
       role="group"
       aria-label="Booking confirmation code"
     >
       <p className="text-sm font-medium text-foreground">Enter confirmation code</p>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-xs tabular-nums text-muted-foreground">
         {`Code sent to ${active.emailMasked}. Expires in ${formatTimer(secondsLeft)}.`}
       </p>
       <div className="mt-4 flex justify-center">
