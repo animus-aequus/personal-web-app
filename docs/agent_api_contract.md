@@ -16,12 +16,14 @@ Base path: `/api/v1` on the agent API host.
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` (deltas + optional UI frames; see below) |
 | `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
-| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"? }` |
-| `POST` | `/bookings/{booking_id}/cancel` | — | **204** (PENDING abort) |
+| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"?, "note"? }` |
+| `POST` | `/bookings/{booking_id}/cancel` | — | `{ "booking_id", "status", "note"? }` (PENDING abort) |
 | `POST` | `/bookings/{booking_id}/cancel-request` | — | cancel OTP payload (CONFIRMED) |
-| `POST` | `/cancellations/{id}/confirm` | `{ "code" }` | `{ "cancellation_id", "booking_id", "status" }` |
-| `POST` | `/cancellations/{id}/abort` | — | **204** |
+| `POST` | `/cancellations/{id}/confirm` | `{ "code" }` | `{ "cancellation_id", "booking_id", "status", "note"? }` |
+| `POST` | `/cancellations/{id}/abort` | — | `{ "cancellation_id", "booking_id", "status", "note"? }` |
 | `GET` | `/cancellations/pending` | query `session_id` | `{ "items": [...] }` |
+
+`note` (when present): `{ "id", "label", "sent_at" }` — a system-note message was appended to the checkpoint for this out-of-band action (see below).
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
@@ -35,7 +37,7 @@ Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
 ### `/sessions/{session_id}/messages` history pagination
 
-Checkpoint messages are projected into **UI rows** (one user or assistant bubble each). Consecutive assistant spans between user turns (e.g. tool narration + final reply) are merged into a single assistant row.
+Checkpoint messages are projected into **UI rows** (`role`: `user`, `assistant`, or `system-note`). Consecutive assistant spans between user turns (e.g. tool narration + final reply) are merged into a single assistant row. `system-note` rows are synthetic — see "Out-of-band system notes" below — and render as a small muted event line, not a chat bubble.
 
 Query parameters:
 
@@ -106,9 +108,11 @@ Protected with `X-Session-Secret` (same session that owns the booking). Rate-lim
 |----------|--------|
 | `GET /bookings/pending?session_id=` | Active non-expired PENDING for rehydration |
 | `POST /bookings/{id}/confirm` | Body `{ "code" }` — verifies OTP, writes Google event, returns CONFIRMED |
-| `POST /bookings/{id}/cancel` | Cancels PENDING only; idempotent **204** |
+| `POST /bookings/{id}/cancel` | Cancels PENDING only |
 
 Confirm errors (**409**): `otp_invalid`, `otp_expired`, `too_many_attempts`, `slot_taken`, `not_pending`.
+
+**Out-of-band system notes:** the 4 confirm/cancel/abort endpoints above run outside the LLM turn loop, but still need the agent to know what happened. Each appends a checkpointed, tagged `HumanMessage` (`role="system-note"` once projected) and returns it as `note: { id, label, sent_at }` in the response body, so the BFF can render it in the transcript immediately instead of waiting for the next history fetch. `label` is a short human-facing summary (e.g. "Booking confirmed"); the LLM-facing instruction text is longer and never shown verbatim in the UI.
 
 This app maps:
 

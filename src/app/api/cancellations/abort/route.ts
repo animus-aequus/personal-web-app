@@ -46,12 +46,11 @@ export async function POST(request: Request) {
       return missingSessionSecretResponse();
     }
 
-    await abortCancellation(cancellationId, {
+    const data = await abortCancellation(cancellationId, {
       clientIp: getClientIp(request),
       sessionSecret,
     });
-    return new NextResponse(null, {
-      status: 204,
+    return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

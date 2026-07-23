@@ -13,16 +13,38 @@ import {
   showBookingOtpSuccessToast,
 } from "@/lib/chat/booking-otp-toast";
 import { cn } from "@/lib/utils";
+import type { SystemNoteInfo } from "@/lib/agent-client";
 import {
   useBookingOtpStore,
   type BookingOtpState,
 } from "@/lib/stores/booking-otp-store";
+import type { ChatMessage } from "@/lib/stores/chat-store";
+
+/** Appends a system-note row immediately, without waiting for a history refetch. */
+type OnSystemNote = (
+  message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
+) => void;
+
+function appendSystemNote(onNote: OnSystemNote | undefined, note?: SystemNoteInfo | null): void {
+  if (!onNote || !note) {
+    return;
+  }
+  const parsed = Date.parse(note.sent_at);
+  onNote({
+    id: note.id,
+    role: "system-note",
+    content: note.label,
+    source: "text",
+    timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
+  });
+}
 
 type BookingOtpCardProps = {
   sessionId: string;
   /** Kept for callers; terminal states use Sonner, so overlay/inline share pending-only UI. */
   variant?: "inline" | "overlay";
   className?: string;
+  onNote?: OnSystemNote;
 };
 
 function remainingSeconds(expiresAt: string, nowMs: number): number {
@@ -73,10 +95,12 @@ function BookingOtpCardInner({
   sessionId,
   active,
   className,
+  onNote,
 }: {
   sessionId: string;
   active: BookingOtpState;
   className?: string;
+  onNote?: OnSystemNote;
 }) {
   const setStatus = useBookingOtpStore((s) => s.setStatus);
   const [code, setCode] = useState("");
@@ -110,6 +134,10 @@ function BookingOtpCardInner({
     try {
       const response = await postConfirm(sessionId, active.bookingId, code);
       if (response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          note?: SystemNoteInfo | null;
+        };
+        appendSystemNote(onNote, data.note);
         finishWithSuccess();
         return;
       }
@@ -144,7 +172,11 @@ function BookingOtpCardInner({
     setSubmitting(true);
     try {
       const response = await postCancel(sessionId, active.bookingId);
-      if (response.ok || response.status === 204) {
+      if (response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          note?: SystemNoteInfo | null;
+        };
+        appendSystemNote(onNote, data.note);
         finishWithError("Booking cancelled.");
         return;
       }
@@ -213,6 +245,7 @@ function BookingOtpCardInner({
 export function BookingOtpCard({
   sessionId,
   className,
+  onNote,
 }: BookingOtpCardProps) {
   const active = useBookingOtpStore((s) => s.active);
   // Terminal outcomes are reported via Sonner toast; keep the card only while pending.
@@ -224,6 +257,7 @@ export function BookingOtpCard({
       sessionId={sessionId}
       active={active}
       className={className}
+      onNote={onNote}
     />
   );
 }

@@ -23,6 +23,9 @@ type MessageListProps = {
   historyStatus?: HistoryStatus;
   sessionId?: string | null;
   showOtpInline?: boolean;
+  onNote?: (
+    message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
+  ) => void;
 };
 
 /** Auto-follow stays active while the viewport is within this distance of the bottom. */
@@ -48,6 +51,7 @@ export function MessageList({
   historyStatus,
   sessionId,
   showOtpInline = false,
+  onNote,
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -204,6 +208,18 @@ export function MessageList({
           </p>
         ) : null}
         {messages.map((message) => {
+          if (message.role === "system-note") {
+            return (
+              <div
+                key={message.id}
+                role="status"
+                className="mx-auto rounded-full bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+              >
+                {message.content}
+              </div>
+            );
+          }
+
           const isInterruptedAssistant =
             message.role === "assistant" && message.interrupted;
 
@@ -263,8 +279,8 @@ export function MessageList({
         })}
         {showOtpInline && sessionId ? (
           <div className="mr-auto flex w-[min(100%,24rem)] flex-col gap-3">
-            <BookingCancelOtpStack sessionId={sessionId} />
-            <BookingOtpCard sessionId={sessionId} variant="inline" />
+            <BookingCancelOtpStack sessionId={sessionId} onNote={onNote} />
+            <BookingOtpCard sessionId={sessionId} variant="inline" onNote={onNote} />
           </div>
         ) : null}
         {awaitingFirstToken ? (

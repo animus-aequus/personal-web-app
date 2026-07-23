@@ -43,12 +43,11 @@ export async function POST(request: Request) {
       return missingSessionSecretResponse();
     }
 
-    await cancelBooking(bookingId, {
+    const data = await cancelBooking(bookingId, {
       clientIp: getClientIp(request),
       sessionSecret,
     });
-    return new NextResponse(null, {
-      status: 204,
+    return NextResponse.json(data, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

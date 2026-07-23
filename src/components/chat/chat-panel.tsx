@@ -448,6 +448,7 @@ function TextChatArea({
             historyStatus={historyStatus}
             sessionId={sessionId}
             showOtpInline={!voiceEnabled}
+            onNote={onVoiceMessage}
           />
         </motion.div>
 
@@ -469,9 +470,14 @@ function TextChatArea({
                 <BookingCancelOtpStack
                   sessionId={sessionId}
                   className="items-center"
+                  onNote={onVoiceMessage}
                 />
                 <div className="mx-auto w-[min(100%,24rem)]">
-                  <BookingOtpCard sessionId={sessionId} variant="overlay" />
+                  <BookingOtpCard
+                    sessionId={sessionId}
+                    variant="overlay"
+                    onNote={onVoiceMessage}
+                  />
                 </div>
               </div>
             </div>

@@ -13,15 +13,37 @@ import {
   showBookingOtpSuccessToast,
 } from "@/lib/chat/booking-otp-toast";
 import { cn } from "@/lib/utils";
+import type { SystemNoteInfo } from "@/lib/agent-client";
 import {
   useBookingCancelOtpStore,
   type CancelOtpCard,
 } from "@/lib/stores/booking-cancel-otp-store";
+import type { ChatMessage } from "@/lib/stores/chat-store";
+
+/** Appends a system-note row immediately, without waiting for a history refetch. */
+type OnSystemNote = (
+  message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
+) => void;
+
+function appendSystemNote(onNote: OnSystemNote | undefined, note?: SystemNoteInfo | null): void {
+  if (!onNote || !note) {
+    return;
+  }
+  const parsed = Date.parse(note.sent_at);
+  onNote({
+    id: note.id,
+    role: "system-note",
+    content: note.label,
+    source: "text",
+    timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
+  });
+}
 
 type BookingCancelOtpCardProps = {
   sessionId: string;
   card: CancelOtpCard;
   className?: string;
+  onNote?: OnSystemNote;
 };
 
 function remainingSeconds(expiresAt: string, nowMs: number): number {
@@ -55,6 +77,7 @@ function BookingCancelOtpCardInner({
   sessionId,
   card,
   className,
+  onNote,
 }: BookingCancelOtpCardProps) {
   const dismiss = useBookingCancelOtpStore((s) => s.dismiss);
   const updateAttempts = useBookingCancelOtpStore((s) => s.updateAttempts);
@@ -108,6 +131,10 @@ function BookingCancelOtpCardInner({
         }),
       });
       if (response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          note?: SystemNoteInfo | null;
+        };
+        appendSystemNote(onNote, data.note);
         finishSuccess();
         return;
       }
@@ -147,7 +174,11 @@ function BookingCancelOtpCardInner({
           cancellationId: card.cancellationId,
         }),
       });
-      if (response.ok || response.status === 204) {
+      if (response.ok) {
+        const data = (await response.json().catch(() => ({}))) as {
+          note?: SystemNoteInfo | null;
+        };
+        appendSystemNote(onNote, data.note);
         finishError("Cancellation aborted.");
         return;
       }
@@ -220,9 +251,11 @@ function BookingCancelOtpCardInner({
 export function BookingCancelOtpStack({
   sessionId,
   className,
+  onNote,
 }: {
   sessionId: string;
   className?: string;
+  onNote?: OnSystemNote;
 }) {
   const items = useBookingCancelOtpStore((s) => s.items);
   if (items.length === 0) {
@@ -235,6 +268,7 @@ export function BookingCancelOtpStack({
           key={card.cancellationId}
           sessionId={sessionId}
           card={card}
+          onNote={onNote}
         />
       ))}
     </div>

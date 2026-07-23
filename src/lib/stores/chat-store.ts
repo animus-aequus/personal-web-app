@@ -18,7 +18,7 @@ export type ChatMessagePart = {
 
 export type ChatMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system-note";
   content: string;
   source: MessageSource;
   timestamp: number;

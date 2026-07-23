@@ -47,7 +47,7 @@ export type HistoryMessagePart = {
 
 export type HistoryMessage = {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "system-note";
   content: string;
   sent_at: string;
   interrupted?: boolean;
@@ -288,10 +288,23 @@ export type PendingBookingResponse = {
   slot_start: string;
 };
 
+export type SystemNoteInfo = {
+  id: string;
+  label: string;
+  sent_at: string;
+};
+
 export type ConfirmBookingResponse = {
   booking_id: string;
   status: string;
   google_event_id?: string | null;
+  note?: SystemNoteInfo | null;
+};
+
+export type CancelBookingResponse = {
+  booking_id: string;
+  status: string;
+  note?: SystemNoteInfo | null;
 };
 
 export async function fetchPendingBooking(
@@ -338,7 +351,7 @@ export async function confirmBooking(
 export async function cancelBooking(
   bookingId: string,
   options?: AgentRequestOptions,
-): Promise<void> {
+): Promise<CancelBookingResponse> {
   const response = await fetch(
     `${AGENT_API_BASE_URL}/api/v1/bookings/${encodeURIComponent(bookingId)}/cancel`,
     {
@@ -347,10 +360,11 @@ export async function cancelBooking(
       cache: "no-store",
     },
   );
-  if (!response.ok && response.status !== 204) {
+  if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Booking cancel failed (${response.status}): ${detail}`);
   }
+  return response.json();
 }
 
 export type CancelRequestResponse = {
@@ -367,6 +381,14 @@ export type CancellationConfirmResponse = {
   cancellation_id: string;
   booking_id: string;
   status: string;
+  note?: SystemNoteInfo | null;
+};
+
+export type CancellationAbortResponse = {
+  cancellation_id: string;
+  booking_id: string;
+  status: string;
+  note?: SystemNoteInfo | null;
 };
 
 export type CancellationPendingItem = CancelRequestResponse;
@@ -414,7 +436,7 @@ export async function confirmCancellation(
 export async function abortCancellation(
   cancellationId: string,
   options?: AgentRequestOptions,
-): Promise<void> {
+): Promise<CancellationAbortResponse> {
   const response = await fetch(
     `${AGENT_API_BASE_URL}/api/v1/cancellations/${encodeURIComponent(cancellationId)}/abort`,
     {
@@ -423,10 +445,11 @@ export async function abortCancellation(
       cache: "no-store",
     },
   );
-  if (!response.ok && response.status !== 204) {
+  if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Cancellation abort failed (${response.status}): ${detail}`);
   }
+  return response.json();
 }
 
 export async function fetchPendingCancellations(
