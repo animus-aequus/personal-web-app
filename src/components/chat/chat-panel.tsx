@@ -44,16 +44,31 @@ const CHAT_FADE_MS = 350;
 /** Fallback bottom reservation until `ChatControlBar` reports its live height. */
 const DEFAULT_CHROME_HEIGHT_PX = 96;
 
-function ChatScrollFade() {
+const CHROME_MASK_COLOR = "rgb(0 0 0)";
+
+/** Masks agent aura below the control bar and softens scroll content above it. */
+function ChatTextBottomChrome({ bottomPx }: { bottomPx: number }) {
   return (
-    <div
-      data-chat-scroll-fade
-      aria-hidden
-      className="pointer-events-none fixed inset-x-0 bottom-24 z-[15] h-8"
-      style={{
-        background: "linear-gradient(to top, rgb(0 0 0) 0%, transparent 100%)",
-      }}
-    />
+    <>
+      <div
+        data-chat-chrome-mask
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[14]"
+        style={{
+          height: bottomPx,
+          backgroundColor: CHROME_MASK_COLOR,
+        }}
+      />
+      <div
+        data-chat-scroll-fade
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 z-[15] h-8"
+        style={{
+          bottom: bottomPx,
+          background: `linear-gradient(to top, ${CHROME_MASK_COLOR} 0%, transparent 100%)`,
+        }}
+      />
+    </>
   );
 }
 
@@ -484,7 +499,9 @@ function TextChatArea({
           </div>
         ) : null}
 
-        {!voiceEnabled ? <ChatScrollFade /> : null}
+        {!voiceEnabled ? (
+          <ChatTextBottomChrome bottomPx={chromeHeight} />
+        ) : null}
 
         <ChatControlBar
           onSend={handleSend}
@@ -516,6 +533,9 @@ export function ChatPanel() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
+  );
+  const [bootstrapChromeHeight, setBootstrapChromeHeight] = useState(
+    DEFAULT_CHROME_HEIGHT_PX,
   );
 
   const handleVoiceDisconnect = useCallback(() => {
@@ -555,7 +575,10 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden">
-      <div className="relative flex h-dvh min-h-0 flex-col pb-24">
+      <div
+        className="relative flex h-dvh min-h-0 flex-col"
+        style={{ paddingBottom: bootstrapChromeHeight }}
+      >
         {phase === "error" ? (
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
             <p className="text-sm text-destructive">
@@ -574,7 +597,9 @@ export function ChatPanel() {
             <ChatLoadingSpinner label="Loading chat" />
           </div>
         )}
-        {!voiceEnabled ? <ChatScrollFade /> : null}
+        {!voiceEnabled ? (
+          <ChatTextBottomChrome bottomPx={bootstrapChromeHeight} />
+        ) : null}
         <ChatControlBar
           onSend={() => {}}
           onVoiceToggle={handleVoiceToggle}
@@ -582,6 +607,7 @@ export function ChatPanel() {
           voiceChromeReady={false}
           disabled
           isLoading={phase === "loading"}
+          onChromeHeightChange={setBootstrapChromeHeight}
         />
       </div>
     </div>
