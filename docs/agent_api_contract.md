@@ -17,7 +17,11 @@ Base path: `/api/v1` on the agent API host.
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` (deltas + optional UI frames; see below) |
 | `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
 | `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"? }` |
-| `POST` | `/bookings/{booking_id}/cancel` | — | **204** |
+| `POST` | `/bookings/{booking_id}/cancel` | — | **204** (PENDING abort) |
+| `POST` | `/bookings/{booking_id}/cancel-request` | — | cancel OTP payload (CONFIRMED) |
+| `POST` | `/cancellations/{id}/confirm` | `{ "code" }` | `{ "cancellation_id", "booking_id", "status" }` |
+| `POST` | `/cancellations/{id}/abort` | — | **204** |
+| `GET` | `/cancellations/pending` | query `session_id` | `{ "items": [...] }` |
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
@@ -47,10 +51,27 @@ Response:
   "session_id": "…",
   "thread_id": "web:…",
   "messages": [
-    { "id": "…", "role": "user", "content": "…", "sent_at": "…", "interrupted": false }
+    { "id": "…", "role": "user", "content": "…", "sent_at": "…", "interrupted": false, "parts": null }
   ],
   "has_more": true,
   "next_before": "…"
+}
+```
+
+Optional `parts` on assistant rows (GenUI snapshots from tool artifacts), e.g.:
+
+```json
+{
+  "type": "meetings_list",
+  "listId": "…",
+  "meetings": [
+    {
+      "bookingId": "…",
+      "eventName": "…",
+      "slotStart": "…",
+      "durationMinutes": 30
+    }
+  ]
 }
 ```
 
@@ -70,13 +91,14 @@ The agent API streams **plain, AI-SDK-agnostic** Server-Sent Events. One JSON ob
 ```
 data: {"type":"delta","text":"…"}
 data: {"type":"ui","widget":"otp","bookingId":"…","emailMasked":"j***@example.com","expiresAt":"…","attemptsLeft":5}
+data: {"type":"ui","widget":"meetings_list","listId":"…","meetings":[…]}
 data: {"type":"done"}
 data: {"type":"error","message":"…"}
 ```
 
-Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts and `ui`/`otp` → `data-otp` parts; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
+Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → `data-otp`, and `ui`/`meetings_list` → `data-meetings-list`; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
 
-### Booking confirm / cancel / pending (E6/E7)
+### Booking confirm / cancel / pending (E6/E7) + cancel CONFIRMED (E8)
 
 Protected with `X-Session-Secret` (same session that owns the booking). Rate-limited (`BOOKING` / `BOOKING_CONFIRM`).
 
@@ -96,6 +118,10 @@ This app maps:
 - `POST /api/bookings/confirm` → `/api/v1/bookings/{id}/confirm`
 - `POST /api/bookings/cancel` → `/api/v1/bookings/{id}/cancel`
 - `GET /api/bookings/pending` → `/api/v1/bookings/pending`
+- `POST /api/bookings/cancel-request` → `/api/v1/bookings/{id}/cancel-request`
+- `POST /api/cancellations/confirm` → `/api/v1/cancellations/{id}/confirm`
+- `POST /api/cancellations/abort` → `/api/v1/cancellations/{id}/abort`
+- `GET /api/cancellations/pending` → `/api/v1/cancellations/pending`
 
 Shared chat `session_id` must map to backend `thread_id = web:{session_id}` so text and voice share checkpoint state.
 
@@ -122,6 +148,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 
 ```json
 { "type": "booking_otp", "bookingId": "…", "emailMasked": "…", "expiresAt": "…", "attemptsLeft": 5 }
+{ "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30 } ] }
 ```
 
 `interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.

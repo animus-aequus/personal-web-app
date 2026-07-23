@@ -5,6 +5,17 @@ import { persist } from "zustand/middleware";
 
 export type MessageSource = "text" | "voice";
 
+export type ChatMessagePart = {
+  type: "meetings_list";
+  listId: string;
+  meetings: Array<{
+    bookingId: string;
+    eventName: string;
+    slotStart: string;
+    durationMinutes: number;
+  }>;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -13,6 +24,7 @@ export type ChatMessage = {
   timestamp: number;
   /** Voice assistant row stopped by user barge-in (verified partial only). */
   interrupted?: boolean;
+  parts?: ChatMessagePart[];
 };
 
 type ChatStore = {

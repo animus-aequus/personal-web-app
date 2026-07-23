@@ -95,6 +95,15 @@ export async function POST(request: Request) {
                   attemptsLeft: event.attemptsLeft,
                 },
               });
+            } else if (event.type === "ui" && event.widget === "meetings_list") {
+              writer.write({
+                type: "data-meetings-list",
+                id: event.listId,
+                data: {
+                  listId: event.listId,
+                  meetings: event.meetings,
+                },
+              });
             }
           }
         } finally {

@@ -55,7 +55,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 3 | Turnstile on session create, chat, and voice connect | **Done** |
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
-| 8 | `/cancel` page + cancel proxy for **confirmed** bookings | Pending |
+| 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
 | 12 | Clerk (optional) | Future |
 
 Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done** — see that doc for env vars. E6/E7 (pending OTP) are **Done** on the agent API.
@@ -73,6 +73,10 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 | `POST /api/bookings/confirm` | yes | — | required |
 | `POST /api/bookings/cancel` | yes | — | required |
 | `GET /api/bookings/pending` | yes | — | required |
+| `POST /api/bookings/cancel-request` | yes | — | required |
+| `POST /api/cancellations/confirm` | yes | — | required |
+| `POST /api/cancellations/abort` | yes | — | required |
+| `GET /api/cancellations/pending` | yes | — | required |
 
 ---
 
@@ -161,6 +165,12 @@ Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`securit
 **Routes:** thin proxies forwarding `X-Session-Secret` + client IP; rate limits `Booking` / `BookingConfirm`.
 
 **UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; rehydrated via `GET /api/bookings/pending` on bootstrap. LiveKit topic `ui_events`.
+
+### Phase 8 — Meetings list + cancel OTP
+
+**Modules:** `meetings-list-card.tsx`, `booking-cancel-otp-card.tsx`, `meetings-list-store.ts`, `booking-cancel-otp-store.ts`, BFF `/api/bookings/cancel-request`, `/api/cancellations/*`, history `parts`
+
+**UI:** `meetings_list` GenUI is part of assistant message history (`parts`); Cancel buttons only while `activeListId` matches (Zustand, cleared on refresh). Cancel OTP cards are ephemeral (multi-stack), rehydrated via `GET /api/cancellations/pending`. Voice: scrollable overlay above chrome (list + cancel OTPs + confirm OTP).
 
 ---
 

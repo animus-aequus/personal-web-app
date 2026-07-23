@@ -9,10 +9,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
+import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
+import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
 import { useTurnstile } from "@/components/turnstile/turnstile-provider";
@@ -20,7 +22,9 @@ import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
+import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
+import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import {
   endVoiceSession,
@@ -28,7 +32,7 @@ import {
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import { useVoiceUiEvents } from "@/lib/livekit/voice-ui-events";
-import type { ChatMessage } from "@/lib/stores/chat-store";
+import type { ChatMessage, ChatMessagePart } from "@/lib/stores/chat-store";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
@@ -74,7 +78,25 @@ function uiMessageToChatMessage(
     .join("\n")
     .trim();
 
-  if (!text) {
+  const parts: ChatMessagePart[] = [];
+  for (const part of message.parts) {
+    if (part.type !== "data-meetings-list") {
+      continue;
+    }
+    const data = part.data as {
+      listId?: string;
+      meetings?: ChatMessagePart["meetings"];
+    };
+    if (typeof data.listId === "string" && Array.isArray(data.meetings)) {
+      parts.push({
+        type: "meetings_list",
+        listId: data.listId,
+        meetings: data.meetings,
+      });
+    }
+  }
+
+  if (!text && parts.length === 0) {
     return null;
   }
 
@@ -83,6 +105,7 @@ function uiMessageToChatMessage(
     role: message.role === "user" ? "user" : "assistant",
     content: text,
     source: "text",
+    parts: parts.length > 0 ? parts : undefined,
   };
 }
 
@@ -248,6 +271,11 @@ function TextChatArea({
   });
 
   const setOtpFromPayload = useBookingOtpStore((s) => s.setFromPayload);
+  const bookingOtpActive = useBookingOtpStore((s) => s.active);
+  const setActiveList = useMeetingsListStore((s) => s.setActiveList);
+  const activeListId = useMeetingsListStore((s) => s.activeListId);
+  const activeMeetings = useMeetingsListStore((s) => s.activeMeetings);
+  const cancelOtpItems = useBookingCancelOtpStore((s) => s.items);
 
   useEffect(() => {
     // Only the latest data-otp part matters; older parts stay in useChat history
@@ -258,29 +286,40 @@ function TextChatArea({
       expiresAt: string;
       attemptsLeft?: number;
     } | null = null;
+    let latestList: {
+      listId: string;
+      meetings: typeof activeMeetings;
+    } | null = null;
 
     for (const message of messages) {
       for (const part of message.parts) {
-        if (part.type !== "data-otp") {
-          continue;
-        }
-        const data = part.data as {
-          bookingId?: string;
-          emailMasked?: string;
-          expiresAt?: string;
-          attemptsLeft?: number;
-        };
-        if (
-          typeof data.bookingId === "string" &&
-          typeof data.emailMasked === "string" &&
-          typeof data.expiresAt === "string"
-        ) {
-          latest = {
-            bookingId: data.bookingId,
-            emailMasked: data.emailMasked,
-            expiresAt: data.expiresAt,
-            attemptsLeft: data.attemptsLeft,
+        if (part.type === "data-otp") {
+          const data = part.data as {
+            bookingId?: string;
+            emailMasked?: string;
+            expiresAt?: string;
+            attemptsLeft?: number;
           };
+          if (
+            typeof data.bookingId === "string" &&
+            typeof data.emailMasked === "string" &&
+            typeof data.expiresAt === "string"
+          ) {
+            latest = {
+              bookingId: data.bookingId,
+              emailMasked: data.emailMasked,
+              expiresAt: data.expiresAt,
+              attemptsLeft: data.attemptsLeft,
+            };
+          }
+        } else if (part.type === "data-meetings-list") {
+          const data = part.data as {
+            listId?: string;
+            meetings?: typeof activeMeetings;
+          };
+          if (typeof data.listId === "string" && Array.isArray(data.meetings)) {
+            latestList = { listId: data.listId, meetings: data.meetings };
+          }
         }
       }
     }
@@ -293,7 +332,10 @@ function TextChatArea({
         attemptsLeft: latest.attemptsLeft ?? 5,
       });
     }
-  }, [messages, setOtpFromPayload]);
+    if (latestList) {
+      setActiveList(latestList.listId, latestList.meetings);
+    }
+  }, [messages, setOtpFromPayload, setActiveList]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -355,6 +397,12 @@ function TextChatArea({
 
   const voiceChromeReady = voiceEnabled && voiceRevealReady;
 
+  const showVoiceOverlay =
+    voiceEnabled &&
+    (Boolean(activeListId) ||
+      cancelOtpItems.length > 0 ||
+      Boolean(bookingOtpActive));
+
   const handleVoiceToggle = useCallback(() => {
     if (voiceEnabled) {
       setVoiceRevealReady(false);
@@ -397,10 +445,26 @@ function TextChatArea({
           />
         </motion.div>
 
-        {voiceEnabled ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center px-4">
-            <div className="pointer-events-auto w-[min(100%,24rem)]">
-              <BookingOtpCard sessionId={sessionId} variant="overlay" />
+        {showVoiceOverlay ? (
+          <div className="pointer-events-none absolute inset-0 z-20 flex flex-col pb-24">
+            <div className="pointer-events-auto mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto overscroll-y-contain px-4 py-6">
+              <div className="mx-auto flex w-full flex-col items-stretch gap-3">
+                {activeListId ? (
+                  <MeetingsListCard
+                    listId={activeListId}
+                    meetings={activeMeetings}
+                    sessionId={sessionId}
+                    className="mt-0 max-w-none"
+                  />
+                ) : null}
+                <BookingCancelOtpStack
+                  sessionId={sessionId}
+                  className="items-center"
+                />
+                <div className="mx-auto w-[min(100%,24rem)]">
+                  <BookingOtpCard sessionId={sessionId} variant="overlay" />
+                </div>
+              </div>
             </div>
           </div>
         ) : null}

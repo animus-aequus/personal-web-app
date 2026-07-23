@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
+import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
@@ -92,6 +94,45 @@ async function rehydratePendingBooking(sessionId: string): Promise<void> {
   }
 }
 
+async function rehydratePendingCancellations(sessionId: string): Promise<void> {
+  try {
+    const response = await fetch(
+      `/api/cancellations/pending?sessionId=${encodeURIComponent(sessionId)}`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) {
+      return;
+    }
+    const data = (await response.json()) as {
+      items?: Array<{
+        cancellation_id: string;
+        booking_id: string;
+        email_masked: string;
+        expires_at: string;
+        attempts_left: number;
+        event_name: string;
+        slot_start: string;
+      }>;
+    };
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      return;
+    }
+    useBookingCancelOtpStore.getState().upsertMany(
+      data.items.map((item) => ({
+        cancellationId: item.cancellation_id,
+        bookingId: item.booking_id,
+        emailMasked: item.email_masked,
+        expiresAt: item.expires_at,
+        attemptsLeft: item.attempts_left,
+        eventName: item.event_name,
+        slotStart: item.slot_start,
+      })),
+    );
+  } catch {
+    // Non-fatal — cancel OTP widgets simply won't rehydrate.
+  }
+}
+
 export function useChatSession(): UseChatSessionResult {
   const { acquireToken, resetAfterUse } = useTurnstile();
   const {
@@ -117,6 +158,8 @@ export function useChatSession(): UseChatSessionResult {
     setBootstrapError(null);
     resetHistory();
     useBookingOtpStore.getState().clear();
+    useBookingCancelOtpStore.getState().clear();
+    useMeetingsListStore.getState().clear();
 
     try {
       await useChatStore.persist.rehydrate();
@@ -140,6 +183,7 @@ export function useChatSession(): UseChatSessionResult {
       await Promise.all([
         loadInitial(activeSessionId),
         rehydratePendingBooking(activeSessionId),
+        rehydratePendingCancellations(activeSessionId),
       ]);
     } catch (error) {
       if (runId !== runIdRef.current) {

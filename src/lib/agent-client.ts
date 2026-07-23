@@ -32,12 +32,26 @@ export type CreateSessionResponse = {
 
 export const HISTORY_PAGE_SIZE = 10;
 
+export type HistoryMeetingItem = {
+  bookingId: string;
+  eventName: string;
+  slotStart: string;
+  durationMinutes: number;
+};
+
+export type HistoryMessagePart = {
+  type: "meetings_list";
+  listId: string;
+  meetings: HistoryMeetingItem[];
+};
+
 export type HistoryMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   sent_at: string;
   interrupted?: boolean;
+  parts?: HistoryMessagePart[] | null;
 };
 
 export type HistoryPageResponse = {
@@ -127,8 +141,27 @@ export type AgentStreamEvent =
       expiresAt: string;
       attemptsLeft?: number;
     }
+  | {
+      type: "ui";
+      widget: "meetings_list";
+      listId: string;
+      meetings: HistoryMeetingItem[];
+    }
   | { type: "done" }
   | { type: "error"; message?: string };
+
+function isMeetingItem(value: unknown): value is HistoryMeetingItem {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.bookingId === "string" &&
+    typeof record.eventName === "string" &&
+    typeof record.slotStart === "string" &&
+    typeof record.durationMinutes === "number"
+  );
+}
 
 function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
   if (typeof value !== "object" || value === null) {
@@ -139,13 +172,22 @@ function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
     return typeof record.text === "string";
   }
   if (record.type === "ui") {
-    return (
-      record.widget === "otp" &&
-      typeof record.bookingId === "string" &&
-      typeof record.emailMasked === "string" &&
-      typeof record.expiresAt === "string" &&
-      (record.attemptsLeft === undefined || typeof record.attemptsLeft === "number")
-    );
+    if (record.widget === "otp") {
+      return (
+        typeof record.bookingId === "string" &&
+        typeof record.emailMasked === "string" &&
+        typeof record.expiresAt === "string" &&
+        (record.attemptsLeft === undefined || typeof record.attemptsLeft === "number")
+      );
+    }
+    if (record.widget === "meetings_list") {
+      return (
+        typeof record.listId === "string" &&
+        Array.isArray(record.meetings) &&
+        record.meetings.every(isMeetingItem)
+      );
+    }
+    return false;
   }
   if (record.type === "done") {
     return true;
@@ -309,4 +351,100 @@ export async function cancelBooking(
     const detail = await response.text();
     throw new Error(`Booking cancel failed (${response.status}): ${detail}`);
   }
+}
+
+export type CancelRequestResponse = {
+  cancellation_id: string;
+  booking_id: string;
+  email_masked: string;
+  expires_at: string;
+  attempts_left: number;
+  event_name: string;
+  slot_start: string;
+};
+
+export type CancellationConfirmResponse = {
+  cancellation_id: string;
+  booking_id: string;
+  status: string;
+};
+
+export type CancellationPendingItem = CancelRequestResponse;
+
+export async function requestBookingCancellation(
+  bookingId: string,
+  options?: AgentRequestOptions,
+): Promise<CancelRequestResponse> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/bookings/${encodeURIComponent(bookingId)}/cancel-request`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Cancel request failed (${response.status}): ${detail}`);
+  }
+  return response.json();
+}
+
+export async function confirmCancellation(
+  cancellationId: string,
+  code: string,
+  options?: AgentRequestOptions,
+): Promise<CancellationConfirmResponse> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/cancellations/${encodeURIComponent(cancellationId)}/confirm`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      body: JSON.stringify({ code }),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Cancellation confirm failed (${response.status}): ${detail}`);
+  }
+  return response.json();
+}
+
+export async function abortCancellation(
+  cancellationId: string,
+  options?: AgentRequestOptions,
+): Promise<void> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/cancellations/${encodeURIComponent(cancellationId)}/abort`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok && response.status !== 204) {
+    const detail = await response.text();
+    throw new Error(`Cancellation abort failed (${response.status}): ${detail}`);
+  }
+}
+
+export async function fetchPendingCancellations(
+  sessionId: string,
+  options?: AgentRequestOptions,
+): Promise<CancellationPendingItem[]> {
+  const url = `${AGENT_API_BASE_URL}/api/v1/cancellations/pending?session_id=${encodeURIComponent(sessionId)}`;
+  const response = await fetch(url, {
+    method: "GET",
+    headers: agentHeaders(options),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Pending cancellations fetch failed (${response.status}): ${detail}`,
+    );
+  }
+  const data = (await response.json()) as { items?: CancellationPendingItem[] };
+  return Array.isArray(data.items) ? data.items : [];
 }

@@ -2,7 +2,7 @@
 
 import type { HistoryMessage, HistoryPageResponse } from "@/lib/agent-client";
 import { HISTORY_PAGE_SIZE } from "@/lib/agent-client";
-import type { ChatMessage } from "@/lib/stores/chat-store";
+import type { ChatMessage, ChatMessagePart } from "@/lib/stores/chat-store";
 
 export type HistoryStatus =
   | "idle"
@@ -11,6 +11,34 @@ export type HistoryStatus =
   | "loading_more"
   | "exhausted"
   | "error";
+
+function mapHistoryParts(
+  parts: HistoryMessage["parts"],
+): ChatMessagePart[] | undefined {
+  if (!parts?.length) {
+    return undefined;
+  }
+  const mapped: ChatMessagePart[] = [];
+  for (const part of parts) {
+    if (part.type !== "meetings_list" || typeof part.listId !== "string") {
+      continue;
+    }
+    if (!Array.isArray(part.meetings)) {
+      continue;
+    }
+    mapped.push({
+      type: "meetings_list",
+      listId: part.listId,
+      meetings: part.meetings.map((m) => ({
+        bookingId: m.bookingId,
+        eventName: m.eventName,
+        slotStart: m.slotStart,
+        durationMinutes: m.durationMinutes,
+      })),
+    });
+  }
+  return mapped.length > 0 ? mapped : undefined;
+}
 
 export function historyMessageToChatMessage(message: HistoryMessage): ChatMessage {
   const parsed = Date.parse(message.sent_at);
@@ -21,6 +49,7 @@ export function historyMessageToChatMessage(message: HistoryMessage): ChatMessag
     source: "text",
     timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
     interrupted: message.interrupted ?? false,
+    parts: mapHistoryParts(message.parts),
   };
 }
 

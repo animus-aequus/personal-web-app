@@ -5,8 +5,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageContent } from "@/components/chat/message-content";
+import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
+import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
+import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
+import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
 
@@ -54,6 +58,13 @@ export function MessageList({
   const pendingPreserveRef = useRef<{ height: number; top: number } | null>(null);
   const prevFirstIdRef = useRef<string | undefined>(undefined);
   const prevLastIdRef = useRef<string | undefined>(undefined);
+
+  // Inline OTP widgets (booking confirm + cancellation) are rendered outside the
+  // `messages` list below and don't participate in `useChat` state, so the
+  // scroll-to-bottom effect must also react to them explicitly — otherwise a
+  // newly added card can land below the fold with no scroll to reveal it.
+  const cancelOtpCount = useBookingCancelOtpStore((s) => s.items.length);
+  const bookingOtpActive = useBookingOtpStore((s) => s.active !== null);
 
   const lastMessage = messages[messages.length - 1];
   const awaitingFirstToken =
@@ -171,7 +182,7 @@ export function MessageList({
     scrollToBottom(element);
     lastScrollTopRef.current = element.scrollTop;
     isInitialScrollRef.current = false;
-  }, [messages, isLoading]);
+  }, [messages, isLoading, cancelOtpCount, bookingOtpActive]);
 
   return (
     <div
@@ -221,16 +232,34 @@ export function MessageList({
                   </span>
                 </div>
               ) : (
-                <MessageContent
-                  content={message.content}
-                  source={message.source}
-                />
+                <>
+                  {message.content ? (
+                    <MessageContent
+                      content={message.content}
+                      source={message.source}
+                    />
+                  ) : null}
+                  {message.parts?.map((part) => {
+                    if (part.type !== "meetings_list" || !sessionId) {
+                      return null;
+                    }
+                    return (
+                      <MeetingsListCard
+                        key={part.listId}
+                        listId={part.listId}
+                        meetings={part.meetings}
+                        sessionId={sessionId}
+                      />
+                    );
+                  })}
+                </>
               )}
             </article>
           );
         })}
         {showOtpInline && sessionId ? (
-          <div className="mr-auto w-[min(100%,24rem)]">
+          <div className="mr-auto flex w-[min(100%,24rem)] flex-col gap-3">
+            <BookingCancelOtpStack sessionId={sessionId} />
             <BookingOtpCard sessionId={sessionId} variant="inline" />
           </div>
         ) : null}

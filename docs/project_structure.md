@@ -23,8 +23,9 @@ personal-website/                 # this repo
 | `app/page.tsx` | Main page — renders `ChatPanel` |
 | `app/layout.tsx` | Root layout, fonts, global styles |
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
-| `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp`) |
-| `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending (E7) |
+| `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp` + `data-meetings-list`) |
+| `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending / cancel-request |
+| `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending (E8) |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `components/chat/chat-panel.tsx` | Chat UI, voice toggle, `useSession`, merge |
 | `components/chat/message-list.tsx` | Renders merged message list |
