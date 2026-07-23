@@ -3,12 +3,10 @@
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 
-import type { MessageSource } from "@/lib/stores/chat-store";
 import { cn } from "@/lib/utils";
 
 type MessageContentProps = {
   content: string;
-  source: MessageSource;
 };
 
 function isSafeHttpsLink(href: string | undefined): href is string {
@@ -79,11 +77,7 @@ const markdownComponents: Components = {
   img: () => null,
 };
 
-export function MessageContent({ content, source }: MessageContentProps) {
-  if (source === "voice") {
-    return <p className="min-w-0 whitespace-pre-wrap">{content}</p>;
-  }
-
+export function MessageContent({ content }: MessageContentProps) {
   return (
     <div className={cn("chat-markdown min-w-0 text-sm leading-relaxed")}>
       <ReactMarkdown components={markdownComponents}>{content}</ReactMarkdown>

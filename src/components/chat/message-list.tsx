@@ -239,10 +239,7 @@ export function MessageList({
             >
               {isInterruptedAssistant ? (
                 <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-7 dark:border-amber-500/15">
-                  <MessageContent
-                    content={message.content}
-                    source={message.source}
-                  />
+                  <MessageContent content={message.content} />
                   <span
                     className="absolute -right-2.5 -top-2.5 flex items-center justify-center bg-background p-1 text-amber-600/55 dark:text-amber-500/50"
                     title="Interrupted before finishing"
@@ -254,10 +251,7 @@ export function MessageList({
               ) : (
                 <>
                   {message.content ? (
-                    <MessageContent
-                      content={message.content}
-                      source={message.source}
-                    />
+                    <MessageContent content={message.content} />
                   ) : null}
                   {message.parts?.map((part) => {
                     if (part.type !== "meetings_list" || !sessionId) {
