@@ -41,6 +41,8 @@ const LIVEKIT_AGENT_NAME =
 
 const EASE = [0.4, 0, 0.2, 1] as const;
 const CHAT_FADE_MS = 350;
+/** Fallback bottom reservation until `ChatControlBar` reports its live height. */
+const DEFAULT_CHROME_HEIGHT_PX = 96;
 
 function ChatScrollFade() {
   return (
@@ -382,6 +384,7 @@ function TextChatArea({
 
   const showGreeting = mergedMessages.length === 0 && !voiceEnabled;
   const [voiceRevealReady, setVoiceRevealReady] = useState(false);
+  const [chromeHeight, setChromeHeight] = useState(DEFAULT_CHROME_HEIGHT_PX);
   const userTrack = session.isConnected ? session.local.microphoneTrack : undefined;
 
   useEffect(() => {
@@ -423,14 +426,17 @@ function TextChatArea({
         <ChatGreeting visible={showGreeting} />
 
         <motion.div
-          className="relative flex min-h-0 flex-1 flex-col pb-24"
+          className="relative flex min-h-0 flex-1 flex-col"
           initial={false}
           animate={{
             opacity: voiceEnabled ? 0 : 1,
             y: voiceEnabled ? 8 : 0,
           }}
           transition={{ duration: 0.35, ease: EASE }}
-          style={{ pointerEvents: voiceEnabled ? "none" : "auto" }}
+          style={{
+            pointerEvents: voiceEnabled ? "none" : "auto",
+            paddingBottom: chromeHeight,
+          }}
           aria-hidden={voiceEnabled}
         >
           <MessageList
@@ -446,8 +452,11 @@ function TextChatArea({
         </motion.div>
 
         {showVoiceOverlay ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex flex-col pb-24">
-            <div className="pointer-events-auto mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-center overflow-y-auto overscroll-y-contain px-4 py-6">
+          <div
+            className="pointer-events-none absolute inset-0 z-20 flex flex-col"
+            style={{ paddingBottom: chromeHeight }}
+          >
+            <div className="pointer-events-auto mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col justify-[safe_center] overflow-y-auto overscroll-y-contain px-4 py-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="mx-auto flex w-full flex-col items-stretch gap-3">
                 {activeListId ? (
                   <MeetingsListCard
@@ -478,6 +487,7 @@ function TextChatArea({
           voiceChromeReady={voiceChromeReady}
           userTrack={userTrack}
           isLoading={isLoading}
+          onChromeHeightChange={setChromeHeight}
         />
       </div>
     </AgentSessionProvider>

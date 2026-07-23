@@ -114,37 +114,63 @@ export function MeetingsListCard({
       ) : (
         meetings.map((meeting) => {
           const { date, time } = formatDateParts(meeting.slotStart);
+          const cancelButton = interactive ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busyId === meeting.bookingId}
+              onClick={() => void handleCancel(meeting)}
+            >
+              Cancel
+            </Button>
+          ) : null;
+
           return (
             <div
               key={meeting.bookingId}
               role="listitem"
-              className="grid grid-cols-[5.5rem_minmax(0,1fr)_4rem_auto] items-center gap-3 border-b border-border px-3 py-3 last:border-b-0"
+              className="border-b border-border px-3 py-3 last:border-b-0"
             >
-              <div className="min-w-0 tabular-nums">
-                <p className="text-sm font-medium leading-tight text-foreground">
-                  {date}
-                </p>
-                <p className="text-xs text-muted-foreground">{time}</p>
+              {/* Mobile: two stacked rows — the 4-column grid below doesn't
+                  leave enough room for the title on narrow viewports. */}
+              <div className="flex flex-col gap-1.5 md:hidden">
+                <div className="flex items-baseline justify-between gap-2 tabular-nums">
+                  <span className="text-sm font-medium text-foreground">
+                    {date}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{time}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {meeting.durationMinutes} min
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p
+                    className="min-w-0 flex-1 truncate text-sm text-foreground"
+                    title={meeting.eventName}
+                  >
+                    {meeting.eventName}
+                  </p>
+                  {cancelButton}
+                </div>
               </div>
-              <p className="truncate text-sm text-foreground" title={meeting.eventName}>
-                {meeting.eventName}
-              </p>
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {meeting.durationMinutes} min
-              </p>
-              {interactive ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busyId === meeting.bookingId}
-                  onClick={() => void handleCancel(meeting)}
-                >
-                  Cancel
-                </Button>
-              ) : (
-                <span className="w-[4.5rem]" aria-hidden />
-              )}
+
+              {/* Desktop/tablet: single-row grid, equal column widths. */}
+              <div className="hidden md:grid md:grid-cols-[5.5rem_minmax(0,1fr)_4rem_auto] md:items-center md:gap-3">
+                <div className="min-w-0 tabular-nums">
+                  <p className="text-sm font-medium leading-tight text-foreground">
+                    {date}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{time}</p>
+                </div>
+                <p className="truncate text-sm text-foreground" title={meeting.eventName}>
+                  {meeting.eventName}
+                </p>
+                <p className="text-xs tabular-nums text-muted-foreground">
+                  {meeting.durationMinutes} min
+                </p>
+                {cancelButton ?? <span className="w-[4.5rem]" aria-hidden />}
+              </div>
             </div>
           );
         })

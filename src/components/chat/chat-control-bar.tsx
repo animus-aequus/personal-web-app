@@ -49,6 +49,9 @@ type ChatControlBarProps = {
   userTrack?: TrackReferenceOrPlaceholder;
   disabled?: boolean;
   isLoading?: boolean;
+  /** Reports the live pixel height reserved by this bar (incl. its bottom
+   * viewport offset) so other fixed/absolute UI can avoid overlapping it. */
+  onChromeHeightChange?: (heightPx: number) => void;
 };
 
 export function ChatControlBar({
@@ -59,6 +62,7 @@ export function ChatControlBar({
   userTrack,
   disabled,
   isLoading,
+  onChromeHeightChange,
 }: ChatControlBarProps) {
   const [value, setValue] = useState("");
   const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
@@ -107,17 +111,27 @@ export function ChatControlBar({
       return;
     }
 
-    const syncBarMaxWidth = () => {
-      setBarMaxWidth(
-        Math.min(anchor.clientWidth, CHAT_CONTROL.BAR_MAX_PX),
-      );
+    // `anchor` hugs its content exactly (no padding of its own), and the
+    // outer wrapper only adds horizontal padding + the fixed bottom offset —
+    // so its live bounding box is exactly the chrome height other UI (e.g.
+    // the voice GenUI overlay) must reserve at the bottom of the viewport.
+    const sync = () => {
+      setBarMaxWidth(Math.min(anchor.clientWidth, CHAT_CONTROL.BAR_MAX_PX));
+      if (onChromeHeightChange) {
+        const rect = anchor.getBoundingClientRect();
+        onChromeHeightChange(Math.max(0, window.innerHeight - rect.top));
+      }
     };
 
-    syncBarMaxWidth();
-    const observer = new ResizeObserver(syncBarMaxWidth);
+    sync();
+    const observer = new ResizeObserver(sync);
     observer.observe(anchor);
-    return () => observer.disconnect();
-  }, []);
+    window.addEventListener("resize", sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", sync);
+    };
+  }, [onChromeHeightChange]);
 
   useLayoutEffect(() => {
     if (voiceEnabled) {
@@ -183,7 +197,7 @@ export function ChatControlBar({
           {geometry.showRadial ? (
             <motion.div
               key="agent-wave"
-              className="mb-10"
+              className="mb-4"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 8 }}

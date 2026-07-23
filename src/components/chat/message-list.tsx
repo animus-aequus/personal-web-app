@@ -211,10 +211,14 @@ export function MessageList({
             <article
               key={message.id}
               className={cn(
-                "max-w-[85%] text-sm leading-relaxed",
+                "text-sm leading-relaxed",
                 message.role === "user"
-                  ? "ml-auto rounded-2xl bg-muted/50 px-4 py-3 text-foreground"
-                  : "mr-auto text-foreground",
+                  ? "ml-auto max-w-[85%] rounded-2xl bg-muted/50 px-4 py-3 text-foreground"
+                  // Fixed (not max-) width: this is a flex item in a column
+                  // flex container, so an auto margin + auto width would
+                  // shrink-to-fit its content instead of taking a stable
+                  // width — that's what made GenUI cards vary in size.
+                  : "mr-auto w-[85%] text-foreground",
               )}
             >
               {isInterruptedAssistant ? (
