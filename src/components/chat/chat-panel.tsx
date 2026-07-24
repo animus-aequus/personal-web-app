@@ -44,34 +44,6 @@ const CHAT_FADE_MS = 350;
 /** Fallback bottom reservation until `ChatControlBar` reports its live height. */
 const DEFAULT_CHROME_HEIGHT_PX = 96;
 
-const CHROME_MASK_COLOR = "rgb(0 0 0)";
-
-/** Masks agent aura below the control bar and softens scroll content above it. */
-function ChatTextBottomChrome({ bottomPx }: { bottomPx: number }) {
-  return (
-    <>
-      <div
-        data-chat-chrome-mask
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-[14]"
-        style={{
-          height: bottomPx,
-          backgroundColor: CHROME_MASK_COLOR,
-        }}
-      />
-      <div
-        data-chat-scroll-fade
-        aria-hidden
-        className="pointer-events-none fixed inset-x-0 z-[15] h-8"
-        style={{
-          bottom: bottomPx,
-          background: `linear-gradient(to top, ${CHROME_MASK_COLOR} 0%, transparent 100%)`,
-        }}
-      />
-    </>
-  );
-}
-
 /** Stable per-session text timestamps; survives re-renders without refs in render. */
 const textMessageTimestamps = new Map<string, number>();
 
@@ -499,10 +471,6 @@ function TextChatArea({
           </div>
         ) : null}
 
-        {!voiceEnabled ? (
-          <ChatTextBottomChrome bottomPx={chromeHeight} />
-        ) : null}
-
         <ChatControlBar
           onSend={handleSend}
           onVoiceToggle={handleVoiceToggle}
@@ -597,9 +565,6 @@ export function ChatPanel() {
             <ChatLoadingSpinner label="Loading chat" />
           </div>
         )}
-        {!voiceEnabled ? (
-          <ChatTextBottomChrome bottomPx={bootstrapChromeHeight} />
-        ) : null}
         <ChatControlBar
           onSend={() => {}}
           onVoiceToggle={handleVoiceToggle}
