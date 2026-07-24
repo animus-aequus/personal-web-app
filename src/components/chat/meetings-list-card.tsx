@@ -101,79 +101,81 @@ export function MeetingsListCard({
   return (
     <div
       className={cn(
-        "mt-3 w-full max-w-lg overflow-hidden rounded-xl border border-border bg-background/95 shadow-sm",
+        "mt-3 w-full max-w-lg overflow-hidden rounded-xl border border-border bg-card shadow-sm",
         className,
       )}
       role="list"
       aria-label="Your upcoming meetings"
     >
       {meetings.length === 0 ? (
-        <p className="px-3 py-4 text-sm text-muted-foreground">
+        <p className="px-4 py-4 text-sm text-muted-foreground">
           No upcoming meetings in this session.
         </p>
       ) : (
-        meetings.map((meeting) => {
-          const { date, time } = formatDateParts(meeting.slotStart);
-          const cancelButton = interactive ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busyId === meeting.bookingId}
-              onClick={() => void handleCancel(meeting)}
-            >
-              Cancel
-            </Button>
-          ) : null;
+        <div className="divide-y divide-border">
+          {meetings.map((meeting) => {
+            const { date, time } = formatDateParts(meeting.slotStart);
+            const cancelButton = interactive ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busyId === meeting.bookingId}
+                onClick={() => void handleCancel(meeting)}
+              >
+                Cancel
+              </Button>
+            ) : null;
 
-          return (
-            <div
-              key={meeting.bookingId}
-              role="listitem"
-              className="border-b border-border px-3 py-3 last:border-b-0"
-            >
-              {/* Mobile: two stacked rows — the 4-column grid below doesn't
-                  leave enough room for the title on narrow viewports. */}
-              <div className="flex flex-col gap-1.5 md:hidden">
-                <div className="flex items-baseline justify-between gap-2 tabular-nums">
-                  <span className="text-sm font-medium text-foreground">
-                    {date}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{time}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {meeting.durationMinutes} min
-                  </span>
+            return (
+              <div
+                key={meeting.bookingId}
+                role="listitem"
+                className="px-4 py-4"
+              >
+                {/* Mobile: two stacked rows — the 4-column grid below doesn't
+                    leave enough room for the title on narrow viewports. */}
+                <div className="flex flex-col gap-2 md:hidden">
+                  <div className="flex items-baseline justify-between gap-2 tabular-nums">
+                    <span className="text-sm font-medium text-foreground">
+                      {date}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{time}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {meeting.durationMinutes} min
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p
+                      className="min-w-0 flex-1 truncate text-sm text-foreground"
+                      title={meeting.eventName}
+                    >
+                      {meeting.eventName}
+                    </p>
+                    {cancelButton}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <p
-                    className="min-w-0 flex-1 truncate text-sm text-foreground"
-                    title={meeting.eventName}
-                  >
+
+                {/* Desktop/tablet: single-row grid, equal column widths. */}
+                <div className="hidden md:grid md:grid-cols-[5.5rem_minmax(0,1fr)_4rem_auto] md:items-center md:gap-3">
+                  <div className="min-w-0 tabular-nums">
+                    <p className="text-sm font-medium leading-tight text-foreground">
+                      {date}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{time}</p>
+                  </div>
+                  <p className="truncate text-sm text-foreground" title={meeting.eventName}>
                     {meeting.eventName}
                   </p>
-                  {cancelButton}
-                </div>
-              </div>
-
-              {/* Desktop/tablet: single-row grid, equal column widths. */}
-              <div className="hidden md:grid md:grid-cols-[5.5rem_minmax(0,1fr)_4rem_auto] md:items-center md:gap-3">
-                <div className="min-w-0 tabular-nums">
-                  <p className="text-sm font-medium leading-tight text-foreground">
-                    {date}
+                  <p className="text-xs tabular-nums text-muted-foreground">
+                    {meeting.durationMinutes} min
                   </p>
-                  <p className="text-xs text-muted-foreground">{time}</p>
+                  {cancelButton ?? <span className="w-[4.5rem]" aria-hidden />}
                 </div>
-                <p className="truncate text-sm text-foreground" title={meeting.eventName}>
-                  {meeting.eventName}
-                </p>
-                <p className="text-xs tabular-nums text-muted-foreground">
-                  {meeting.durationMinutes} min
-                </p>
-                {cancelButton ?? <span className="w-[4.5rem]" aria-hidden />}
               </div>
-            </div>
-          );
-        })
+            );
+          })}
+        </div>
       )}
     </div>
   );
