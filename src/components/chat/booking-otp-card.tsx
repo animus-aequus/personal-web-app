@@ -191,7 +191,7 @@ function BookingOtpCardInner({
   return (
     <div
       className={cn(
-        "w-[min(100%,24rem)] rounded-xl border border-border bg-background/95 p-4 shadow-sm backdrop-blur",
+        "w-[min(100%,24rem)] rounded-xl border border-border bg-card p-4 shadow-sm",
         className,
       )}
       role="group"

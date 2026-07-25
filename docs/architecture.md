@@ -162,7 +162,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | `/api/livekit/token` only | Never in browser |
 | `AGENT_API_BASE_URL` | Server only | Default `http://localhost:8000` |
 
-**Security rollout:** BFF-side controls (rate limits, Turnstile, session cookie) are tracked in [`security.md`](security.md). Agent API booking and calendar auth: optional repo [`../personal-voice-agent/docs/security.md`](../personal-voice-agent/docs/security.md).
+**Security rollout:** BFF-side controls (rate limits, Turnstile, session cookie) are tracked in [`security.md`](security.md). Agent API booking quotas (E9), shared text+voice message budget (E10), and graph `recursion_limit` (E12): optional repo [`../personal-voice-agent/docs/security.md`](../personal-voice-agent/docs/security.md). BFF chat RL does not duplicate the agent shared session message counter.
 
 **Agent working notes:** opt-in `docs/tmp/` (inactive by default; see `.cursor/rules/docs-tmp.mdc`).
 

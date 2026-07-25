@@ -56,9 +56,9 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
-| 12 | Clerk (optional) | Future |
+| — | Clerk (optional) | Future |
 
-Backend-only phases (2, 5–6, 9–11) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done** — see that doc for env vars. E6/E7 (pending OTP) are **Done** on the agent API.
+Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice turn RL + shared 60 messages/session/hour across text+voice) is agent-enforced; BFF chat RL stays edge-only and does **not** duplicate the shared `SESSION_MESSAGE` budget.
 
 ---
 
