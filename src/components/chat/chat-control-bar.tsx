@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -76,6 +77,7 @@ export function ChatControlBar({
 
   const anchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wasLoadingRef = useRef(Boolean(isLoading));
 
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
@@ -132,6 +134,18 @@ export function ChatControlBar({
       window.removeEventListener("resize", sync);
     };
   }, [onChromeHeightChange]);
+
+  useEffect(() => {
+    const wasLoading = wasLoadingRef.current;
+    wasLoadingRef.current = Boolean(isLoading);
+
+    if (voiceEnabled || disabled) {
+      return;
+    }
+    if (wasLoading && !isLoading) {
+      textareaRef.current?.focus();
+    }
+  }, [disabled, isLoading, voiceEnabled]);
 
   useLayoutEffect(() => {
     if (voiceEnabled) {
