@@ -13,11 +13,13 @@ import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageContent } from "@/components/chat/message-content";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
+import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { SmoothStreamingText } from "@/components/chat/smooth-streaming-text";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
+import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/stores/chat-store";
 
@@ -78,6 +80,7 @@ export function MessageList({
   // newly added card can land below the fold with no scroll to reveal it.
   const cancelOtpCount = useBookingCancelOtpStore((s) => s.items.length);
   const bookingOtpActive = useBookingOtpStore((s) => s.active !== null);
+  const directMessageActive = useDirectMessageStore((s) => s.active !== null);
 
   const lastMessage = messages[messages.length - 1];
   const awaitingFirstToken =
@@ -220,7 +223,14 @@ export function MessageList({
     }
 
     followBottomIfNeeded();
-  }, [messages, isLoading, cancelOtpCount, bookingOtpActive, followBottomIfNeeded]);
+  }, [
+    messages,
+    isLoading,
+    cancelOtpCount,
+    bookingOtpActive,
+    directMessageActive,
+    followBottomIfNeeded,
+  ]);
 
   // Word-by-word reveal grows content without changing `messages` identity —
   // observe the column so stick-to-bottom still tracks height.
@@ -343,6 +353,7 @@ export function MessageList({
           <div className="mr-auto flex w-[min(100%,24rem)] flex-col gap-3">
             <BookingCancelOtpStack sessionId={sessionId} onNote={onNote} />
             <BookingOtpCard sessionId={sessionId} variant="inline" onNote={onNote} />
+            <DirectMessageCard sessionId={sessionId} onNote={onNote} />
           </div>
         ) : null}
         {awaitingFirstToken ? (

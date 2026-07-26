@@ -56,6 +56,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
+| — | Direct message GenUI proxies + dual-window RL | **Done** |
 | — | Clerk (optional) | Future |
 
 Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice turn RL + shared 60 messages/session/hour across text+voice) is agent-enforced; BFF chat RL stays edge-only and does **not** duplicate the shared `SESSION_MESSAGE` budget.
@@ -77,6 +78,8 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 | `POST /api/cancellations/confirm` | yes | — | required |
 | `POST /api/cancellations/abort` | yes | — | required |
 | `GET /api/cancellations/pending` | yes | — | required |
+| `POST /api/direct-messages` | yes (3/h + 6/24h) | — | required |
+| `POST /api/direct-messages/cancel` | yes | — | required |
 
 ---
 
@@ -171,6 +174,16 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 **Modules:** `meetings-list-card.tsx`, `booking-cancel-otp-card.tsx`, `meetings-list-store.ts`, `booking-cancel-otp-store.ts`, BFF `/api/bookings/cancel-request`, `/api/cancellations/*`, history `parts`
 
 **UI:** `meetings_list` GenUI is part of assistant message history (`parts`); Cancel buttons only while `activeListId` matches (Zustand, cleared on refresh). Cancel OTP cards are ephemeral (multi-stack), rehydrated via `GET /api/cancellations/pending`. Voice: scrollable overlay above chrome (list + cancel OTPs + confirm OTP).
+
+### Direct message GenUI
+
+**Modules:** `direct-message-card.tsx`, `direct-message-store.ts`, `direct-message-validation.ts`, BFF `/api/direct-messages`, `/api/direct-messages/cancel`, `agent-client` send/cancel, dual-window scopes in `rate-limit-config.ts` / `rate-limit.ts`
+
+**Behaviour:**
+
+- Tool `open_direct_message_form` opens an ephemeral form (SSE `ui`/`direct_message` → `data-direct-message`, LiveKit `ui_events`). Not stored in history `parts`; no pending rehydrate.
+- Send: FE+BE validation → dual-window rate limit (3/h and 6/24h, session + IP) → agent Telegram notify + `direct_messages` insert → system-note with name/email/message.
+- Cancel: light `Booking` rate limit → agent system-note only (`Private message cancelled`).
 
 ---
 

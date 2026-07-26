@@ -109,9 +109,15 @@ async function consumeLimit(
   identifier: string,
   baseLimit: number,
   tier: AbuseTier,
+  windowSeconds?: number,
 ): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
   const limit = effectiveLimit(baseLimit, tier, config);
-  const limiter = getLimiter(redis, scope, limit, config.windowSeconds);
+  const limiter = getLimiter(
+    redis,
+    scope,
+    limit,
+    windowSeconds ?? config.windowSeconds,
+  );
   const result = await limiter.limit(identifier);
 
   if (!result.success) {
@@ -125,6 +131,66 @@ async function consumeLimit(
   return { allowed: true };
 }
 
+async function checkDirectMessageLimits(
+  ip: string,
+  sessionId: string,
+  config: RateLimitConfig,
+  redis: Redis,
+): Promise<RateLimitCheckResult> {
+  const strikes = await getAbuseStrikes(redis, ip);
+  const tier = abuseTierForStrikes(strikes, config);
+  const dm = config.directMessage;
+  const sessionKey = `${ip}:${sessionId}`;
+  const checks: Array<{
+    scope: RateLimitScope;
+    identifier: string;
+    baseLimit: number;
+    windowSeconds: number;
+  }> = [
+    {
+      scope: RateLimitScope.DirectMessageSessionHourly,
+      identifier: sessionKey,
+      baseLimit: dm.perSessionHourly,
+      windowSeconds: dm.hourlyWindowSeconds,
+    },
+    {
+      scope: RateLimitScope.DirectMessageIpHourly,
+      identifier: ip,
+      baseLimit: dm.perIpHourly,
+      windowSeconds: dm.hourlyWindowSeconds,
+    },
+    {
+      scope: RateLimitScope.DirectMessageSessionDaily,
+      identifier: sessionKey,
+      baseLimit: dm.perSessionDaily,
+      windowSeconds: dm.dailyWindowSeconds,
+    },
+    {
+      scope: RateLimitScope.DirectMessageIpDaily,
+      identifier: ip,
+      baseLimit: dm.perIpDaily,
+      windowSeconds: dm.dailyWindowSeconds,
+    },
+  ];
+
+  for (const check of checks) {
+    const outcome = await consumeLimit(
+      redis,
+      config,
+      check.scope,
+      check.identifier,
+      check.baseLimit,
+      tier,
+      check.windowSeconds,
+    );
+    if (!outcome.allowed) {
+      await recordAbuseStrike(redis, ip, config);
+      return outcome;
+    }
+  }
+  return { allowed: true };
+}
+
 async function checkRouteLimits(
   route: RateLimitRoute,
   ip: string,
@@ -132,6 +198,13 @@ async function checkRouteLimits(
   config: RateLimitConfig,
   redis: Redis,
 ): Promise<RateLimitCheckResult> {
+  if (route === RateLimitRoute.DirectMessage) {
+    if (!sessionId) {
+      return { allowed: false, retryAfterSeconds: 60 };
+    }
+    return checkDirectMessageLimits(ip, sessionId, config, redis);
+  }
+
   const strikes = await getAbuseStrikes(redis, ip);
   const tier = abuseTierForStrikes(strikes, config);
   const routeConfig = config.routes[route];

@@ -147,6 +147,14 @@ export type AgentStreamEvent =
       listId: string;
       meetings: HistoryMeetingItem[];
     }
+  | {
+      type: "ui";
+      widget: "direct_message";
+      formId: string;
+      name?: string;
+      email?: string;
+      phoneNumber?: string;
+    }
   | { type: "done" }
   | { type: "error"; message?: string };
 
@@ -185,6 +193,14 @@ function isAgentStreamEvent(value: unknown): value is AgentStreamEvent {
         typeof record.listId === "string" &&
         Array.isArray(record.meetings) &&
         record.meetings.every(isMeetingItem)
+      );
+    }
+    if (record.widget === "direct_message") {
+      return (
+        typeof record.formId === "string" &&
+        (record.name === undefined || typeof record.name === "string") &&
+        (record.email === undefined || typeof record.email === "string") &&
+        (record.phoneNumber === undefined || typeof record.phoneNumber === "string")
       );
     }
     return false;
@@ -470,4 +486,70 @@ export async function fetchPendingCancellations(
   }
   const data = (await response.json()) as { items?: CancellationPendingItem[] };
   return Array.isArray(data.items) ? data.items : [];
+}
+
+export type DirectMessageSendResponse = {
+  message_id: string;
+  note?: SystemNoteInfo | null;
+};
+
+export type DirectMessageCancelResponse = {
+  form_id: string;
+  note?: SystemNoteInfo | null;
+};
+
+export async function sendDirectMessage(
+  body: {
+    sessionId: string;
+    formId: string;
+    name: string;
+    email: string;
+    message: string;
+    phoneNumber?: string;
+  },
+  options?: AgentRequestOptions,
+): Promise<DirectMessageSendResponse> {
+  const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/direct-messages`, {
+    method: "POST",
+    headers: agentHeaders(options),
+    body: JSON.stringify({
+      session_id: body.sessionId,
+      form_id: body.formId,
+      name: body.name,
+      email: body.email,
+      message: body.message,
+      phone_number: body.phoneNumber ?? null,
+    }),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Direct message send failed (${response.status}): ${detail}`);
+  }
+  return response.json();
+}
+
+export async function cancelDirectMessage(
+  body: { sessionId: string; formId: string },
+  options?: AgentRequestOptions,
+): Promise<DirectMessageCancelResponse> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/direct-messages/cancel`,
+    {
+      method: "POST",
+      headers: agentHeaders(options),
+      body: JSON.stringify({
+        session_id: body.sessionId,
+        form_id: body.formId,
+      }),
+      cache: "no-store",
+    },
+  );
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(
+      `Direct message cancel failed (${response.status}): ${detail}`,
+    );
+  }
+  return response.json();
 }

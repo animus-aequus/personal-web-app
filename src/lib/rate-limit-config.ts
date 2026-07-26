@@ -5,6 +5,7 @@ export enum RateLimitRoute {
   Livekit = "livekit",
   Booking = "booking",
   BookingConfirm = "booking_confirm",
+  DirectMessage = "direct_message",
 }
 
 export enum RateLimitScope {
@@ -19,6 +20,10 @@ export enum RateLimitScope {
   BookingIp = "booking_ip",
   BookingConfirmSession = "booking_confirm_session",
   BookingConfirmIp = "booking_confirm_ip",
+  DirectMessageSessionHourly = "direct_message_session_hourly",
+  DirectMessageIpHourly = "direct_message_ip_hourly",
+  DirectMessageSessionDaily = "direct_message_session_daily",
+  DirectMessageIpDaily = "direct_message_ip_daily",
 }
 
 export enum AbuseTier {
@@ -41,6 +46,8 @@ export function sessionScopeForRoute(route: RateLimitRoute): RateLimitScope {
       return RateLimitScope.BookingSession;
     case RateLimitRoute.BookingConfirm:
       return RateLimitScope.BookingConfirmSession;
+    case RateLimitRoute.DirectMessage:
+      return RateLimitScope.DirectMessageSessionHourly;
   }
 }
 
@@ -58,6 +65,8 @@ export function ipScopeForRoute(route: RateLimitRoute): RateLimitScope | undefin
       return RateLimitScope.BookingIp;
     case RateLimitRoute.BookingConfirm:
       return RateLimitScope.BookingConfirmIp;
+    case RateLimitRoute.DirectMessage:
+      return RateLimitScope.DirectMessageIpHourly;
   }
 }
 
@@ -68,11 +77,21 @@ export type RateLimitRouteConfig = {
   perIp?: number;
 };
 
+export type DualWindowRouteConfig = {
+  perSessionHourly: number;
+  perIpHourly: number;
+  perSessionDaily: number;
+  perIpDaily: number;
+  hourlyWindowSeconds: number;
+  dailyWindowSeconds: number;
+};
+
 export type RateLimitConfig = {
   enabled: boolean;
   failClosed: boolean;
   windowSeconds: number;
   routes: Record<RateLimitRoute, RateLimitRouteConfig>;
+  directMessage: DualWindowRouteConfig;
   abuse: {
     strikeWindowSeconds: number;
     strikesModerate: number;
@@ -147,6 +166,33 @@ export function loadRateLimitConfig(): RateLimitConfig {
         perSession: readPositiveInt("RATE_LIMIT_BOOKING_CONFIRM_PER_SESSION", 20),
         perIp: readPositiveInt("RATE_LIMIT_BOOKING_CONFIRM_PER_IP", 40),
       },
+      [RateLimitRoute.DirectMessage]: {
+        perSession: readPositiveInt(
+          "RATE_LIMIT_DIRECT_MESSAGE_PER_SESSION_HOURLY",
+          3,
+        ),
+        perIp: readPositiveInt("RATE_LIMIT_DIRECT_MESSAGE_PER_IP_HOURLY", 3),
+      },
+    },
+    directMessage: {
+      perSessionHourly: readPositiveInt(
+        "RATE_LIMIT_DIRECT_MESSAGE_PER_SESSION_HOURLY",
+        3,
+      ),
+      perIpHourly: readPositiveInt("RATE_LIMIT_DIRECT_MESSAGE_PER_IP_HOURLY", 3),
+      perSessionDaily: readPositiveInt(
+        "RATE_LIMIT_DIRECT_MESSAGE_PER_SESSION_DAILY",
+        6,
+      ),
+      perIpDaily: readPositiveInt("RATE_LIMIT_DIRECT_MESSAGE_PER_IP_DAILY", 6),
+      hourlyWindowSeconds: readPositiveInt(
+        "RATE_LIMIT_DIRECT_MESSAGE_HOURLY_WINDOW_SECONDS",
+        3600,
+      ),
+      dailyWindowSeconds: readPositiveInt(
+        "RATE_LIMIT_DIRECT_MESSAGE_DAILY_WINDOW_SECONDS",
+        86_400,
+      ),
     },
     abuse: {
       strikeWindowSeconds: readPositiveInt(

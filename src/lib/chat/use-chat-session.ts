@@ -6,6 +6,7 @@ import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history"
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
@@ -160,6 +161,7 @@ export function useChatSession(): UseChatSessionResult {
     useBookingOtpStore.getState().clear();
     useBookingCancelOtpStore.getState().clear();
     useMeetingsListStore.getState().clear();
+    useDirectMessageStore.getState().clear();
 
     try {
       await useChatStore.persist.rehydrate();

@@ -14,6 +14,7 @@ import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
+import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
@@ -24,6 +25,7 @@ import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
+import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import type { VoiceLanguageCode } from "@/lib/livekit/voice-languages";
@@ -280,6 +282,10 @@ function TextChatArea({
   const activeListId = useMeetingsListStore((s) => s.activeListId);
   const activeMeetings = useMeetingsListStore((s) => s.activeMeetings);
   const cancelOtpItems = useBookingCancelOtpStore((s) => s.items);
+  const setDirectMessageFromPayload = useDirectMessageStore(
+    (s) => s.setFromPayload,
+  );
+  const directMessageActive = useDirectMessageStore((s) => s.active);
 
   useEffect(() => {
     // Only the latest data-otp part matters; older parts stay in useChat history
@@ -293,6 +299,12 @@ function TextChatArea({
     let latestList: {
       listId: string;
       meetings: typeof activeMeetings;
+    } | null = null;
+    let latestDm: {
+      formId: string;
+      name?: string;
+      email?: string;
+      phoneNumber?: string;
     } | null = null;
 
     for (const message of messages) {
@@ -324,6 +336,24 @@ function TextChatArea({
           if (typeof data.listId === "string" && Array.isArray(data.meetings)) {
             latestList = { listId: data.listId, meetings: data.meetings };
           }
+        } else if (part.type === "data-direct-message") {
+          const data = part.data as {
+            formId?: string;
+            name?: string;
+            email?: string;
+            phoneNumber?: string;
+          };
+          if (typeof data.formId === "string") {
+            latestDm = {
+              formId: data.formId,
+              name: typeof data.name === "string" ? data.name : undefined,
+              email: typeof data.email === "string" ? data.email : undefined,
+              phoneNumber:
+                typeof data.phoneNumber === "string"
+                  ? data.phoneNumber
+                  : undefined,
+            };
+          }
         }
       }
     }
@@ -339,7 +369,10 @@ function TextChatArea({
     if (latestList) {
       setActiveList(latestList.listId, latestList.meetings);
     }
-  }, [messages, setOtpFromPayload, setActiveList]);
+    if (latestDm) {
+      setDirectMessageFromPayload(latestDm);
+    }
+  }, [messages, setOtpFromPayload, setActiveList, setDirectMessageFromPayload]);
 
   const handleSend = useCallback(
     async (text: string) => {
@@ -406,7 +439,8 @@ function TextChatArea({
     voiceEnabled &&
     (Boolean(activeListId) ||
       cancelOtpItems.length > 0 ||
-      Boolean(bookingOtpActive));
+      Boolean(bookingOtpActive) ||
+      Boolean(directMessageActive));
 
   const handleVoiceToggle = useCallback(() => {
     if (voiceEnabled) {
@@ -484,6 +518,12 @@ function TextChatArea({
                   <BookingOtpCard
                     sessionId={sessionId}
                     variant="overlay"
+                    onNote={onVoiceMessage}
+                  />
+                </div>
+                <div className="mx-auto w-[min(100%,24rem)]">
+                  <DirectMessageCard
+                    sessionId={sessionId}
                     onNote={onVoiceMessage}
                   />
                 </div>

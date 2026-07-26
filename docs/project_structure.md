@@ -25,6 +25,8 @@ personal-website/                 # this repo
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
 | `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp` + `data-meetings-list`) |
 | `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending / cancel-request |
+| `app/api/direct-messages/route.ts` | Proxy private-message send |
+| `app/api/direct-messages/cancel/route.ts` | Proxy private-message cancel |
 | `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending (E8) |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `components/chat/chat-panel.tsx` | Chat UI, voice toggle, `useSession`, merge |
@@ -56,7 +58,7 @@ personal-website/                 # this repo
 | Voice transcript sync | `src/lib/livekit/voice-chat-sync.ts` |
 | LiveKit room naming | `src/lib/livekit/room.ts` |
 | Voice language select options | `src/lib/livekit/voice-languages.ts` |
-| Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/bookings/*` |
+| Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/bookings/*`, `src/app/api/direct-messages/*` |
 | LiveKit token / agent dispatch | `src/app/api/livekit/token/route.ts` |
 | Message persistence / session store | `src/lib/stores/chat-store.ts` |
 | Page shell / routing | `src/app/page.tsx`, `src/app/layout.tsx` |

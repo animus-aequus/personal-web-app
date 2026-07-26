@@ -94,11 +94,12 @@ The agent API streams **plain, AI-SDK-agnostic** Server-Sent Events. One JSON ob
 data: {"type":"delta","text":"…"}
 data: {"type":"ui","widget":"otp","bookingId":"…","emailMasked":"j***@example.com","expiresAt":"…","attemptsLeft":5}
 data: {"type":"ui","widget":"meetings_list","listId":"…","meetings":[…]}
+data: {"type":"ui","widget":"direct_message","formId":"…","name":"…","email":"…","phoneNumber":"…"}
 data: {"type":"done"}
 data: {"type":"error","message":"…"}
 ```
 
-Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → `data-otp`, and `ui`/`meetings_list` → `data-meetings-list`; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
+Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list, direct message) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → `data-otp`, `ui`/`meetings_list` → `data-meetings-list`, and `ui`/`direct_message` → `data-direct-message`; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
 
 ### Booking confirm / cancel / pending (E6/E7) + cancel CONFIRMED (E8)
 
@@ -112,7 +113,18 @@ Protected with `X-Session-Secret` (same session that owns the booking). Rate-lim
 
 Confirm errors (**409**): `otp_invalid`, `otp_expired`, `too_many_attempts`, `slot_taken`, `not_pending`.
 
-**Out-of-band system notes:** the 4 confirm/cancel/abort endpoints above run outside the LLM turn loop, but still need the agent to know what happened. Each appends a checkpointed, tagged `HumanMessage` (`role="system-note"` once projected) and returns it as `note: { id, label, sent_at }` in the response body, so the BFF can render it in the transcript immediately instead of waiting for the next history fetch. `label` is a short human-facing summary (e.g. "Booking confirmed"); the LLM-facing instruction text is longer and never shown verbatim in the UI.
+**Out-of-band system notes:** the confirm/cancel/abort booking endpoints and the direct-message send/cancel endpoints run outside the LLM turn loop, but still need the agent to know what happened. Each appends a checkpointed, tagged `HumanMessage` (`role="system-note"` once projected) and returns it as `note: { id, label, sent_at }` in the response body, so the BFF can render it in the transcript immediately instead of waiting for the next history fetch. `label` is a short human-facing summary (e.g. "Booking confirmed"); the LLM-facing instruction text is longer and never shown verbatim in the UI.
+
+### Direct messages (private message GenUI)
+
+Protected with `X-Session-Secret`. Send is dual-window rate-limited (`DIRECT_MESSAGE`: 3/h and 6/24h per session and IP). Cancel uses the lighter `BOOKING` bucket. No pending/rehydrate — the form is ephemeral.
+
+| Endpoint | Body | Notes |
+|----------|------|--------|
+| `POST /direct-messages` | `{ session_id, form_id, name, email, message, phone_number? }` | Validates fields, notifies via Telegram, inserts `direct_messages`, returns `note` |
+| `POST /direct-messages/cancel` | `{ session_id, form_id }` | Appends cancel system-note only (no DB row) |
+
+Validation: `name`/`email`/`message` required; `message` 8–1000 chars; `email` pattern; optional phone with flexible formatting (8–15 digits after normalization).
 
 This app maps:
 
@@ -126,6 +138,8 @@ This app maps:
 - `POST /api/cancellations/confirm` → `/api/v1/cancellations/{id}/confirm`
 - `POST /api/cancellations/abort` → `/api/v1/cancellations/{id}/abort`
 - `GET /api/cancellations/pending` → `/api/v1/cancellations/pending`
+- `POST /api/direct-messages` → `/api/v1/direct-messages`
+- `POST /api/direct-messages/cancel` → `/api/v1/direct-messages/cancel`
 
 Shared chat `session_id` must map to backend `thread_id = web:{session_id}` so text and voice share checkpoint state.
 
@@ -154,6 +168,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 ```json
 { "type": "booking_otp", "bookingId": "…", "emailMasked": "…", "expiresAt": "…", "attemptsLeft": 5 }
 { "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30 } ] }
+{ "type": "direct_message", "formId": "…", "name": "…", "email": "…", "phoneNumber": "…" }
 ```
 
 `interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.

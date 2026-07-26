@@ -104,6 +104,17 @@ export async function POST(request: Request) {
                   meetings: event.meetings,
                 },
               });
+            } else if (event.type === "ui" && event.widget === "direct_message") {
+              writer.write({
+                type: "data-direct-message",
+                id: event.formId,
+                data: {
+                  formId: event.formId,
+                  name: event.name,
+                  email: event.email,
+                  phoneNumber: event.phoneNumber,
+                },
+              });
             }
           }
         } finally {

@@ -17,7 +17,15 @@ export type MeetingsListData = {
   }>;
 };
 
+export type DirectMessageData = {
+  formId: string;
+  name?: string;
+  email?: string;
+  phoneNumber?: string;
+};
+
 export type ChatDataParts = {
   otp: BookingOtpData;
   "meetings-list": MeetingsListData;
+  "direct-message": DirectMessageData;
 };
