@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, Send } from "lucide-react";
+import { Mic, Send, Square } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -30,6 +30,7 @@ import {
   hasTtsFallback,
   type VoiceLanguageCode,
 } from "@/lib/livekit/voice-languages";
+import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
@@ -48,10 +49,15 @@ const MORPH_TRANSITION = {
   ease: EASE,
   borderRadius: { duration: 0 },
 } as const;
+const ICON_SWAP_TRANSITION = {
+  duration: 0.18,
+  ease: EASE,
+} as const;
 
 type ChatControlBarProps = {
   onSend: (message: string) => Promise<void> | void;
   onVoiceToggle: () => void;
+  onStopSpeech?: () => void;
   voiceEnabled: boolean;
   voiceChromeReady: boolean;
   voiceLanguage?: VoiceLanguageCode;
@@ -67,6 +73,7 @@ type ChatControlBarProps = {
 export function ChatControlBar({
   onSend,
   onVoiceToggle,
+  onStopSpeech,
   voiceEnabled,
   voiceChromeReady,
   voiceLanguage = DEFAULT_VOICE_LANGUAGE,
@@ -76,6 +83,7 @@ export function ChatControlBar({
   isLoading,
   onChromeHeightChange,
 }: ChatControlBarProps) {
+  const agentPhase = useAgentActivityStore((state) => state.phase);
   const [value, setValue] = useState("");
   const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
     height: CHAT_CONTROL.TEXT_LINE_PX,
@@ -92,8 +100,13 @@ export function ChatControlBar({
 
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
+  const agentBusy =
+    voiceEnabled &&
+    (agentPhase === "thinking" || agentPhase === "responding");
   const showTtsFallbackWarning =
     voiceEnabled && hasTtsFallback(voiceLanguage);
+  const languageSelectDisabled =
+    disabled || !onVoiceLanguageChange || agentBusy;
 
   const stackedLayout =
     !voiceEnabled &&
@@ -236,7 +249,7 @@ export function ChatControlBar({
               <select
                 id="voice-language-select"
                 value={voiceLanguage}
-                disabled={disabled || !onVoiceLanguageChange}
+                disabled={languageSelectDisabled}
                 onChange={(event) => {
                   onVoiceLanguageChange?.(
                     event.target.value as VoiceLanguageCode,
@@ -331,12 +344,17 @@ export function ChatControlBar({
             {voiceEnabled ? (
               <motion.button
                 type="button"
-                onClick={onVoiceToggle}
-                disabled={disabled}
+                onClick={agentBusy ? onStopSpeech : onVoiceToggle}
+                disabled={disabled || (agentBusy && !onStopSpeech)}
                 aria-pressed={voiceEnabled}
-                aria-label="End voice conversation"
+                aria-label={
+                  agentBusy ? "Stop response" : "End voice conversation"
+                }
                 className={cn(
-                  "absolute z-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary/90",
+                  "absolute z-10 flex items-center justify-center rounded-full transition-colors duration-300",
+                  agentBusy
+                    ? "bg-red-600 text-white hover:bg-red-700"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90",
                   disabled && "opacity-50",
                 )}
                 initial={false}
@@ -348,7 +366,31 @@ export function ChatControlBar({
                 }}
                 transition={MORPH_TRANSITION}
               >
-                <Mic className="size-6" />
+                <AnimatePresence mode="wait" initial={false}>
+                  {agentBusy ? (
+                    <motion.span
+                      key="stop"
+                      className="flex items-center justify-center"
+                      initial={{ opacity: 0, scale: 0.45 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.45 }}
+                      transition={ICON_SWAP_TRANSITION}
+                    >
+                      <Square className="size-5 fill-white text-white" />
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="mic"
+                      className="flex items-center justify-center"
+                      initial={{ opacity: 0, scale: 0.45 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.45 }}
+                      transition={ICON_SWAP_TRANSITION}
+                    >
+                      <Mic className="size-6" />
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </motion.button>
             ) : (
               <>

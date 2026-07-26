@@ -29,6 +29,7 @@ import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import type { VoiceLanguageCode } from "@/lib/livekit/voice-languages";
 import {
   endVoiceSession,
+  publishStopSpeech,
   publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
@@ -419,6 +420,12 @@ function TextChatArea({
     onVoiceToggle();
   }, [voiceEnabled, onVoiceToggle, session.room]);
 
+  const handleStopSpeech = useCallback(() => {
+    void publishStopSpeech(session.room).catch((error) => {
+      console.warn("Stop speech signal failed", error);
+    });
+  }, [session.room]);
+
   return (
     <AgentSessionProvider session={session}>
       <VoiceAuraBridge active={voiceEnabled} />
@@ -488,6 +495,7 @@ function TextChatArea({
         <ChatControlBar
           onSend={handleSend}
           onVoiceToggle={handleVoiceToggle}
+          onStopSpeech={handleStopSpeech}
           voiceEnabled={voiceEnabled}
           voiceChromeReady={voiceChromeReady}
           voiceLanguage={voiceLanguage}

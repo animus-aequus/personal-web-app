@@ -6,19 +6,29 @@ export const VOICE_CONTROL_TOPIC = "voice_control";
 
 const MODE_EXIT_SETTLE_MS = 600;
 
-/** Tell the worker to commit any in-flight assistant turn before disconnect. */
-export async function publishVoiceModeExit(room: Room): Promise<void> {
+async function publishVoiceControl(
+  room: Room,
+  type: "voice_mode_exit" | "stop_speech",
+): Promise<void> {
   if (room.state !== ConnectionState.Connected) {
     return;
   }
-  const payload = new TextEncoder().encode(
-    JSON.stringify({ type: "voice_mode_exit" }),
-  );
+  const payload = new TextEncoder().encode(JSON.stringify({ type }));
   await room.localParticipant.publishData(payload, {
     topic: VOICE_CONTROL_TOPIC,
     reliable: true,
   });
+}
+
+/** Tell the worker to commit any in-flight assistant turn before disconnect. */
+export async function publishVoiceModeExit(room: Room): Promise<void> {
+  await publishVoiceControl(room, "voice_mode_exit");
   await new Promise((resolve) => setTimeout(resolve, MODE_EXIT_SETTLE_MS));
+}
+
+/** Stop agent speech while staying in the voice session (no user message). */
+export async function publishStopSpeech(room: Room): Promise<void> {
+  await publishVoiceControl(room, "stop_speech");
 }
 
 /** End voice after signalling mode exit so chat_sync can arrive before teardown. */
