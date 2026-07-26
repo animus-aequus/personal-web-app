@@ -177,7 +177,7 @@ function BookingOtpCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        finishWithError("Booking cancelled.");
+        finishWithSuccess("Booking cancelled.");
         return;
       }
       finishWithError("Could not cancel the booking.");

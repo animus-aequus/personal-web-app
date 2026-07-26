@@ -105,8 +105,8 @@ function BookingCancelOtpCardInner({
     dismiss(card.cancellationId);
   }, [secondsLeft, card.cancellationId, dismiss]);
 
-  const finishSuccess = () => {
-    showBookingOtpSuccessToast("Meeting cancelled.");
+  const finishSuccess = (message = "Meeting cancelled.") => {
+    showBookingOtpSuccessToast(message);
     dismiss(card.cancellationId);
   };
 
@@ -179,7 +179,7 @@ function BookingCancelOtpCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        finishError("Cancellation aborted.");
+        finishSuccess("Cancellation aborted.");
         return;
       }
       finishError("Could not abort cancellation.");
