@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -81,6 +82,8 @@ async function postCancel(sessionId: string, bookingId: string): Promise<Respons
   });
 }
 
+type PendingAction = "confirm" | "cancel" | null;
+
 function finishWithSuccess(message?: string): void {
   showBookingOtpSuccessToast(message);
   useBookingOtpStore.getState().dismiss();
@@ -104,7 +107,7 @@ function BookingOtpCardInner({
 }) {
   const setStatus = useBookingOtpStore((s) => s.setStatus);
   const [code, setCode] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const expiredHandledRef = useRef(false);
 
@@ -127,10 +130,10 @@ function BookingOtpCardInner({
   }, [secondsLeft]);
 
   const handleConfirm = async () => {
-    if (code.length < 6 || submitting) {
+    if (code.length < 6 || pendingAction) {
       return;
     }
-    setSubmitting(true);
+    setPendingAction("confirm");
     try {
       const response = await postConfirm(sessionId, active.bookingId, code);
       if (response.ok) {
@@ -161,15 +164,15 @@ function BookingOtpCardInner({
     } catch {
       finishWithError("Could not confirm the booking.");
     } finally {
-      setSubmitting(false);
+      setPendingAction(null);
     }
   };
 
   const handleCancel = async () => {
-    if (submitting) {
+    if (pendingAction) {
       return;
     }
-    setSubmitting(true);
+    setPendingAction("cancel");
     try {
       const response = await postCancel(sessionId, active.bookingId);
       if (response.ok) {
@@ -184,9 +187,11 @@ function BookingOtpCardInner({
     } catch {
       finishWithError("Could not cancel the booking.");
     } finally {
-      setSubmitting(false);
+      setPendingAction(null);
     }
   };
+
+  const isBusy = pendingAction !== null;
 
   return (
     <div
@@ -206,7 +211,7 @@ function BookingOtpCardInner({
           maxLength={6}
           value={code}
           onChange={setCode}
-          disabled={submitting}
+          disabled={isBusy}
           containerClassName="gap-2"
         >
           <InputOTPGroup>
@@ -223,19 +228,29 @@ function BookingOtpCardInner({
         <Button
           type="button"
           className="flex-1"
-          disabled={code.length < 6 || submitting}
+          disabled={code.length < 6 || isBusy}
+          aria-busy={pendingAction === "confirm"}
           onClick={() => void handleConfirm()}
         >
-          Confirm
+          {pendingAction === "confirm" ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            "Confirm"
+          )}
         </Button>
         <Button
           type="button"
           variant="outline"
           className="flex-1"
-          disabled={submitting}
+          disabled={isBusy}
+          aria-busy={pendingAction === "cancel"}
           onClick={() => void handleCancel()}
         >
-          Cancel
+          {pendingAction === "cancel" ? (
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+          ) : (
+            "Cancel"
+          )}
         </Button>
       </div>
     </div>
