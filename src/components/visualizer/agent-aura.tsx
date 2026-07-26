@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
+import { buildAuraPaletteGlsl } from "@/lib/visualizer/aura-palette";
 
 /**
  * Background "aura": a gradient glow that hugs the viewport edges and comes
@@ -22,7 +23,7 @@ const VERTEX_SHADER = /* glsl */ `
   }
 `;
 
-const FRAGMENT_SHADER = /* glsl */ `
+const FRAGMENT_SHADER_HEAD = /* glsl */ `
   precision highp float;
 
   varying vec2 vUv;
@@ -61,22 +62,10 @@ const FRAGMENT_SHADER = /* glsl */ `
     return v;
   }
 
-  // Smooth multicolor ramp: indigo -> azure -> teal -> violet -> rose.
-  // Intentionally NOT the blue/purple Gemini palette; teal + rose set it apart.
-  vec3 palette(float t) {
-    t = fract(t);
-    vec3 c0 = vec3(0.28, 0.26, 0.80);
-    vec3 c1 = vec3(0.18, 0.55, 0.95);
-    vec3 c2 = vec3(0.15, 0.80, 0.70);
-    vec3 c3 = vec3(0.62, 0.34, 0.95);
-    vec3 c4 = vec3(0.98, 0.42, 0.68);
-    vec3 c = mix(c0, c1, smoothstep(0.0, 0.28, t));
-    c = mix(c, c2, smoothstep(0.24, 0.5, t));
-    c = mix(c, c3, smoothstep(0.5, 0.72, t));
-    c = mix(c, c4, smoothstep(0.7, 0.95, t));
-    c = mix(c, c0, smoothstep(0.93, 1.0, t));
-    return c;
-  }
+  // Stoic Meridian ramp — colors from lib/visualizer/aura-palette.
+`;
+
+const FRAGMENT_SHADER_TAIL = /* glsl */ `
 
   void main() {
     vec2 uv = vUv;
@@ -134,6 +123,9 @@ const FRAGMENT_SHADER = /* glsl */ `
     gl_FragColor = vec4(col * alpha, alpha);
   }
 `;
+
+const FRAGMENT_SHADER =
+  FRAGMENT_SHADER_HEAD + buildAuraPaletteGlsl() + FRAGMENT_SHADER_TAIL;
 
 // Gentle, symmetric fade so appearing/disappearing feels calm (not a pop).
 const PRESENCE_EASE_RATE = 1.7;

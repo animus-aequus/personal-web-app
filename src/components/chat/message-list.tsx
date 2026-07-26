@@ -1,13 +1,20 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageContent } from "@/components/chat/message-content";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
+import { SmoothStreamingText } from "@/components/chat/smooth-streaming-text";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
@@ -54,6 +61,7 @@ export function MessageList({
   onNote,
 }: MessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const isInitialScrollRef = useRef(true);
@@ -62,6 +70,7 @@ export function MessageList({
   const pendingPreserveRef = useRef<{ height: number; top: number } | null>(null);
   const prevFirstIdRef = useRef<string | undefined>(undefined);
   const prevLastIdRef = useRef<string | undefined>(undefined);
+  const [smoothMessageId, setSmoothMessageId] = useState<string | null>(null);
 
   // Inline OTP widgets (booking confirm + cancellation) are rendered outside the
   // `messages` list below and don't participate in `useChat` state, so the
@@ -73,6 +82,23 @@ export function MessageList({
   const lastMessage = messages[messages.length - 1];
   const awaitingFirstToken =
     isLoading && (!lastMessage || lastMessage.role === "user");
+
+  // Latch the streaming assistant id during render so reveal stays mounted
+  // after `isLoading` flips false until plain → markdown settles.
+  const liveSmoothId =
+    isLoading &&
+    lastMessage?.role === "assistant" &&
+    lastMessage.source === "text" &&
+    !lastMessage.interrupted
+      ? lastMessage.id
+      : null;
+  if (liveSmoothId !== null && liveSmoothId !== smoothMessageId) {
+    setSmoothMessageId(liveSmoothId);
+  }
+
+  const clearSmoothMessage = useCallback((messageId: string) => {
+    setSmoothMessageId((current) => (current === messageId ? null : current));
+  }, []);
 
   const triggerLoadOlder = useCallback(() => {
     if (!onLoadOlder || !hasMoreHistory || isLoadingOlder) {
@@ -146,6 +172,24 @@ export function MessageList({
     return () => observer.disconnect();
   }, [onLoadOlder, triggerLoadOlder]);
 
+  const followBottomIfNeeded = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) {
+      return;
+    }
+
+    const shouldFollow =
+      isInitialScrollRef.current || stickToBottomRef.current;
+    if (!shouldFollow) {
+      return;
+    }
+
+    programmaticScrollRef.current = true;
+    scrollToBottom(element);
+    lastScrollTopRef.current = element.scrollTop;
+    isInitialScrollRef.current = false;
+  }, []);
+
   useLayoutEffect(() => {
     const element = scrollRef.current;
     if (!element) {
@@ -175,25 +219,33 @@ export function MessageList({
       return;
     }
 
-    const shouldFollow =
-      isInitialScrollRef.current || stickToBottomRef.current;
+    followBottomIfNeeded();
+  }, [messages, isLoading, cancelOtpCount, bookingOtpActive, followBottomIfNeeded]);
 
-    if (!shouldFollow) {
+  // Word-by-word reveal grows content without changing `messages` identity —
+  // observe the column so stick-to-bottom still tracks height.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") {
       return;
     }
 
-    programmaticScrollRef.current = true;
-    scrollToBottom(element);
-    lastScrollTopRef.current = element.scrollTop;
-    isInitialScrollRef.current = false;
-  }, [messages, isLoading, cancelOtpCount, bookingOtpActive]);
+    const observer = new ResizeObserver(() => {
+      followBottomIfNeeded();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [followBottomIfNeeded]);
 
   return (
     <div
       ref={scrollRef}
       className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6">
+      <div
+        ref={contentRef}
+        className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6"
+      >
         <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
         {isLoadingOlder ? (
           <ChatLoadingSpinner
@@ -222,6 +274,12 @@ export function MessageList({
 
           const isInterruptedAssistant =
             message.role === "assistant" && message.interrupted;
+          const useSmoothReveal =
+            message.id === smoothMessageId &&
+            message.role === "assistant" &&
+            message.source === "text" &&
+            !message.interrupted &&
+            Boolean(message.content);
 
           return (
             <article
@@ -251,7 +309,17 @@ export function MessageList({
               ) : (
                 <>
                   {message.content ? (
-                    <MessageContent content={message.content} />
+                    useSmoothReveal ? (
+                      <SmoothStreamingText
+                        key={message.id}
+                        messageId={message.id}
+                        content={message.content}
+                        isStreaming={Boolean(isLoading)}
+                        onSettled={() => clearSmoothMessage(message.id)}
+                      />
+                    ) : (
+                      <MessageContent content={message.content} />
+                    )
                   ) : null}
                   {message.parts?.map((part) => {
                     if (part.type !== "meetings_list" || !sessionId) {
