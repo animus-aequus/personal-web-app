@@ -26,13 +26,18 @@ import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store"
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
+import type { VoiceLanguageCode } from "@/lib/livekit/voice-languages";
 import {
   endVoiceSession,
   publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import { useVoiceUiEvents } from "@/lib/livekit/voice-ui-events";
-import type { ChatMessage, ChatMessagePart } from "@/lib/stores/chat-store";
+import {
+  useChatStore,
+  type ChatMessage,
+  type ChatMessagePart,
+} from "@/lib/stores/chat-store";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
@@ -110,6 +115,8 @@ type TextChatAreaProps = {
   ) => void;
   voiceConnectionId: string | null;
   voiceEnabled: boolean;
+  voiceLanguage: VoiceLanguageCode;
+  onVoiceLanguageChange: (language: VoiceLanguageCode) => void;
   onVoiceDisconnect: () => void;
   onVoiceToggle: () => void;
 };
@@ -128,10 +135,16 @@ function TextChatArea({
   onVoiceMessage,
   voiceConnectionId,
   voiceEnabled,
+  voiceLanguage,
+  onVoiceLanguageChange,
   onVoiceDisconnect,
   onVoiceToggle,
 }: TextChatAreaProps) {
   const { acquireToken, resetAfterUse } = useTurnstile();
+  const agentMetadata = useMemo(
+    () => JSON.stringify({ voice_language: voiceLanguage }),
+    [voiceLanguage],
+  );
 
   const tokenSource = useMemo(
     () =>
@@ -177,6 +190,7 @@ function TextChatArea({
     roomName: livekitRoom,
     participantMetadata: sessionId,
     agentName: LIVEKIT_AGENT_NAME,
+    agentMetadata,
   });
 
   useVoiceChatSync(session, onVoiceMessage);
@@ -476,6 +490,8 @@ function TextChatArea({
           onVoiceToggle={handleVoiceToggle}
           voiceEnabled={voiceEnabled}
           voiceChromeReady={voiceChromeReady}
+          voiceLanguage={voiceLanguage}
+          onVoiceLanguageChange={onVoiceLanguageChange}
           userTrack={userTrack}
           isLoading={isLoading}
           onChromeHeightChange={setChromeHeight}
@@ -497,6 +513,9 @@ export function ChatPanel() {
     loadOlder,
     appendLive,
   } = useChatSession();
+
+  const voiceLanguage = useChatStore((state) => state.voiceLanguage);
+  const setVoiceLanguage = useChatStore((state) => state.setVoiceLanguage);
 
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
@@ -520,6 +539,17 @@ export function ChatPanel() {
     });
   }, []);
 
+  const handleVoiceLanguageChange = useCallback(
+    (language: VoiceLanguageCode) => {
+      setVoiceLanguage(language);
+      if (voiceEnabled) {
+        // New room + agent dispatch so STT/TTS/reply language rebuild cleanly.
+        setVoiceConnectionId(crypto.randomUUID());
+      }
+    },
+    [setVoiceLanguage, voiceEnabled],
+  );
+
   if (phase === "ready" && sessionId) {
     return (
       <div className="flex h-dvh w-full flex-col overflow-hidden">
@@ -534,6 +564,8 @@ export function ChatPanel() {
           onVoiceMessage={appendLive}
           voiceConnectionId={voiceConnectionId}
           voiceEnabled={voiceEnabled}
+          voiceLanguage={voiceLanguage}
+          onVoiceLanguageChange={handleVoiceLanguageChange}
           onVoiceDisconnect={handleVoiceDisconnect}
           onVoiceToggle={handleVoiceToggle}
         />
@@ -570,6 +602,8 @@ export function ChatPanel() {
           onVoiceToggle={handleVoiceToggle}
           voiceEnabled={voiceEnabled}
           voiceChromeReady={false}
+          voiceLanguage={voiceLanguage}
+          onVoiceLanguageChange={handleVoiceLanguageChange}
           disabled
           isLoading={phase === "loading"}
           onChromeHeightChange={setBootstrapChromeHeight}

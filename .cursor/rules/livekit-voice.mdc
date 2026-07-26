@@ -50,6 +50,7 @@ Render `AgentSessionProvider` only while `voiceEnabled` (children need session c
 
 - `sessionId` from `participantMetadata` before parsing room name suffix
 - `RoomConfiguration` metadata + agent dispatch on every mint
+- Forward `agentMetadata.voice_language` (`en|pl|de|es|fr`) into `RoomAgentDispatch.metadata` (see `lib/livekit/voice-languages.ts`)
 
 ## Do not
 

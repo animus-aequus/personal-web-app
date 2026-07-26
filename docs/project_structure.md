@@ -40,8 +40,9 @@ personal-website/                 # this repo
 | `lib/rate-limit-config.ts` | Env-driven rate limit parameters |
 | `lib/rate-limit.ts` | Upstash rate limiter + abuse escalation |
 | `lib/livekit/room.ts` | LiveKit room naming helpers |
+| `lib/livekit/voice-languages.ts` | Voice STT language catalog + TTS-fallback helpers |
 | `lib/livekit/voice-chat-sync.ts` | `chat_sync` data channel → Zustand |
-| `lib/stores/chat-store.ts` | Persisted `sessionId` + unified messages |
+| `lib/stores/chat-store.ts` | Persisted `sessionId` + `voiceLanguage` |
 | `lib/utils.ts` | `cn()` and shared utilities |
 
 ## Where to add changes
@@ -54,6 +55,7 @@ personal-website/                 # this repo
 | Background aura / agent activity state | `src/components/visualizer/*`, `src/lib/stores/agent-activity-store.ts` |
 | Voice transcript sync | `src/lib/livekit/voice-chat-sync.ts` |
 | LiveKit room naming | `src/lib/livekit/room.ts` |
+| Voice language select options | `src/lib/livekit/voice-languages.ts` |
 | Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/bookings/*` |
 | LiveKit token / agent dispatch | `src/app/api/livekit/token/route.ts` |
 | Message persistence / session store | `src/lib/stores/chat-store.ts` |

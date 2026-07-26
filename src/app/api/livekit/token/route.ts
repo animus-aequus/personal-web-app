@@ -10,6 +10,11 @@ import { NextResponse } from "next/server";
 
 import { verifyAgentSession } from "@/lib/agent-client";
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
+import {
+  DEFAULT_VOICE_LANGUAGE,
+  parseVoiceLanguage,
+  type VoiceLanguageCode,
+} from "@/lib/livekit/voice-languages";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -18,6 +23,18 @@ import {
 } from "@/lib/session-cookie";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
+
+function resolveVoiceLanguage(agentMetadata: unknown): VoiceLanguageCode {
+  if (typeof agentMetadata !== "string" || !agentMetadata.trim()) {
+    return DEFAULT_VOICE_LANGUAGE;
+  }
+  try {
+    const parsed = JSON.parse(agentMetadata) as { voice_language?: unknown };
+    return parseVoiceLanguage(parsed?.voice_language);
+  } catch {
+    return DEFAULT_VOICE_LANGUAGE;
+  }
+}
 
 export const revalidate = 0;
 
@@ -92,9 +109,21 @@ export async function POST(request: Request) {
       });
     }
 
+    const voiceLanguage = resolveVoiceLanguage(rawBody.agentMetadata);
+    const agentJobMetadata = JSON.stringify({ voice_language: voiceLanguage });
+
     const roomConfig = new RoomConfiguration({
-      metadata: JSON.stringify({ session_id: sessionId }),
-      agents: [new RoomAgentDispatch({ agentName: LIVEKIT_AGENT_NAME })],
+      // Include voice_language on the room as a fallback if job metadata is empty.
+      metadata: JSON.stringify({
+        session_id: sessionId,
+        voice_language: voiceLanguage,
+      }),
+      agents: [
+        new RoomAgentDispatch({
+          agentName: LIVEKIT_AGENT_NAME,
+          metadata: agentJobMetadata,
+        }),
+      ],
     });
 
     const identity =

@@ -67,12 +67,13 @@ and retries: only the latest run may commit state.
 ### Web voice (LiveKit)
 
 1. User toggles voice on → new `voiceConnectionId` (`crypto.randomUUID()`).
-2. `useSession` uses `livekitVoiceRoomName(sessionId, connectionId)` and `participantMetadata: sessionId`.
+2. `useSession` uses `livekitVoiceRoomName(sessionId, connectionId)`, `participantMetadata: sessionId`, and `agentMetadata: {"voice_language": …}` from the voice language select (persisted in Zustand; default `en`).
 3. Effect on `voiceEnabled`: `await start()` then `await session.room.startAudio()`.
-4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`).
-5. Worker (agent API) handles STT/TTS and publishes `voice_user` / `voice_assistant` on `chat_sync`.
+4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`) — forwards `voice_language` into `RoomAgentDispatch.metadata`.
+5. Worker (agent API) configures Deepgram STT/TTS from that metadata and publishes `voice_user` / `voice_assistant` on `chat_sync`.
 6. `useVoiceChatSync` appends live voice rows to in-memory history state (`appendLive`).
 7. Voice off → browser publishes `voice_mode_exit` on `voice_control`, then effect cleanup calls `session.end()`.
+8. Changing the language select while voice is on bumps `voiceConnectionId` (new room + agent) so STT/TTS rebuild cleanly. For Polish, the UI shows an amber warning that spoken replies stay in English (no Deepgram Polish TTS).
 
 Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` stays the same.
 

@@ -23,6 +23,13 @@ import {
   textSlotWidthForBar,
   type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
+import {
+  DEFAULT_VOICE_LANGUAGE,
+  TTS_FALLBACK_WARNING,
+  VOICE_LANGUAGES,
+  hasTtsFallback,
+  type VoiceLanguageCode,
+} from "@/lib/livekit/voice-languages";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
@@ -47,6 +54,8 @@ type ChatControlBarProps = {
   onVoiceToggle: () => void;
   voiceEnabled: boolean;
   voiceChromeReady: boolean;
+  voiceLanguage?: VoiceLanguageCode;
+  onVoiceLanguageChange?: (language: VoiceLanguageCode) => void;
   userTrack?: TrackReferenceOrPlaceholder;
   disabled?: boolean;
   isLoading?: boolean;
@@ -60,6 +69,8 @@ export function ChatControlBar({
   onVoiceToggle,
   voiceEnabled,
   voiceChromeReady,
+  voiceLanguage = DEFAULT_VOICE_LANGUAGE,
+  onVoiceLanguageChange,
   userTrack,
   disabled,
   isLoading,
@@ -81,6 +92,8 @@ export function ChatControlBar({
 
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
+  const showTtsFallbackWarning =
+    voiceEnabled && hasTtsFallback(voiceLanguage);
 
   const stackedLayout =
     !voiceEnabled &&
@@ -207,6 +220,53 @@ export function ChatControlBar({
         ref={anchorRef}
         className="mx-auto flex w-full max-w-2xl flex-col items-center"
       >
+        <AnimatePresence>
+          {voiceEnabled ? (
+            <motion.div
+              key="voice-language"
+              className="mb-3 flex w-full max-w-xs flex-col items-center gap-2"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              transition={{ duration: 0.3, ease: EASE }}
+            >
+              <label className="sr-only" htmlFor="voice-language-select">
+                Voice language
+              </label>
+              <select
+                id="voice-language-select"
+                value={voiceLanguage}
+                disabled={disabled || !onVoiceLanguageChange}
+                onChange={(event) => {
+                  onVoiceLanguageChange?.(
+                    event.target.value as VoiceLanguageCode,
+                  );
+                }}
+                className={cn(
+                  "h-9 w-full max-w-[12rem] appearance-none rounded-full border bg-card px-4 text-center text-sm text-foreground shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+                  showTtsFallbackWarning
+                    ? "border-amber-500 focus-visible:ring-amber-500/40"
+                    : "border-border",
+                )}
+              >
+                {VOICE_LANGUAGES.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {showTtsFallbackWarning ? (
+                <p
+                  role="status"
+                  className="px-2 text-center text-xs leading-snug text-amber-700 dark:text-amber-400"
+                >
+                  {TTS_FALLBACK_WARNING}
+                </p>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
         <AnimatePresence>
           {geometry.showRadial ? (
             <motion.div
