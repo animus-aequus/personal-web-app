@@ -26,7 +26,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 
 ## Principles
 
-1. **Secrets stay on the server:** `WEB_API_KEY`, LiveKit keys, Turnstile secret — Route Handlers only.
+1. **Secrets stay on the server:** `WEB_API_KEY`, Cloudflare Access service token, LiveKit keys, Turnstile secret — Route Handlers only.
 2. **BFF is the public edge:** rate limits and bot checks apply before proxying to the agent API.
 3. **Match agent API rules:** limits and session binding should align with backend enforcement (defence in depth).
 4. **`sessionId` in localStorage is not auth** — phase 4 adds a server-bound session secret.
@@ -38,6 +38,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Control | Status |
 |---------|--------|
 | `WEB_API_KEY` proxied to agent API (server-only) | Implemented |
+| Cloudflare Access service token (`CF-Access-Client-*`) on agent calls | Implemented (env optional; required when Access protects `api.*`) |
 | LiveKit JWT minting (server-only secrets) | Implemented |
 | Rate limiting on Route Handlers | Implemented (Upstash; see below) |
 | Turnstile | Implemented (session, chat, voice connect) |

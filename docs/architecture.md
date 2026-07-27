@@ -160,6 +160,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 | Secret | Where | Notes |
 |--------|-------|-------|
 | `WEB_API_KEY` | Route Handlers (`agent-client.ts`) | Proxied as `X-API-Key` when set |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Route Handlers (`agent-client.ts`) | Sent as `CF-Access-Client-*` when Access protects the agent hostname |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | `/api/livekit/token` only | Never in browser |
 | `AGENT_API_BASE_URL` | Server only | Default `http://localhost:8000` |
 
@@ -173,6 +174,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
 |----------|---------|
 | `AGENT_API_BASE_URL` | Agent API base URL |
 | `WEB_API_KEY` | Optional agent API REST auth |
+| `CF_ACCESS_CLIENT_ID` / `CF_ACCESS_CLIENT_SECRET` | Cloudflare Access service token (when `api.*` is Access-protected) |
 | `LIVEKIT_URL` | LiveKit Cloud WebSocket URL |
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | Server-only token minting |
 | `LIVEKIT_AGENT_NAME` | Agent dispatch name (token route) |

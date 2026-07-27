@@ -1,6 +1,8 @@
 const AGENT_API_BASE_URL =
   process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
+const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID ?? "";
+const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET ?? "";
 
 export type AgentRequestOptions = {
   clientIp?: string;
@@ -13,6 +15,10 @@ function agentHeaders(options?: AgentRequestOptions): HeadersInit {
   };
   if (WEB_API_KEY) {
     headers["X-API-Key"] = WEB_API_KEY;
+  }
+  if (CF_ACCESS_CLIENT_ID && CF_ACCESS_CLIENT_SECRET) {
+    headers["CF-Access-Client-Id"] = CF_ACCESS_CLIENT_ID;
+    headers["CF-Access-Client-Secret"] = CF_ACCESS_CLIENT_SECRET;
   }
   if (options?.clientIp) {
     headers["X-Forwarded-For"] = options.clientIp;
