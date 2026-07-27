@@ -67,9 +67,11 @@ export function MeetingsListCard({
           error?: string;
         };
         showBookingOtpErrorToast(
-          payload.error?.includes("not_confirmed")
-            ? "That meeting can no longer be cancelled."
-            : "Could not start cancellation.",
+          payload.error?.includes("email_suppressed")
+            ? "This email cannot receive codes. Use a different address or contact the host."
+            : payload.error?.includes("not_confirmed")
+              ? "That meeting can no longer be cancelled."
+              : "Could not start cancellation.",
         );
         return;
       }
