@@ -35,9 +35,14 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "";
 export function TurnstileProvider({ children }: { children: ReactNode }) {
   const enabled = isTurnstileClientEnabled();
   const widgetRef = useRef<TurnstileInstance | null>(null);
+  /** Token was sent to an API; refresh the widget only on the next acquire. */
+  const tokenConsumedRef = useRef(false);
 
   const resetAfterUse = useCallback(() => {
-    widgetRef.current?.reset();
+    // Defer widget.reset() until the next acquireToken(). Immediate reset with
+    // appearance: interaction-only (esp. Brave) re-shows the checkbox while idle
+    // and looks like a verification loop after session create.
+    tokenConsumedRef.current = true;
   }, []);
 
   const acquireToken = useCallback(async (): Promise<string> => {
@@ -50,7 +55,8 @@ export function TurnstileProvider({ children }: { children: ReactNode }) {
       throw new Error("Turnstile widget is not ready");
     }
 
-    if (widget.isExpired()) {
+    if (tokenConsumedRef.current || widget.isExpired()) {
+      tokenConsumedRef.current = false;
       widget.reset();
     }
 

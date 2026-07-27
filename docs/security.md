@@ -127,7 +127,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **Routes verified:** `POST /api/session`, `POST /api/chat`, `POST /api/livekit/token` (each voice connect, not per utterance)
 
-**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Fresh token per protected action; widget resets after each use.
+**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Fresh token per protected action; after a token is consumed the widget is marked dirty and `reset()` runs on the *next* `acquireToken()` (not immediately), so interaction-only does not re-show the checkbox while idle.
 
 **Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.”
 

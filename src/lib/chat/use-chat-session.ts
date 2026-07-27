@@ -168,6 +168,13 @@ export function useChatSession(): UseChatSessionResult {
       const persistedId = useChatStore.getState().sessionId;
 
       const turnstileToken = await acquireToken();
+      if (runId !== runIdRef.current) {
+        // Stale run (e.g. Strict Mode remount) — do not create a second session
+        // with this token; mark consumed so the live run refreshes the widget.
+        resetAfterUse();
+        return;
+      }
+
       let activeSessionId: string;
       try {
         activeSessionId = await ensureServerSession(persistedId, turnstileToken);
@@ -198,7 +205,7 @@ export function useChatSession(): UseChatSessionResult {
   }, [acquireToken, loadInitial, resetAfterUse, resetHistory]);
 
   useEffect(() => {
-    (() => bootstrap())();
+    void bootstrap();
     return () => {
       // Invalidate the in-flight run so its late resolution cannot commit.
       runIdRef.current += 1;
