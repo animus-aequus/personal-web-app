@@ -10,6 +10,7 @@ import {
   useContext,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 
@@ -23,7 +24,7 @@ type TurnstileContextValue = {
   enabled: boolean;
   /** Obtain a fresh Turnstile token (waits for the widget when needed). */
   acquireToken: () => Promise<string>;
-  /** Reset the widget after a token has been consumed by an API call. */
+  /** Mark the current token consumed; hide the widget until the next acquire. */
   resetAfterUse: () => void;
   tokenField: typeof TURNSTILE_TOKEN_FIELD;
 };
@@ -37,12 +38,14 @@ export function TurnstileProvider({ children }: { children: ReactNode }) {
   const widgetRef = useRef<TurnstileInstance | null>(null);
   /** Token was sent to an API; refresh the widget only on the next acquire. */
   const tokenConsumedRef = useRef(false);
+  /** Visible only while Cloudflare needs a click (e.g. Brave). */
+  const [challengeVisible, setChallengeVisible] = useState(false);
 
   const resetAfterUse = useCallback(() => {
     // Defer widget.reset() until the next acquireToken(). Immediate reset with
-    // appearance: interaction-only (esp. Brave) re-shows the checkbox while idle
-    // and looks like a verification loop after session create.
+    // appearance: interaction-only (esp. Brave) re-shows the checkbox while idle.
     tokenConsumedRef.current = true;
+    setChallengeVisible(false);
   }, []);
 
   const acquireToken = useCallback(async (): Promise<string> => {
@@ -55,12 +58,17 @@ export function TurnstileProvider({ children }: { children: ReactNode }) {
       throw new Error("Turnstile widget is not ready");
     }
 
-    if (tokenConsumedRef.current || widget.isExpired()) {
-      tokenConsumedRef.current = false;
-      widget.reset();
-    }
+    try {
+      if (tokenConsumedRef.current || widget.isExpired()) {
+        tokenConsumedRef.current = false;
+        widget.reset();
+      }
 
-    return widget.getResponsePromise(30_000);
+      return await widget.getResponsePromise(30_000);
+    } catch (error) {
+      setChallengeVisible(false);
+      throw error;
+    }
   }, [enabled]);
 
   const value = useMemo(
@@ -78,8 +86,13 @@ export function TurnstileProvider({ children }: { children: ReactNode }) {
       {children}
       {enabled ? (
         <div
-          className="fixed bottom-24 left-4 z-20"
-          aria-label="Security verification"
+          className={
+            challengeVisible
+              ? "fixed bottom-24 left-4 z-20"
+              : "pointer-events-none fixed bottom-24 left-4 z-20 opacity-0"
+          }
+          aria-hidden={!challengeVisible}
+          aria-label={challengeVisible ? "Security verification" : undefined}
         >
           <Turnstile
             ref={widgetRef}
@@ -87,12 +100,25 @@ export function TurnstileProvider({ children }: { children: ReactNode }) {
             options={{
               theme: "dark",
               appearance: "interaction-only",
+              retry: "never",
+            }}
+            onBeforeInteractive={() => {
+              setChallengeVisible(true);
             }}
             onError={() => {
               showTurnstileErrorToast();
+              tokenConsumedRef.current = true;
+              setChallengeVisible(false);
               widgetRef.current?.reset();
             }}
             onExpire={() => {
+              tokenConsumedRef.current = true;
+              setChallengeVisible(false);
+              widgetRef.current?.reset();
+            }}
+            onTimeout={() => {
+              tokenConsumedRef.current = true;
+              setChallengeVisible(false);
               widgetRef.current?.reset();
             }}
           />

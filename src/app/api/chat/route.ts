@@ -9,8 +9,6 @@ import {
   missingSessionSecretResponse,
   SESSION_SECRET_COOKIE,
 } from "@/lib/session-cookie";
-import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
-import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
 export const revalidate = 0;
 export const maxDuration = 120;
@@ -19,7 +17,6 @@ type ChatRequestBody = {
   sessionId?: string;
   session_id?: string;
   messages?: UIMessage[];
-  turnstileToken?: string;
 };
 
 function extractUserText(messages: UIMessage[] | undefined): string {
@@ -48,14 +45,6 @@ export async function POST(request: Request) {
     const rateLimited = await enforceRateLimit(request, RateLimitRoute.Chat, sessionId);
     if (rateLimited) {
       return rateLimited;
-    }
-
-    const turnstileBlocked = await enforceTurnstile(
-      request,
-      body[TURNSTILE_TOKEN_FIELD],
-    );
-    if (turnstileBlocked) {
-      return turnstileBlocked;
     }
 
     if (!sessionId) {

@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
-import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
@@ -134,6 +134,82 @@ async function rehydratePendingCancellations(sessionId: string): Promise<void> {
   }
 }
 
+type BootstrapDeps = {
+  isCurrent: () => boolean;
+  acquireToken: () => Promise<string>;
+  resetAfterUse: () => void;
+  loadInitial: (sessionId: string) => Promise<void>;
+  resetHistory: () => void;
+  setSessionId: (sessionId: string) => void;
+  setBootstrapError: (error: string | null) => void;
+};
+
+/**
+ * Session bootstrap. React setState runs only after the first await so this is
+ * safe to kick off from a mount effect (no synchronous setState in the effect).
+ */
+async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
+  const {
+    isCurrent,
+    acquireToken,
+    resetAfterUse,
+    loadInitial,
+    resetHistory,
+    setSessionId,
+    setBootstrapError,
+  } = deps;
+
+  try {
+    await useChatStore.persist.rehydrate();
+    if (!isCurrent()) {
+      return;
+    }
+
+    setBootstrapError(null);
+    resetHistory();
+    useBookingOtpStore.getState().clear();
+    useBookingCancelOtpStore.getState().clear();
+    useMeetingsListStore.getState().clear();
+    useDirectMessageStore.getState().clear();
+
+    const persistedId = useChatStore.getState().sessionId;
+
+    const turnstileToken = await acquireToken();
+    if (!isCurrent()) {
+      // Stale run (e.g. Strict Mode remount) — do not create a second session.
+      resetAfterUse();
+      return;
+    }
+
+    let activeSessionId: string;
+    try {
+      activeSessionId = await ensureServerSession(persistedId, turnstileToken);
+    } finally {
+      resetAfterUse();
+    }
+
+    if (!isCurrent()) {
+      return;
+    }
+
+    useChatStore.getState().setSessionId(activeSessionId);
+    setSessionId(activeSessionId);
+
+    await Promise.all([
+      loadInitial(activeSessionId),
+      rehydratePendingBooking(activeSessionId),
+      rehydratePendingCancellations(activeSessionId),
+    ]);
+  } catch (error) {
+    if (!isCurrent()) {
+      return;
+    }
+    setBootstrapError(
+      error instanceof Error ? error.message : "Failed to start chat",
+    );
+  }
+}
+
 export function useChatSession(): UseChatSessionResult {
   const { acquireToken, resetAfterUse } = useTurnstile();
   const {
@@ -154,63 +230,25 @@ export function useChatSession(): UseChatSessionResult {
   // retries): only the latest run may commit state.
   const runIdRef = useRef(0);
 
-  const bootstrap = useCallback(async () => {
+  const startBootstrap = useCallback(() => {
     const runId = ++runIdRef.current;
-    setBootstrapError(null);
-    resetHistory();
-    useBookingOtpStore.getState().clear();
-    useBookingCancelOtpStore.getState().clear();
-    useMeetingsListStore.getState().clear();
-    useDirectMessageStore.getState().clear();
-
-    try {
-      await useChatStore.persist.rehydrate();
-      const persistedId = useChatStore.getState().sessionId;
-
-      const turnstileToken = await acquireToken();
-      if (runId !== runIdRef.current) {
-        // Stale run (e.g. Strict Mode remount) — do not create a second session
-        // with this token; mark consumed so the live run refreshes the widget.
-        resetAfterUse();
-        return;
-      }
-
-      let activeSessionId: string;
-      try {
-        activeSessionId = await ensureServerSession(persistedId, turnstileToken);
-      } finally {
-        resetAfterUse();
-      }
-
-      if (runId !== runIdRef.current) {
-        return;
-      }
-
-      useChatStore.getState().setSessionId(activeSessionId);
-      setSessionId(activeSessionId);
-
-      await Promise.all([
-        loadInitial(activeSessionId),
-        rehydratePendingBooking(activeSessionId),
-        rehydratePendingCancellations(activeSessionId),
-      ]);
-    } catch (error) {
-      if (runId !== runIdRef.current) {
-        return;
-      }
-      setBootstrapError(
-        error instanceof Error ? error.message : "Failed to start chat",
-      );
-    }
+    return bootstrapChatSession({
+      isCurrent: () => runId === runIdRef.current,
+      acquireToken,
+      resetAfterUse,
+      loadInitial,
+      resetHistory,
+      setSessionId,
+      setBootstrapError,
+    });
   }, [acquireToken, loadInitial, resetAfterUse, resetHistory]);
 
   useEffect(() => {
-    void bootstrap();
+    void startBootstrap();
     return () => {
-      // Invalidate the in-flight run so its late resolution cannot commit.
       runIdRef.current += 1;
     };
-  }, [bootstrap]);
+  }, [startBootstrap]);
 
   const phase: ChatSessionPhase =
     bootstrapError || historyStatus === "error"
@@ -227,7 +265,7 @@ export function useChatSession(): UseChatSessionResult {
     phase,
     error: bootstrapError ?? historyError,
     retry: () => {
-      void bootstrap();
+      void startBootstrap();
     },
     historyStatus,
     rows,

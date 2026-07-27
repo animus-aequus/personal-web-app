@@ -21,8 +21,6 @@ import {
   missingSessionSecretResponse,
   SESSION_SECRET_COOKIE,
 } from "@/lib/session-cookie";
-import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
-import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
 function resolveVoiceLanguage(agentMetadata: unknown): VoiceLanguageCode {
   if (typeof agentMetadata !== "string" || !agentMetadata.trim()) {
@@ -60,15 +58,6 @@ export async function POST(request: Request) {
     const rawBody = (await request.json()) as Record<string, unknown> & {
       [key: string]: unknown;
     };
-    const turnstileToken =
-      typeof rawBody[TURNSTILE_TOKEN_FIELD] === "string"
-        ? rawBody[TURNSTILE_TOKEN_FIELD]
-        : undefined;
-
-    const turnstileBlocked = await enforceTurnstile(request, turnstileToken);
-    if (turnstileBlocked) {
-      return turnstileBlocked;
-    }
 
     const tokenRequest = TokenSourceRequest.fromJson(
       rawBody as Parameters<typeof TokenSourceRequest.fromJson>[0],

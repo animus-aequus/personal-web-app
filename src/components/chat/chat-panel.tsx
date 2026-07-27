@@ -18,7 +18,6 @@ import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
-import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
@@ -41,8 +40,6 @@ import {
   type ChatMessage,
   type ChatMessagePart,
 } from "@/lib/stores/chat-store";
-import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
-import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
@@ -143,7 +140,6 @@ function TextChatArea({
   onVoiceDisconnect,
   onVoiceToggle,
 }: TextChatAreaProps) {
-  const { acquireToken, resetAfterUse } = useTurnstile();
   const agentMetadata = useMemo(
     () => JSON.stringify({ voice_language: voiceLanguage }),
     [voiceLanguage],
@@ -152,37 +148,30 @@ function TextChatArea({
   const tokenSource = useMemo(
     () =>
       TokenSource.custom(async (options) => {
-        const turnstileToken = await acquireToken();
-        try {
-          const response = await fetch("/api/livekit/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              roomName: options.roomName,
-              participantName: options.participantName,
-              participantIdentity: options.participantIdentity,
-              participantMetadata: options.participantMetadata,
-              participantAttributes: options.participantAttributes,
-              agentName: options.agentName,
-              agentMetadata: options.agentMetadata,
-              [TURNSTILE_TOKEN_FIELD]: turnstileToken,
-            }),
-          });
+        const response = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            roomName: options.roomName,
+            participantName: options.participantName,
+            participantIdentity: options.participantIdentity,
+            participantMetadata: options.participantMetadata,
+            participantAttributes: options.participantAttributes,
+            agentName: options.agentName,
+            agentMetadata: options.agentMetadata,
+          }),
+        });
 
-          if (!response.ok) {
-            await notifyTurnstileFailureIfNeeded(response);
-            const payload = (await response.json().catch(() => ({}))) as {
-              error?: string;
-            };
-            throw new Error(payload.error ?? "Token generation failed");
-          }
-
-          return response.json();
-        } finally {
-          resetAfterUse();
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(payload.error ?? "Token generation failed");
         }
+
+        return response.json();
       }),
-    [acquireToken, resetAfterUse],
+    [],
   );
 
   const livekitRoom = voiceConnectionId
@@ -236,39 +225,24 @@ function TextChatArea({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        prepareSendMessagesRequest: async ({
+        prepareSendMessagesRequest: ({
           body,
           messages,
           id,
           trigger,
           messageId,
-        }) => {
-          const turnstileToken = await acquireToken();
-          return {
-            body: {
-              ...(body ?? {}),
-              sessionId,
-              messages,
-              id,
-              trigger,
-              messageId,
-              [TURNSTILE_TOKEN_FIELD]: turnstileToken,
-            },
-          };
-        },
-        fetch: async (input, init) => {
-          try {
-            const response = await fetch(input, init);
-            if (!response.ok) {
-              await notifyTurnstileFailureIfNeeded(response);
-            }
-            return response;
-          } finally {
-            resetAfterUse();
-          }
-        },
+        }) => ({
+          body: {
+            ...(body ?? {}),
+            sessionId,
+            messages,
+            id,
+            trigger,
+            messageId,
+          },
+        }),
       }),
-    [sessionId, acquireToken, resetAfterUse],
+    [sessionId],
   );
 
   const { messages, sendMessage, status } = useChat({

@@ -41,7 +41,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Cloudflare Access service token (`CF-Access-Client-*`) on agent calls | Implemented (env optional; required when Access protects `api.*`) |
 | LiveKit JWT minting (server-only secrets) | Implemented |
 | Rate limiting on Route Handlers | Implemented (Upstash; see below) |
-| Turnstile | Implemented (session, chat, voice connect) |
+| Turnstile | Implemented (`POST /api/session` only; chat/voice rely on session + RL) |
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel / pending proxy routes | **Done** (E7) |
 
@@ -53,7 +53,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 |-------|-------|--------|
 | 0 | Doc scaffold | **Done** |
 | 1 | Rate limiting (`/api/session`, `/api/chat`, `/api/session/messages`, `/api/livekit/token`) | **Done** |
-| 3 | Turnstile on session create, chat, and voice connect | **Done** |
+| 3 | Turnstile on session create (chat/voice use session binding + rate limits) | **Done** |
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
@@ -69,9 +69,9 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 | Route | Rate limit (E1) | Turnstile (E3) | Session secret (E4) |
 |-------|-----------------|----------------|---------------------|
 | `POST /api/session` | yes | yes | sets cookie |
-| `POST /api/chat` | yes | yes | required |
+| `POST /api/chat` | yes | — | required |
 | `GET /api/session/messages` | yes | — | required |
-| `POST /api/livekit/token` | yes | yes | required |
+| `POST /api/livekit/token` | yes | — | required |
 | `POST /api/bookings/confirm` | yes | — | required |
 | `POST /api/bookings/cancel` | yes | — | required |
 | `GET /api/bookings/pending` | yes | — | required |
@@ -125,9 +125,9 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **Modules:** `src/lib/turnstile/turnstile-config.ts`, `src/lib/turnstile/verify-turnstile.ts`, `src/components/turnstile/turnstile-provider.tsx`
 
-**Routes verified:** `POST /api/session`, `POST /api/chat`, `POST /api/livekit/token` (each voice connect, not per utterance)
+**Routes verified:** `POST /api/session` only. Chat and LiveKit token rely on session secret (E4) + BFF/agent rate limits — not per-request Turnstile (avoids repeated visible challenges, especially in privacy browsers).
 
-**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Fresh token per protected action; after a token is consumed the widget is marked dirty and `reset()` runs on the *next* `acquireToken()` (not immediately), so interaction-only does not re-show the checkbox while idle.
+**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Used once at session bootstrap; after the token is consumed the widget is hidden and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify`.
 
 **Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.”
 
