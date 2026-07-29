@@ -200,7 +200,7 @@ Booking / cancellation / direct-message routes are intentionally **not** guarded
 
 **UI:** bootstrap calls `GET /api/public-status` after store rehydrate and before Turnstile / `POST /api/session`; when paused the session phase becomes `paused` and nothing is created. Mid-session pauses are detected from `useChat` `onError` and a failed LiveKit `start()` via `refreshPublicPauseState()`. Both paths show the same centered warning card (overlay + `OK`), and the control bar (input, send, voice toggle) stays disabled after acknowledging.
 
-**LangSmith webhook:** `POST /api/webhooks/langsmith` verifies `X-Webhook-Secret` against `LANGSMITH_WEBHOOK_SECRET` with `timingSafeEqual` (missing env → **503**, mismatch → **401** without detail). Non-cost alert attributes are acknowledged with **200** so LangSmith stops retrying. On a cost alert it calls agent `POST /api/v1/admin/pause` with `X-Admin-Secret`, mapping `triggered_metric_value` → `cost_usd` and `triggered_threshold` → `threshold_usd`, then invalidates the status cache. Agent failure → **500** so LangSmith retries.
+**LangSmith webhook:** `POST /api/webhooks/langsmith` verifies `X-Webhook-Secret` against `LANGSMITH_WEBHOOK_SECRET` with `timingSafeEqual` (missing env → **503**, mismatch → **401** without detail). After auth, every delivery calls agent `POST /api/v1/admin/pause` with `X-Admin-Secret` (only wire Cost alerts to this URL). Maps `triggered_metric_value` → `cost_usd` and `triggered_threshold` → `threshold_usd` when LangSmith includes them; empty or minimal test bodies still pause. Invalidates the status cache on success. Agent failure → **500** so LangSmith retries.
 
 **Env:** `LANGSMITH_WEBHOOK_SECRET`, `ADMIN_PAUSE_SECRET` (both server-only; the second must match the agent).
 
@@ -208,7 +208,7 @@ Booking / cancellation / direct-message routes are intentionally **not** guarded
 
 1. Settings → Models: confirm a pricing entry exists for `eu.anthropic.claude-haiku-4-5-20251001-v1:0`, otherwise alert `Cost` stays at zero.
 2. Tracing project → Alerts → two **Cost** alerts on the same webhook: `sum ≥ $3` over **15 min** (spike) and `sum ≥ $8` over **60 min** (slower burn).
-3. Webhook URL `https://<domain>/api/webhooks/langsmith`, header `{"X-Webhook-Secret": "<LANGSMITH_WEBHOOK_SECRET>"}`, default body template.
+3. Webhook URL `https://<canonical-domain>/api/webhooks/langsmith` (use the final host — e.g. `www` if apex redirects with **308**), header `{"X-Webhook-Secret": "<LANGSMITH_WEBHOOK_SECRET>"}`. Default body is fine; LangSmith merges alert fields when present.
 4. `Send Test Notification` → expect a Telegram alert (Path: LangSmith) and `paused = true` in Postgres; then resume manually (SQL runbook in the agent repo `docs/security.md`).
 5. Ensure Vercel Deployment Protection does not cover `/api/webhooks/*` in production.
 

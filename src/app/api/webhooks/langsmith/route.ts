@@ -8,7 +8,6 @@ import { invalidatePublicStatusCache } from "@/lib/public-access";
 export const revalidate = 0;
 
 type LangSmithAlertPayload = {
-  alert_rule_attribute?: string;
   alert_rule_name?: string;
   project_name?: string;
   triggered_metric_value?: number | string;
@@ -36,8 +35,10 @@ function toAmount(value: number | string | undefined): number | undefined {
 }
 
 /**
- * LangSmith cost alert → pause the assistant. The agent API stays behind
- * Cloudflare Access, so LangSmith talks to this proxy instead.
+ * LangSmith cost-alert webhook → pause the assistant. Only Cost alerts should
+ * point here. The agent API stays behind Cloudflare Access; LangSmith hits
+ * this BFF proxy instead. LangSmith may send an empty body on test delivery;
+ * cost/threshold fields are optional when absent.
  */
 export async function POST(request: Request) {
   const expected = process.env.LANGSMITH_WEBHOOK_SECRET?.trim();
@@ -54,13 +55,6 @@ export async function POST(request: Request) {
   const payload = (await request
     .json()
     .catch(() => ({}))) as LangSmithAlertPayload;
-
-  // Non-cost alerts are acknowledged so LangSmith does not retry them.
-  const attribute = payload.alert_rule_attribute?.trim().toLowerCase();
-  if (attribute && attribute !== "cost") {
-    console.warn("[langsmith-webhook] ignored attribute", attribute);
-    return NextResponse.json({ ignored: true });
-  }
 
   try {
     const result = await pauseAssistant({
