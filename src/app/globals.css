@@ -86,21 +86,23 @@
 .dark {
   --background: oklch(0.13 0.02 260);
   --foreground: oklch(0.95 0.01 90);
-  --card: oklch(0.22 0.01 260);
+  /* Elevated surfaces sit above the page gradient (0.08–0.18 L). Keep a
+     clear step so bubbles / control bar / GenUI remain readable on OLED. */
+  --card: oklch(0.30 0.015 260);
   --card-foreground: oklch(0.95 0.01 90);
-  --popover: oklch(0.22 0.01 260);
+  --popover: oklch(0.30 0.015 260);
   --popover-foreground: oklch(0.95 0.01 90);
   --primary: oklch(0.72 0.12 75);
   --primary-foreground: oklch(0.18 0.03 75);
-  --secondary: oklch(0.25 0.02 260);
+  --secondary: oklch(0.34 0.02 260);
   --secondary-foreground: oklch(0.95 0.01 90);
-  --muted: oklch(0.22 0.01 260);
+  --muted: oklch(0.28 0.015 260);
   --muted-foreground: oklch(0.65 0.02 260);
   --accent: oklch(0.28 0.04 75);
   --accent-foreground: oklch(0.92 0.08 75);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(0.25 0.01 260);
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(0.32 0.015 260);
   --ring: oklch(0.72 0.12 75);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -123,6 +125,7 @@
   }
   html {
     @apply font-sans;
+    color-scheme: dark;
   }
   body {
     @apply bg-background text-foreground font-sans text-[15px] leading-relaxed tracking-normal;
