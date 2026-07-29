@@ -123,13 +123,13 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Phase 3 — Cloudflare Turnstile
 
-**Modules:** `src/lib/turnstile/turnstile-config.ts`, `src/lib/turnstile/verify-turnstile.ts`, `src/components/turnstile/turnstile-provider.tsx`
+**Modules:** `src/lib/turnstile/turnstile-config.ts`, `src/lib/turnstile/verify-turnstile.ts`, `src/components/turnstile/turnstile-provider.tsx`, `src/components/turnstile/session-verification-gate.tsx`
 
 **Routes verified:** `POST /api/session` only. Chat and LiveKit token rely on session secret (E4) + BFF/agent rate limits — not per-request Turnstile (avoids repeated visible challenges, especially in privacy browsers).
 
-**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Used once at session bootstrap; after the token is consumed the widget is hidden and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify`.
+**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Shown on an **in-page verification gate** (`phase: "verifying"`) before chat chrome mounts — not as an overlay above the control bar. First visit uses a short human-check prompt; re-bootstrap with a prior/persisted session uses session-expired copy. After the token is consumed the gate unmounts (`loading` → `ready`) and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify`.
 
-**Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.”
+**Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.” Bootstrap failures show a generic “Something went wrong. Please try again.” screen with a primary Retry button (technical details only in the console).
 
 **Env:**
 

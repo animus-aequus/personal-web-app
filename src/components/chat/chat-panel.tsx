@@ -17,6 +17,8 @@ import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
+import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
+import { Button } from "@/components/ui/button";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
 import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
@@ -527,7 +529,7 @@ export function ChatPanel() {
   const {
     sessionId,
     phase,
-    error,
+    isReverification,
     retry,
     historyStatus,
     rows: historyRows,
@@ -536,15 +538,68 @@ export function ChatPanel() {
     appendLive,
   } = useChatSession();
 
+  if (phase === "ready" && sessionId) {
+    return (
+      <ReadyChatPanel
+        key={sessionId}
+        sessionId={sessionId}
+        historyRows={historyRows}
+        hasMoreHistory={hasMoreHistory}
+        historyStatus={historyStatus}
+        loadOlder={loadOlder}
+        appendLive={appendLive}
+      />
+    );
+  }
+
+  if (phase === "verifying") {
+    return <SessionVerificationGate isReverification={isReverification} />;
+  }
+
+  if (phase === "error") {
+    return (
+      <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="text-sm text-muted-foreground">
+          Something went wrong. Please try again.
+        </p>
+        <Button type="button" variant="default" onClick={retry}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh w-full flex-col items-center justify-center overflow-hidden">
+      <ChatLoadingSpinner label="Loading chat" />
+    </div>
+  );
+}
+
+type ReadyChatPanelProps = {
+  sessionId: string;
+  historyRows: ReturnType<typeof useChatSession>["rows"];
+  hasMoreHistory: boolean;
+  historyStatus: HistoryStatus;
+  loadOlder: ReturnType<typeof useChatSession>["loadOlder"];
+  appendLive: ReturnType<typeof useChatSession>["appendLive"];
+};
+
+/** Owns voice toggle state so leaving `ready` unmounts and clears LiveKit cleanly. */
+function ReadyChatPanel({
+  sessionId,
+  historyRows,
+  hasMoreHistory,
+  historyStatus,
+  loadOlder,
+  appendLive,
+}: ReadyChatPanelProps) {
   const voiceLanguage = useChatStore((state) => state.voiceLanguage);
   const setVoiceLanguage = useChatStore((state) => state.setVoiceLanguage);
 
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
-  );
-  const [bootstrapChromeHeight, setBootstrapChromeHeight] = useState(
-    DEFAULT_CHROME_HEIGHT_PX,
   );
 
   const handleVoiceDisconnect = useCallback(() => {
@@ -572,65 +627,23 @@ export function ChatPanel() {
     [setVoiceLanguage, voiceEnabled],
   );
 
-  if (phase === "ready" && sessionId) {
-    return (
-      <div className="flex h-dvh w-full flex-col overflow-hidden">
-        <TextChatArea
-          key={sessionId}
-          sessionId={sessionId}
-          historyRows={historyRows}
-          hasMoreHistory={hasMoreHistory}
-          isLoadingOlder={historyStatus === "loading_more"}
-          historyStatus={historyStatus}
-          onLoadOlder={loadOlder}
-          onVoiceMessage={appendLive}
-          voiceConnectionId={voiceConnectionId}
-          voiceEnabled={voiceEnabled}
-          voiceLanguage={voiceLanguage}
-          onVoiceLanguageChange={handleVoiceLanguageChange}
-          onVoiceDisconnect={handleVoiceDisconnect}
-          onVoiceToggle={handleVoiceToggle}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden">
-      <div
-        className="relative flex h-dvh min-h-0 flex-col"
-        style={{ paddingBottom: bootstrapChromeHeight }}
-      >
-        {phase === "error" ? (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-            <p className="text-sm text-destructive">
-              {error ?? "Failed to start chat"}
-            </p>
-            <button
-              type="button"
-              className="text-sm text-foreground underline underline-offset-4"
-              onClick={retry}
-            >
-              Retry
-            </button>
-          </div>
-        ) : (
-          <div className="flex min-h-0 flex-1 items-center justify-center">
-            <ChatLoadingSpinner label="Loading chat" />
-          </div>
-        )}
-        <ChatControlBar
-          onSend={() => {}}
-          onVoiceToggle={handleVoiceToggle}
-          voiceEnabled={voiceEnabled}
-          voiceChromeReady={false}
-          voiceLanguage={voiceLanguage}
-          onVoiceLanguageChange={handleVoiceLanguageChange}
-          disabled
-          isLoading={phase === "loading"}
-          onChromeHeightChange={setBootstrapChromeHeight}
-        />
-      </div>
+      <TextChatArea
+        sessionId={sessionId}
+        historyRows={historyRows}
+        hasMoreHistory={hasMoreHistory}
+        isLoadingOlder={historyStatus === "loading_more"}
+        historyStatus={historyStatus}
+        onLoadOlder={loadOlder}
+        onVoiceMessage={appendLive}
+        voiceConnectionId={voiceConnectionId}
+        voiceEnabled={voiceEnabled}
+        voiceLanguage={voiceLanguage}
+        onVoiceLanguageChange={handleVoiceLanguageChange}
+        onVoiceDisconnect={handleVoiceDisconnect}
+        onVoiceToggle={handleVoiceToggle}
+      />
     </div>
   );
 }

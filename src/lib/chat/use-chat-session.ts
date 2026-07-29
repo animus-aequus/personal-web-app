@@ -13,19 +13,21 @@ import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
 /**
- * Coarse lifecycle for the chat surface, derived from the bootstrap sequence and
- * the initial history load:
- * - `loading`  — hydrating storage, creating/resuming the session, or fetching
- *                the first history page. UI shows a spinner and disables input.
- * - `ready`    — session established and initial history settled (possibly empty).
- *                UI mounts the chat; an empty thread shows the greeting.
- * - `error`    — bootstrap or initial history failed; UI shows a retry affordance.
+ * Coarse lifecycle for the chat surface:
+ * - `verifying` — Turnstile gate (human check) before session create/resume.
+ * - `loading`   — session create/resume and/or initial history fetch.
+ * - `ready`     — session established and initial history settled.
+ * - `error`     — bootstrap or initial history failed; UI shows a retry affordance.
  */
-export type ChatSessionPhase = "loading" | "ready" | "error";
+export type ChatSessionPhase = "verifying" | "loading" | "ready" | "error";
+
+type BootstrapStage = "verifying" | "loading";
 
 type UseChatSessionResult = {
   sessionId: string | null;
   phase: ChatSessionPhase;
+  /** True when bootstrap is re-checking after a prior/persisted session. */
+  isReverification: boolean;
   error: string | null;
   retry: () => void;
   historyStatus: HistoryStatus;
@@ -136,12 +138,16 @@ async function rehydratePendingCancellations(sessionId: string): Promise<void> {
 
 type BootstrapDeps = {
   isCurrent: () => boolean;
+  turnstileEnabled: boolean;
   acquireToken: () => Promise<string>;
   resetAfterUse: () => void;
   loadInitial: (sessionId: string) => Promise<void>;
   resetHistory: () => void;
-  setSessionId: (sessionId: string) => void;
+  setSessionId: (sessionId: string | null) => void;
   setBootstrapError: (error: string | null) => void;
+  setBootstrapStage: (stage: BootstrapStage) => void;
+  setIsReverification: (value: boolean) => void;
+  hadReadySession: () => boolean;
 };
 
 /**
@@ -151,12 +157,16 @@ type BootstrapDeps = {
 async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
   const {
     isCurrent,
+    turnstileEnabled,
     acquireToken,
     resetAfterUse,
     loadInitial,
     resetHistory,
     setSessionId,
     setBootstrapError,
+    setBootstrapStage,
+    setIsReverification,
+    hadReadySession,
   } = deps;
 
   try {
@@ -166,6 +176,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     }
 
     setBootstrapError(null);
+    setSessionId(null);
     resetHistory();
     useBookingOtpStore.getState().clear();
     useBookingCancelOtpStore.getState().clear();
@@ -173,6 +184,13 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     useDirectMessageStore.getState().clear();
 
     const persistedId = useChatStore.getState().sessionId;
+    setIsReverification(Boolean(persistedId) || hadReadySession());
+
+    if (turnstileEnabled) {
+      setBootstrapStage("verifying");
+    } else {
+      setBootstrapStage("loading");
+    }
 
     const turnstileToken = await acquireToken();
     if (!isCurrent()) {
@@ -180,6 +198,8 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
       resetAfterUse();
       return;
     }
+
+    setBootstrapStage("loading");
 
     let activeSessionId: string;
     try {
@@ -204,6 +224,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     if (!isCurrent()) {
       return;
     }
+    console.error("Chat session bootstrap failed:", error);
     setBootstrapError(
       error instanceof Error ? error.message : "Failed to start chat",
     );
@@ -211,7 +232,8 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
 }
 
 export function useChatSession(): UseChatSessionResult {
-  const { acquireToken, resetAfterUse } = useTurnstile();
+  const { enabled: turnstileEnabled, acquireToken, resetAfterUse } =
+    useTurnstile();
   const {
     rows,
     status: historyStatus,
@@ -225,23 +247,37 @@ export function useChatSession(): UseChatSessionResult {
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
+  const [bootstrapStage, setBootstrapStage] =
+    useState<BootstrapStage>("loading");
+  const [isReverification, setIsReverification] = useState(false);
 
   // Guards against overlapping bootstraps (React Strict Mode double-invoke,
   // retries): only the latest run may commit state.
   const runIdRef = useRef(0);
+  const hadReadySessionRef = useRef(false);
 
   const startBootstrap = useCallback(() => {
     const runId = ++runIdRef.current;
     return bootstrapChatSession({
       isCurrent: () => runId === runIdRef.current,
+      turnstileEnabled,
       acquireToken,
       resetAfterUse,
       loadInitial,
       resetHistory,
       setSessionId,
       setBootstrapError,
+      setBootstrapStage,
+      setIsReverification,
+      hadReadySession: () => hadReadySessionRef.current,
     });
-  }, [acquireToken, loadInitial, resetAfterUse, resetHistory]);
+  }, [
+    acquireToken,
+    loadInitial,
+    resetAfterUse,
+    resetHistory,
+    turnstileEnabled,
+  ]);
 
   useEffect(() => {
     void startBootstrap();
@@ -258,11 +294,26 @@ export function useChatSession(): UseChatSessionResult {
             historyStatus === "exhausted" ||
             historyStatus === "loading_more")
         ? "ready"
-        : "loading";
+        : bootstrapStage === "verifying"
+          ? "verifying"
+          : "loading";
+
+  useEffect(() => {
+    if (phase === "ready") {
+      hadReadySessionRef.current = true;
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    if (historyStatus === "error" && historyError) {
+      console.error("Chat history load failed:", historyError);
+    }
+  }, [historyError, historyStatus]);
 
   return {
     sessionId,
     phase,
+    isReverification,
     error: bootstrapError ?? historyError,
     retry: () => {
       void startBootstrap();
