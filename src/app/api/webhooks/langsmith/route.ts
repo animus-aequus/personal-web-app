@@ -1,0 +1,80 @@
+import { timingSafeEqual } from "node:crypto";
+
+import { NextResponse } from "next/server";
+
+import { pauseAssistant } from "@/lib/agent-client";
+import { invalidatePublicStatusCache } from "@/lib/public-access";
+
+export const revalidate = 0;
+
+type LangSmithAlertPayload = {
+  alert_rule_attribute?: string;
+  alert_rule_name?: string;
+  project_name?: string;
+  triggered_metric_value?: number | string;
+  triggered_threshold?: number | string;
+};
+
+function secretMatches(provided: string, expected: string): boolean {
+  const providedBytes = Buffer.from(provided);
+  const expectedBytes = Buffer.from(expected);
+  if (providedBytes.length !== expectedBytes.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBytes, expectedBytes);
+}
+
+function toAmount(value: number | string | undefined): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * LangSmith cost alert → pause the assistant. The agent API stays behind
+ * Cloudflare Access, so LangSmith talks to this proxy instead.
+ */
+export async function POST(request: Request) {
+  const expected = process.env.LANGSMITH_WEBHOOK_SECRET?.trim();
+  if (!expected) {
+    console.error("[langsmith-webhook] LANGSMITH_WEBHOOK_SECRET is not configured");
+    return NextResponse.json({ error: "webhook_not_configured" }, { status: 503 });
+  }
+
+  const provided = request.headers.get("x-webhook-secret") ?? "";
+  if (!secretMatches(provided, expected)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  const payload = (await request
+    .json()
+    .catch(() => ({}))) as LangSmithAlertPayload;
+
+  // Non-cost alerts are acknowledged so LangSmith does not retry them.
+  const attribute = payload.alert_rule_attribute?.trim().toLowerCase();
+  if (attribute && attribute !== "cost") {
+    console.warn("[langsmith-webhook] ignored attribute", attribute);
+    return NextResponse.json({ ignored: true });
+  }
+
+  try {
+    const result = await pauseAssistant({
+      source: "langsmith",
+      costUsd: toAmount(payload.triggered_metric_value),
+      thresholdUsd: toAmount(payload.triggered_threshold),
+      alertName: payload.alert_rule_name?.trim() || undefined,
+      projectName: payload.project_name?.trim() || undefined,
+    });
+    invalidatePublicStatusCache();
+    return NextResponse.json(result);
+  } catch (error) {
+    console.error("[langsmith-webhook] pause failed", error);
+    // 5xx so LangSmith retries the delivery.
+    return NextResponse.json({ error: "pause_failed" }, { status: 500 });
+  }
+}

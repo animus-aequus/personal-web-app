@@ -42,6 +42,8 @@ npm run dev
 | `LIVEKIT_API_SECRET` | LiveKit API secret (server-only) |
 | `LIVEKIT_AGENT_NAME` | Agent dispatch name for token route (server) |
 | `NEXT_PUBLIC_LIVEKIT_AGENT_NAME` | Agent name for `useSession` (client; default `personal-voice-agent`) |
+| `ADMIN_PAUSE_SECRET` | `X-Admin-Secret` sent to agent `POST /api/v1/admin/pause` (server-only; must match agent env) |
+| `LANGSMITH_WEBHOOK_SECRET` | Expected `X-Webhook-Secret` on `POST /api/webhooks/langsmith` (server-only) |
 
 ## Routes (this app)
 
@@ -51,5 +53,7 @@ npm run dev
 | `POST /api/session` | Proxy session bootstrap to agent API |
 | `POST /api/chat` | Proxy chat; AI SDK SSE response |
 | `POST /api/livekit/token` | Mint LiveKit room token |
+| `GET /api/public-status` | Pause state for the UI (read before Turnstile/session) |
+| `POST /api/webhooks/langsmith` | LangSmith cost alert → pause the assistant |
 
 Voice uses room names `web-{session_id}--{connection_id}` per connect; room metadata carries `session_id` so text and voice can share server-side conversation state. Details: [`docs/agent_api_contract.md`](docs/agent_api_contract.md).

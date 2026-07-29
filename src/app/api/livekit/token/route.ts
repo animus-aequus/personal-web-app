@@ -15,6 +15,7 @@ import {
   parseVoiceLanguage,
   type VoiceLanguageCode,
 } from "@/lib/livekit/voice-languages";
+import { enforcePublicAccess } from "@/lib/public-access";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -50,6 +51,11 @@ function requireEnv(name: string, value: string | undefined): string {
 }
 
 export async function POST(request: Request) {
+  const paused = await enforcePublicAccess();
+  if (paused) {
+    return paused;
+  }
+
   try {
     const livekitUrl = requireEnv("LIVEKIT_URL", LIVEKIT_URL);
     const apiKey = requireEnv("LIVEKIT_API_KEY", LIVEKIT_API_KEY);

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { streamAgentChat } from "@/lib/agent-client";
+import { enforcePublicAccess } from "@/lib/public-access";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -37,6 +38,11 @@ function extractUserText(messages: UIMessage[] | undefined): string {
 }
 
 export async function POST(request: Request) {
+  const paused = await enforcePublicAccess();
+  if (paused) {
+    return paused;
+  }
+
   try {
     const body = (await request.json()) as ChatRequestBody;
     const sessionId = body.sessionId ?? body.session_id;

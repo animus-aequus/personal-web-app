@@ -10,6 +10,8 @@ Base path: `/api/v1` on the agent API host.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
+| `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused", "pause_message" }` |
+| `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` |
 | `POST` | `/sessions` | `{ "session_id": string \| null }` | `{ "session_id", "thread_id", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
@@ -28,6 +30,14 @@ Base path: `/api/v1` on the agent API host.
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
 **Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
+
+### `GET /config` and `POST /admin/pause` (public access guard)
+
+`/config` is unauthenticated and carries no counters. While `paused` is true, `features.text_chat` and `features.voice_chat` are `false` and `pause_message` holds visitor-facing copy; otherwise `pause_message` is `null`. This app reads it through `getPublicStatus()` (15 s cache) for early rejects and `GET /api/public-status`.
+
+`/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret` (`ADMIN_PAUSE_SECRET`, identical on both sides). `source` is `"langsmith"` or `"manual"`. It is idempotent: `changed` is `false` when the assistant was already paused (no duplicate Telegram alert). **503** when the agent has no admin secret configured, **401** on mismatch. Called from `pauseAssistant()` in the LangSmith webhook route.
+
+While paused, every LLM turn is refused by the agent itself, so LiveKit voice (which bypasses this BFF) is covered too.
 
 ### `POST /sessions`
 

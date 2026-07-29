@@ -9,19 +9,29 @@ import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
+import {
+  fetchPublicStatus,
+  usePublicPauseStore,
+} from "@/lib/stores/public-pause-store";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
 /**
  * Coarse lifecycle for the chat surface:
+ * - `paused`    — public access is paused; nothing is created (zero cost).
  * - `verifying` — Turnstile gate (human check) before session create/resume.
  * - `loading`   — session create/resume and/or initial history fetch.
  * - `ready`     — session established and initial history settled.
  * - `error`     — bootstrap or initial history failed; UI shows a retry affordance.
  */
-export type ChatSessionPhase = "verifying" | "loading" | "ready" | "error";
+export type ChatSessionPhase =
+  | "paused"
+  | "verifying"
+  | "loading"
+  | "ready"
+  | "error";
 
-type BootstrapStage = "verifying" | "loading";
+type BootstrapStage = "verifying" | "loading" | "paused";
 
 type UseChatSessionResult = {
   sessionId: string | null;
@@ -183,6 +193,18 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     useMeetingsListStore.getState().clear();
     useDirectMessageStore.getState().clear();
 
+    // Before Turnstile and session creation: a paused assistant must not cost
+    // a Turnstile verification, an Upstash command or a session row.
+    const publicStatus = await fetchPublicStatus();
+    if (!isCurrent()) {
+      return;
+    }
+    usePublicPauseStore.getState().setStatus(publicStatus);
+    if (publicStatus.paused) {
+      setBootstrapStage("paused");
+      return;
+    }
+
     const persistedId = useChatStore.getState().sessionId;
     setIsReverification(Boolean(persistedId) || hadReadySession());
 
@@ -287,16 +309,18 @@ export function useChatSession(): UseChatSessionResult {
   }, [startBootstrap]);
 
   const phase: ChatSessionPhase =
-    bootstrapError || historyStatus === "error"
-      ? "error"
-      : sessionId &&
-          (historyStatus === "ready" ||
-            historyStatus === "exhausted" ||
-            historyStatus === "loading_more")
-        ? "ready"
-        : bootstrapStage === "verifying"
-          ? "verifying"
-          : "loading";
+    bootstrapStage === "paused"
+      ? "paused"
+      : bootstrapError || historyStatus === "error"
+        ? "error"
+        : sessionId &&
+            (historyStatus === "ready" ||
+              historyStatus === "exhausted" ||
+              historyStatus === "loading_more")
+          ? "ready"
+          : bootstrapStage === "verifying"
+            ? "verifying"
+            : "loading";
 
   useEffect(() => {
     if (phase === "ready") {

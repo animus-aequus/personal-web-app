@@ -17,6 +17,7 @@ import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
+import { PublicPauseModal } from "@/components/chat/public-pause-modal";
 import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { Button } from "@/components/ui/button";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
@@ -28,6 +29,11 @@ import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store"
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
+import {
+  refreshPublicPauseState,
+  usePublicPauseStore,
+} from "@/lib/stores/public-pause-store";
+import { DEFAULT_PAUSE_MESSAGE } from "@/lib/public-access-config";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import type { VoiceLanguageCode } from "@/lib/livekit/voice-languages";
 import {
@@ -211,6 +217,7 @@ function TextChatArea({
           return;
         }
         console.error("LiveKit session failed to start", error);
+        void refreshPublicPauseState();
         onVoiceDisconnect();
       }
     })();
@@ -247,9 +254,18 @@ function TextChatArea({
     [sessionId],
   );
 
+  const paused = usePublicPauseStore((s) => s.paused);
+  const pauseMessage = usePublicPauseStore((s) => s.message);
+  const pauseDismissed = usePublicPauseStore((s) => s.dismissed);
+  const dismissPause = usePublicPauseStore((s) => s.dismiss);
+
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
     transport,
+    onError: (error) => {
+      console.error("Chat turn failed", error);
+      void refreshPublicPauseState();
+    },
   });
 
   const setOtpFromPayload = useBookingOtpStore((s) => s.setFromPayload);
@@ -517,9 +533,14 @@ function TextChatArea({
           voiceLanguage={voiceLanguage}
           onVoiceLanguageChange={onVoiceLanguageChange}
           userTrack={userTrack}
+          disabled={paused}
           isLoading={isLoading}
           onChromeHeightChange={setChromeHeight}
         />
+
+        {paused && !pauseDismissed ? (
+          <PublicPauseModal message={pauseMessage} onAcknowledge={dismissPause} />
+        ) : null}
       </div>
     </AgentSessionProvider>
   );
@@ -552,6 +573,10 @@ export function ChatPanel() {
     );
   }
 
+  if (phase === "paused") {
+    return <PausedChatPanel />;
+  }
+
   if (phase === "verifying") {
     return <SessionVerificationGate isReverification={isReverification} />;
   }
@@ -572,6 +597,25 @@ export function ChatPanel() {
   return (
     <div className="flex h-dvh w-full flex-col items-center justify-center overflow-hidden">
       <ChatLoadingSpinner label="Loading chat" />
+    </div>
+  );
+}
+
+/** Bootstrap stopped before Turnstile and session creation — nothing to chat with. */
+function PausedChatPanel() {
+  const message = usePublicPauseStore((s) => s.message);
+  const dismissed = usePublicPauseStore((s) => s.dismissed);
+  const dismiss = usePublicPauseStore((s) => s.dismiss);
+
+  if (!dismissed) {
+    return <PublicPauseModal message={message} onAcknowledge={dismiss} />;
+  }
+
+  return (
+    <div className="flex h-dvh w-full items-center justify-center px-6 text-center">
+      <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+        {message?.trim() || DEFAULT_PAUSE_MESSAGE}
+      </p>
     </div>
   );
 }

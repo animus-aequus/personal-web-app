@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { createAgentSession } from "@/lib/agent-client";
+import { enforcePublicAccess } from "@/lib/public-access";
 import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -14,6 +15,11 @@ import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 export const revalidate = 0;
 
 export async function POST(request: Request) {
+  const paused = await enforcePublicAccess();
+  if (paused) {
+    return paused;
+  }
+
   const rateLimited = await enforceRateLimit(request, RateLimitRoute.Session);
   if (rateLimited) {
     return rateLimited;

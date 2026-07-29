@@ -44,6 +44,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Turnstile | Implemented (`POST /api/session` only; chat/voice rely on session + RL) |
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel / pending proxy routes | **Done** (E7) |
+| Public access early reject + LangSmith pause webhook | **Done** (see below) |
 
 ---
 
@@ -58,6 +59,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
 | — | Direct message GenUI proxies + dual-window RL | **Done** |
+| — | Public access cost guard (early reject, `/api/public-status`, LangSmith webhook) | **Done** |
 | — | Clerk (optional) | Future |
 
 Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice turn RL + shared 60 messages/session/hour across text+voice) is agent-enforced; BFF chat RL stays edge-only and does **not** duplicate the shared `SESSION_MESSAGE` budget.
@@ -68,10 +70,10 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 | Route | Rate limit (E1) | Turnstile (E3) | Session secret (E4) |
 |-------|-----------------|----------------|---------------------|
-| `POST /api/session` | yes | yes | sets cookie |
-| `POST /api/chat` | yes | — | required |
+| `POST /api/session` | yes (after pause check) | yes | sets cookie |
+| `POST /api/chat` | yes (after pause check) | — | required |
 | `GET /api/session/messages` | yes | — | required |
-| `POST /api/livekit/token` | yes | — | required |
+| `POST /api/livekit/token` | yes (after pause check) | — | required |
 | `POST /api/bookings/confirm` | yes | — | required |
 | `POST /api/bookings/cancel` | yes | — | required |
 | `GET /api/bookings/pending` | yes | — | required |
@@ -81,6 +83,8 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 | `GET /api/cancellations/pending` | yes | — | required |
 | `POST /api/direct-messages` | yes (3/h + 6/24h) | — | required |
 | `POST /api/direct-messages/cancel` | yes | — | required |
+| `GET /api/public-status` | — | — | — |
+| `POST /api/webhooks/langsmith` | — | — | `X-Webhook-Secret` |
 
 ---
 
@@ -185,6 +189,30 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 - Tool `open_direct_message_form` opens an ephemeral form (SSE `ui`/`direct_message` → `data-direct-message`, LiveKit `ui_events`). Not stored in history `parts`; no pending rehydrate.
 - Send: FE+BE validation → dual-window rate limit (3/h and 6/24h, session + IP) → agent Telegram notify + `direct_messages` insert → system-note with name/email/message.
 - Cancel: light `Booking` rate limit → agent system-note only (`Private message cancelled`).
+
+### Public access cost guard (early reject + LangSmith webhook)
+
+**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`
+
+**Early reject:** `enforcePublicAccess()` runs as the **first** statement of `POST /api/session`, `POST /api/chat` and `POST /api/livekit/token` — before `enforceRateLimit`, so a paused assistant burns no Upstash commands and no Turnstile verification. Response: **503** `{ "error": "assistant_paused", "message": … }`. Pause state comes from agent `GET /api/v1/config`, cached in-module for **15 s** (failures cached too). Read failures **fail open** — the agent's own turn guard is the hard cap.
+
+Booking / cancellation / direct-message routes are intentionally **not** guarded: they make no LLM call, and blocking them would trap a visitor mid-OTP.
+
+**UI:** bootstrap calls `GET /api/public-status` after store rehydrate and before Turnstile / `POST /api/session`; when paused the session phase becomes `paused` and nothing is created. Mid-session pauses are detected from `useChat` `onError` and a failed LiveKit `start()` via `refreshPublicPauseState()`. Both paths show the same centered warning card (overlay + `OK`), and the control bar (input, send, voice toggle) stays disabled after acknowledging.
+
+**LangSmith webhook:** `POST /api/webhooks/langsmith` verifies `X-Webhook-Secret` against `LANGSMITH_WEBHOOK_SECRET` with `timingSafeEqual` (missing env → **503**, mismatch → **401** without detail). Non-cost alert attributes are acknowledged with **200** so LangSmith stops retrying. On a cost alert it calls agent `POST /api/v1/admin/pause` with `X-Admin-Secret`, mapping `triggered_metric_value` → `cost_usd` and `triggered_threshold` → `threshold_usd`, then invalidates the status cache. Agent failure → **500** so LangSmith retries.
+
+**Env:** `LANGSMITH_WEBHOOK_SECRET`, `ADMIN_PAUSE_SECRET` (both server-only; the second must match the agent).
+
+**LangSmith setup (manual, outside the repo):**
+
+1. Settings → Models: confirm a pricing entry exists for `eu.anthropic.claude-haiku-4-5-20251001-v1:0`, otherwise alert `Cost` stays at zero.
+2. Tracing project → Alerts → two **Cost** alerts on the same webhook: `sum ≥ $3` over **15 min** (spike) and `sum ≥ $8` over **60 min** (slower burn).
+3. Webhook URL `https://<domain>/api/webhooks/langsmith`, header `{"X-Webhook-Secret": "<LANGSMITH_WEBHOOK_SECRET>"}`, default body template.
+4. `Send Test Notification` → expect a Telegram alert (Path: LangSmith) and `paused = true` in Postgres; then resume manually (SQL runbook in the agent repo `docs/security.md`).
+5. Ensure Vercel Deployment Protection does not cover `/api/webhooks/*` in production.
+
+Resume, manual pause and limit changes are SQL-only — see the runbook in the agent API [`security.md`](../../personal-voice-agent/docs/security.md).
 
 ---
 

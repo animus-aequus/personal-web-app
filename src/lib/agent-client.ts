@@ -3,13 +3,14 @@ const AGENT_API_BASE_URL =
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID ?? "";
 const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET ?? "";
+const ADMIN_PAUSE_SECRET = process.env.ADMIN_PAUSE_SECRET ?? "";
 
 export type AgentRequestOptions = {
   clientIp?: string;
   sessionSecret?: string;
 };
 
-function agentHeaders(options?: AgentRequestOptions): HeadersInit {
+function agentHeaders(options?: AgentRequestOptions): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
@@ -35,6 +36,69 @@ export type CreateSessionResponse = {
   session_secret?: string | null;
   session_expires_at?: string | null;
 };
+
+export type AgentClientConfig = {
+  features: Record<string, boolean>;
+  paused?: boolean;
+  pause_message?: string | null;
+};
+
+export async function fetchAgentConfig(): Promise<AgentClientConfig> {
+  const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/config`, {
+    method: "GET",
+    headers: agentHeaders(),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Agent config fetch failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
+
+export type PauseAssistantRequest = {
+  source: "langsmith" | "manual";
+  costUsd?: number;
+  thresholdUsd?: number;
+  alertName?: string;
+  projectName?: string;
+};
+
+export type PauseAssistantResponse = {
+  paused: boolean;
+  changed: boolean;
+};
+
+/** Flip the agent's public access pause flag (LangSmith cost alert / operator). */
+export async function pauseAssistant(
+  body: PauseAssistantRequest,
+): Promise<PauseAssistantResponse> {
+  if (!ADMIN_PAUSE_SECRET) {
+    throw new Error("ADMIN_PAUSE_SECRET is not configured");
+  }
+
+  const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/admin/pause`, {
+    method: "POST",
+    headers: { ...agentHeaders(), "X-Admin-Secret": ADMIN_PAUSE_SECRET },
+    body: JSON.stringify({
+      source: body.source,
+      cost_usd: body.costUsd ?? null,
+      threshold_usd: body.thresholdUsd ?? null,
+      alert_name: body.alertName ?? null,
+      project_name: body.projectName ?? null,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Assistant pause failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
 
 export const HISTORY_PAGE_SIZE = 10;
 

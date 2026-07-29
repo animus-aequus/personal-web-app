@@ -29,6 +29,8 @@ personal-website/                 # this repo
 | `app/api/direct-messages/cancel/route.ts` | Proxy private-message cancel |
 | `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending (E8) |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
+| `app/api/public-status/route.ts` | Public access pause state for the UI |
+| `app/api/webhooks/langsmith/route.ts` | LangSmith cost alert → pause the assistant |
 | `components/chat/chat-panel.tsx` | Chat UI, voice toggle, `useSession`, merge |
 | `components/chat/message-list.tsx` | Renders merged message list |
 | `components/chat/message-input.tsx` | Text input + send |
@@ -41,6 +43,10 @@ personal-website/                 # this repo
 | `lib/session-cookie.ts` | httpOnly session secret cookie helpers (E4) |
 | `lib/rate-limit-config.ts` | Env-driven rate limit parameters |
 | `lib/rate-limit.ts` | Upstash rate limiter + abuse escalation |
+| `lib/public-access-config.ts` | Shared pause contract (error code, status path, default copy) |
+| `lib/public-access.ts` | Cached pause status + `enforcePublicAccess()` early reject |
+| `lib/stores/public-pause-store.ts` | Pause state for the UI + `refreshPublicPauseState()` |
+| `components/chat/public-pause-modal.tsx` | Full-screen pause notice (overlay + OK) |
 | `lib/livekit/room.ts` | LiveKit room naming helpers |
 | `lib/livekit/voice-languages.ts` | Voice STT language catalog + TTS-fallback helpers |
 | `lib/livekit/voice-chat-sync.ts` | `chat_sync` data channel → Zustand |
@@ -63,6 +69,7 @@ personal-website/                 # this repo
 | Message persistence / session store | `src/lib/stores/chat-store.ts` |
 | Page shell / routing | `src/app/page.tsx`, `src/app/layout.tsx` |
 | Styling / design tokens | `src/app/globals.css`, `src/components/ui/*` |
+| Public access pause (early reject, status, modal) | `src/lib/public-access.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx` |
 | Agent API contract / cross-service behaviour | `docs/agent_api_contract.md`, then agent API repo if in workspace |
 
 ## Layering rules (do not break)
