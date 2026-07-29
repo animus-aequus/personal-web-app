@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
@@ -17,6 +17,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Personal Voice Agent",
   description: "Text and voice scheduling assistant",
+};
+
+// The UI is dark-only. Declaring it in the document head (not just CSS) stops
+// mobile browsers — Chrome Android's auto-dark, Samsung Internet's dark mode —
+// from re-mapping the palette themselves.
+export const viewport: Viewport = {
+  colorScheme: "dark",
+  themeColor: "#04070f",
 };
 
 export default function RootLayout({

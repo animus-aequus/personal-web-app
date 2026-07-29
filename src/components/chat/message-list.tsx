@@ -297,7 +297,7 @@ export function MessageList({
               className={cn(
                 "text-sm leading-relaxed",
                 message.role === "user"
-                  ? "ml-auto max-w-[85%] rounded-2xl bg-card px-4 py-3 text-foreground"
+                  ? "ml-auto max-w-[85%] rounded-2xl border border-border bg-card px-4 py-3 text-foreground"
                   // Fixed (not max-) width: this is a flex item in a column
                   // flex container, so an auto margin + auto width would
                   // shrink-to-fit its content instead of taking a stable
