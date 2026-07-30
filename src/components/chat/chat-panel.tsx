@@ -5,7 +5,13 @@ import { useSession } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
@@ -57,6 +63,44 @@ const EASE = [0.4, 0, 0.2, 1] as const;
 const CHAT_FADE_MS = 350;
 /** Fallback bottom reservation until `ChatControlBar` reports its live height. */
 const DEFAULT_CHROME_HEIGHT_PX = 96;
+
+/** Tailwind `lg` — fade is not rendered below this width. */
+const CHAT_SCROLL_FADE_MIN_PX = 1024;
+
+/**
+ * Softens scroll content just above the control bar.
+ * Tracks live chrome height; lg+ only.
+ */
+function ChatScrollFade({ bottomPx }: { bottomPx: number }) {
+  const [isLgUp, setIsLgUp] = useState(false);
+
+  useLayoutEffect(() => {
+    const mediaQuery = window.matchMedia(
+      `(min-width: ${CHAT_SCROLL_FADE_MIN_PX}px)`,
+    );
+    const sync = () => setIsLgUp(mediaQuery.matches);
+    sync();
+    mediaQuery.addEventListener("change", sync);
+    return () => mediaQuery.removeEventListener("change", sync);
+  }, []);
+
+  if (!isLgUp) {
+    return null;
+  }
+
+  return (
+    <div
+      data-chat-scroll-fade
+      aria-hidden
+      className="pointer-events-none fixed inset-x-0 z-[15] mx-auto h-8 w-full max-w-3xl"
+      style={{
+        bottom: bottomPx,
+        background:
+          "linear-gradient(to top, var(--background) 0%, transparent 100%)",
+      }}
+    />
+  );
+}
 
 /** Stable per-session text timestamps; survives re-renders without refs in render. */
 const textMessageTimestamps = new Map<string, number>();
@@ -524,6 +568,8 @@ function TextChatArea({
             </div>
           </div>
         ) : null}
+
+        {!voiceEnabled ? <ChatScrollFade bottomPx={chromeHeight} /> : null}
 
         <ChatControlBar
           onSend={handleSend}
