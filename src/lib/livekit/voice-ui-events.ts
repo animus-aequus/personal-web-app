@@ -26,6 +26,8 @@ type MeetingsListPayload = {
     eventName: string;
     slotStart: string;
     durationMinutes: number;
+    meetUrl: string | null;
+    htmlLink: string | null;
   }>;
 };
 
@@ -64,20 +66,31 @@ function parseUiEvent(raw: Uint8Array): UiPayload | null {
       if (typeof data.listId !== "string" || !Array.isArray(data.meetings)) {
         return null;
       }
-      const meetings = data.meetings.filter(
-        (item): item is MeetingsListPayload["meetings"][number] => {
-          if (typeof item !== "object" || item === null) {
-            return false;
-          }
-          const row = item as Record<string, unknown>;
-          return (
-            typeof row.bookingId === "string" &&
-            typeof row.eventName === "string" &&
-            typeof row.slotStart === "string" &&
-            typeof row.durationMinutes === "number"
-          );
-        },
-      );
+      const meetings: MeetingsListPayload["meetings"] = [];
+      for (const item of data.meetings) {
+        if (typeof item !== "object" || item === null) {
+          continue;
+        }
+        const row = item as Record<string, unknown>;
+        if (
+          typeof row.bookingId !== "string" ||
+          typeof row.eventName !== "string" ||
+          typeof row.slotStart !== "string" ||
+          typeof row.durationMinutes !== "number" ||
+          !(row.meetUrl === null || typeof row.meetUrl === "string") ||
+          !(row.htmlLink === null || typeof row.htmlLink === "string")
+        ) {
+          continue;
+        }
+        meetings.push({
+          bookingId: row.bookingId,
+          eventName: row.eventName,
+          slotStart: row.slotStart,
+          durationMinutes: row.durationMinutes,
+          meetUrl: row.meetUrl,
+          htmlLink: row.htmlLink,
+        });
+      }
       return { type: "meetings_list", listId: data.listId, meetings };
     }
     if (data.type === "direct_message") {

@@ -18,7 +18,7 @@ Base path: `/api/v1` on the agent API host.
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` (deltas + optional UI frames; see below) |
 | `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
-| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"?, "meet_url"?, "html_link"?, "ical_uid"?, "event_name"?, "slot_start"?, "duration_minutes"?, "note"? }` |
+| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id", "meet_url", "html_link", "ical_uid", "event_name", "slot_start", "duration_minutes", "note"? }` |
 | `POST` | `/bookings/{booking_id}/cancel` | — | `{ "booking_id", "status", "note"? }` (PENDING abort) |
 | `POST` | `/bookings/{booking_id}/cancel-request` | — | cancel OTP payload (CONFIRMED) |
 | `POST` | `/cancellations/{id}/confirm` | `{ "code" }` | `{ "cancellation_id", "booking_id", "status", "note"? }` |
@@ -81,7 +81,9 @@ Optional `parts` on assistant rows (GenUI snapshots from tool artifacts), e.g.:
       "bookingId": "…",
       "eventName": "…",
       "slotStart": "…",
-      "durationMinutes": 30
+      "durationMinutes": 30,
+      "meetUrl": "https://meet.google.com/…",
+      "htmlLink": "https://www.google.com/calendar/event?…"
     }
   ]
 }
@@ -179,7 +181,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 
 ```json
 { "type": "booking_otp", "bookingId": "…", "emailMasked": "…", "expiresAt": "…", "attemptsLeft": 5 }
-{ "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30 } ] }
+{ "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30, "meetUrl": "…", "htmlLink": "…" } ] }
 { "type": "direct_message", "formId": "…", "name": "…", "email": "…", "phoneNumber": "…" }
 ```
 

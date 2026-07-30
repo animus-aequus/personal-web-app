@@ -2,18 +2,15 @@
 
 import { useState } from "react";
 
+import { MeetingDetailsDialog } from "@/components/chat/meeting-details-dialog";
 import { Button } from "@/components/ui/button";
-import { showBookingOtpErrorToast } from "@/lib/chat/booking-otp-toast";
 import { cn } from "@/lib/utils";
-import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
-import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
+import {
+  useMeetingsListStore,
+  type MeetingsListMeeting,
+} from "@/lib/stores/meetings-list-store";
 
-export type MeetingListItem = {
-  bookingId: string;
-  eventName: string;
-  slotStart: string;
-  durationMinutes: number;
-};
+export type MeetingListItem = MeetingsListMeeting;
 
 type MeetingsListCardProps = {
   listId: string;
@@ -47,58 +44,10 @@ export function MeetingsListCard({
   className,
 }: MeetingsListCardProps) {
   const activeListId = useMeetingsListStore((s) => s.activeListId);
-  const interactive = activeListId === listId;
-  const upsertCancel = useBookingCancelOtpStore((s) => s.upsert);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  const handleCancel = async (meeting: MeetingListItem) => {
-    if (!interactive || busyId) {
-      return;
-    }
-    setBusyId(meeting.bookingId);
-    try {
-      const response = await fetch("/api/bookings/cancel-request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, bookingId: meeting.bookingId }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        showBookingOtpErrorToast(
-          payload.error?.includes("email_suppressed")
-            ? "This email cannot receive codes. Use a different address or contact the host."
-            : payload.error?.includes("not_confirmed")
-              ? "That meeting can no longer be cancelled."
-              : "Could not start cancellation.",
-        );
-        return;
-      }
-      const data = (await response.json()) as {
-        cancellation_id: string;
-        booking_id: string;
-        email_masked: string;
-        expires_at: string;
-        attempts_left: number;
-        event_name: string;
-        slot_start: string;
-      };
-      upsertCancel({
-        cancellationId: data.cancellation_id,
-        bookingId: data.booking_id,
-        emailMasked: data.email_masked,
-        expiresAt: data.expires_at,
-        attemptsLeft: data.attempts_left,
-        eventName: data.event_name,
-        slotStart: data.slot_start,
-      });
-    } catch {
-      showBookingOtpErrorToast("Could not start cancellation.");
-    } finally {
-      setBusyId(null);
-    }
-  };
+  const canCancel = activeListId === listId;
+  const [detailsMeeting, setDetailsMeeting] = useState<MeetingListItem | null>(
+    null,
+  );
 
   return (
     <div
@@ -117,17 +66,17 @@ export function MeetingsListCard({
         <div className="divide-y divide-border">
           {meetings.map((meeting) => {
             const { date, time } = formatDateParts(meeting.slotStart);
-            const cancelButton = interactive ? (
+            const detailsButton = (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={busyId === meeting.bookingId}
-                onClick={() => void handleCancel(meeting)}
+                className="shrink-0"
+                onClick={() => setDetailsMeeting(meeting)}
               >
-                Cancel
+                Details
               </Button>
-            ) : null;
+            );
 
             return (
               <div
@@ -154,7 +103,7 @@ export function MeetingsListCard({
                     >
                       {meeting.eventName}
                     </p>
-                    {cancelButton}
+                    {detailsButton}
                   </div>
                 </div>
 
@@ -166,19 +115,34 @@ export function MeetingsListCard({
                     </p>
                     <p className="text-xs text-muted-foreground">{time}</p>
                   </div>
-                  <p className="truncate text-sm text-foreground" title={meeting.eventName}>
+                  <p
+                    className="truncate text-sm text-foreground"
+                    title={meeting.eventName}
+                  >
                     {meeting.eventName}
                   </p>
                   <p className="text-xs tabular-nums text-muted-foreground">
                     {meeting.durationMinutes} min
                   </p>
-                  {cancelButton ?? <span className="w-[4.5rem]" aria-hidden />}
+                  {detailsButton}
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      <MeetingDetailsDialog
+        meeting={detailsMeeting}
+        open={detailsMeeting !== null}
+        sessionId={sessionId}
+        canCancel={canCancel}
+        onOpenChange={(next) => {
+          if (!next) {
+            setDetailsMeeting(null);
+          }
+        }}
+      />
     </div>
   );
 }

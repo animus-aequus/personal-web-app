@@ -14,6 +14,8 @@ export type MeetingsListData = {
     eventName: string;
     slotStart: string;
     durationMinutes: number;
+    meetUrl: string | null;
+    htmlLink: string | null;
   }>;
 };
 

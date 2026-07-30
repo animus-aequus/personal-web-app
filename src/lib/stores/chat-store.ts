@@ -19,6 +19,8 @@ export type ChatMessagePart = {
     eventName: string;
     slotStart: string;
     durationMinutes: number;
+    meetUrl: string | null;
+    htmlLink: string | null;
   }>;
 };
 

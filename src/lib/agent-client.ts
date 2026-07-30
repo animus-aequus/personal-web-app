@@ -107,6 +107,8 @@ export type HistoryMeetingItem = {
   eventName: string;
   slotStart: string;
   durationMinutes: number;
+  meetUrl: string | null;
+  htmlLink: string | null;
 };
 
 export type HistoryMessagePart = {
@@ -233,11 +235,14 @@ function isMeetingItem(value: unknown): value is HistoryMeetingItem {
     return false;
   }
   const record = value as Record<string, unknown>;
+  const linkOk = (value: unknown) => value === null || typeof value === "string";
   return (
     typeof record.bookingId === "string" &&
     typeof record.eventName === "string" &&
     typeof record.slotStart === "string" &&
-    typeof record.durationMinutes === "number"
+    typeof record.durationMinutes === "number" &&
+    linkOk(record.meetUrl) &&
+    linkOk(record.htmlLink)
   );
 }
 
@@ -383,14 +388,14 @@ export type SystemNoteInfo = {
 export type ConfirmBookingResponse = {
   booking_id: string;
   status: string;
-  google_event_id?: string | null;
-  meet_url?: string | null;
-  html_link?: string | null;
-  ical_uid?: string | null;
-  event_name?: string | null;
-  slot_start?: string | null;
-  duration_minutes?: number | null;
-  note?: SystemNoteInfo | null;
+  google_event_id: string | null;
+  meet_url: string | null;
+  html_link: string | null;
+  ical_uid: string | null;
+  event_name: string;
+  slot_start: string;
+  duration_minutes: number;
+  note: SystemNoteInfo | null;
 };
 
 export type CancelBookingResponse = {

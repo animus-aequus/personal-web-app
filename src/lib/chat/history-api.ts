@@ -34,6 +34,8 @@ function mapHistoryParts(
         eventName: m.eventName,
         slotStart: m.slotStart,
         durationMinutes: m.durationMinutes,
+        meetUrl: m.meetUrl,
+        htmlLink: m.htmlLink,
       })),
     });
   }
