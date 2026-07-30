@@ -18,7 +18,7 @@ Base path: `/api/v1` on the agent API host.
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` | `text/event-stream` (deltas + optional UI frames; see below) |
 | `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
-| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"?, "note"? }` |
+| `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id"?, "meet_url"?, "html_link"?, "ical_uid"?, "event_name"?, "slot_start"?, "duration_minutes"?, "note"? }` |
 | `POST` | `/bookings/{booking_id}/cancel` | — | `{ "booking_id", "status", "note"? }` (PENDING abort) |
 | `POST` | `/bookings/{booking_id}/cancel-request` | — | cancel OTP payload (CONFIRMED) |
 | `POST` | `/cancellations/{id}/confirm` | `{ "code" }` | `{ "cancellation_id", "booking_id", "status", "note"? }` |
@@ -118,7 +118,7 @@ Protected with `X-Session-Secret` (same session that owns the booking). Rate-lim
 | Endpoint | Notes |
 |----------|--------|
 | `GET /bookings/pending?session_id=` | Active non-expired PENDING for rehydration |
-| `POST /bookings/{id}/confirm` | Body `{ "code" }` — verifies OTP, writes Google event, returns CONFIRMED |
+| `POST /bookings/{id}/confirm` | Body `{ "code" }` — verifies OTP, writes Google event (guest + Meet when owner OAuth is configured), returns CONFIRMED plus optional `meet_url` / `html_link` / `ical_uid` for the success dialog |
 | `POST /bookings/{id}/cancel` | Cancels PENDING only |
 
 Confirm errors (**409**): `otp_invalid`, `otp_expired`, `too_many_attempts`, `slot_taken`, `not_pending`.

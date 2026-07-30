@@ -384,6 +384,12 @@ export type ConfirmBookingResponse = {
   booking_id: string;
   status: string;
   google_event_id?: string | null;
+  meet_url?: string | null;
+  html_link?: string | null;
+  ical_uid?: string | null;
+  event_name?: string | null;
+  slot_start?: string | null;
+  duration_minutes?: number | null;
   note?: SystemNoteInfo | null;
 };
 

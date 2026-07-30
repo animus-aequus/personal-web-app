@@ -106,6 +106,7 @@ function BookingOtpCardInner({
   onNote?: OnSystemNote;
 }) {
   const setStatus = useBookingOtpStore((s) => s.setStatus);
+  const setSuccess = useBookingOtpStore((s) => s.setSuccess);
   const [code, setCode] = useState("");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -139,9 +140,22 @@ function BookingOtpCardInner({
       if (response.ok) {
         const data = (await response.json().catch(() => ({}))) as {
           note?: SystemNoteInfo | null;
+          meet_url?: string | null;
+          html_link?: string | null;
+          ical_uid?: string | null;
+          event_name?: string | null;
+          slot_start?: string | null;
+          duration_minutes?: number | null;
         };
         appendSystemNote(onNote, data.note);
-        finishWithSuccess();
+        setSuccess({
+          eventName: data.event_name ?? active.eventName,
+          slotStart: data.slot_start ?? active.slotStart,
+          durationMinutes: data.duration_minutes ?? undefined,
+          meetUrl: data.meet_url,
+          htmlLink: data.html_link,
+          icalUid: data.ical_uid,
+        });
         return;
       }
       const payload = (await response.json().catch(() => ({}))) as {

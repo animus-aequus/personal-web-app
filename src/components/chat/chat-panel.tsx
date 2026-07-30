@@ -11,6 +11,7 @@ import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provi
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
+import { BookingSuccessDialog } from "@/components/chat/booking-success-dialog";
 import { ChatControlBar } from "@/components/chat/chat-control-bar";
 import { ChatGreeting } from "@/components/chat/chat-greeting";
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
@@ -541,6 +542,8 @@ function TextChatArea({
         {paused && !pauseDismissed ? (
           <PublicPauseModal message={pauseMessage} onAcknowledge={dismissPause} />
         ) : null}
+
+        <BookingSuccessDialog />
       </div>
     </AgentSessionProvider>
   );

@@ -13,6 +13,19 @@ export type BookingOtpState = {
   errorMessage?: string;
   eventName?: string;
   slotStart?: string;
+  durationMinutes?: number;
+  meetUrl?: string;
+  htmlLink?: string;
+  icalUid?: string;
+};
+
+export type BookingSuccessPayload = {
+  eventName?: string;
+  slotStart?: string;
+  durationMinutes?: number;
+  meetUrl?: string | null;
+  htmlLink?: string | null;
+  icalUid?: string | null;
 };
 
 type BookingOtpStore = {
@@ -29,6 +42,7 @@ type BookingOtpStore = {
     errorMessage?: string,
     attemptsLeft?: number,
   ) => void;
+  setSuccess: (payload: BookingSuccessPayload) => void;
   /** Mark current booking dismissed and remove the widget (terminal OTP action). */
   dismiss: () => void;
   /** Full reset (session bootstrap) — clears active + dismissed history. */
@@ -43,6 +57,13 @@ export const useBookingOtpStore = create<BookingOtpStore>((set) => ({
       if (state.dismissedBookingIds.has(payload.bookingId)) {
         return state;
       }
+      // Do not clobber success/error UI when a stale data-otp part reappears.
+      if (
+        state.active?.bookingId === payload.bookingId &&
+        state.active.status !== "pending"
+      ) {
+        return state;
+      }
       return {
         active: {
           bookingId: payload.bookingId,
@@ -52,6 +73,10 @@ export const useBookingOtpStore = create<BookingOtpStore>((set) => ({
           status: payload.status ?? "pending",
           eventName: payload.eventName,
           slotStart: payload.slotStart,
+          durationMinutes: payload.durationMinutes,
+          meetUrl: payload.meetUrl,
+          htmlLink: payload.htmlLink,
+          icalUid: payload.icalUid,
           errorMessage: undefined,
         },
       };
@@ -68,6 +93,26 @@ export const useBookingOtpStore = create<BookingOtpStore>((set) => ({
           errorMessage,
           attemptsLeft:
             attemptsLeft !== undefined ? attemptsLeft : state.active.attemptsLeft,
+        },
+      };
+    }),
+  setSuccess: (payload) =>
+    set((state) => {
+      if (!state.active) {
+        return state;
+      }
+      return {
+        active: {
+          ...state.active,
+          status: "success",
+          errorMessage: undefined,
+          eventName: payload.eventName ?? state.active.eventName,
+          slotStart: payload.slotStart ?? state.active.slotStart,
+          durationMinutes:
+            payload.durationMinutes ?? state.active.durationMinutes,
+          meetUrl: payload.meetUrl ?? state.active.meetUrl,
+          htmlLink: payload.htmlLink ?? state.active.htmlLink,
+          icalUid: payload.icalUid ?? state.active.icalUid,
         },
       };
     }),
