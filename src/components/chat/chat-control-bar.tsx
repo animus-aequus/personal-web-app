@@ -331,7 +331,7 @@ export function ChatControlBar({
             transition={MORPH_TRANSITION}
           >
             <motion.div
-              className="absolute inset-0 border border-border bg-card shadow-lg"
+              className="absolute inset-0 bg-card shadow-lg"
               initial={false}
               animate={{
                 opacity: geometry.shellBackgroundOpacity,

@@ -86,25 +86,21 @@
 .dark {
   --background: oklch(0.13 0.02 260);
   --foreground: oklch(0.95 0.01 90);
-  /* The page gradient bottoms out near pure black (0.08–0.18 L), so surfaces
-     need ~2:1 luminance contrast against it. Anything below that survives a
-     desktop monitor in a dim room but collapses under the ambient reflection
-     floor of a phone held in daylight. */
-  --card: oklch(0.40 0.022 260);
+  --card: oklch(0.22 0.01 260);
   --card-foreground: oklch(0.95 0.01 90);
-  --popover: oklch(0.40 0.022 260);
+  --popover: oklch(0.22 0.01 260);
   --popover-foreground: oklch(0.95 0.01 90);
   --primary: oklch(0.72 0.12 75);
   --primary-foreground: oklch(0.18 0.03 75);
-  --secondary: oklch(0.44 0.024 260);
+  --secondary: oklch(0.25 0.02 260);
   --secondary-foreground: oklch(0.95 0.01 90);
-  --muted: oklch(0.36 0.02 260);
-  --muted-foreground: oklch(0.72 0.02 260);
+  --muted: oklch(0.22 0.01 260);
+  --muted-foreground: oklch(0.65 0.02 260);
   --accent: oklch(0.28 0.04 75);
   --accent-foreground: oklch(0.92 0.08 75);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 24%);
-  --input: oklch(0.38 0.02 260);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(0.25 0.01 260);
   --ring: oklch(0.72 0.12 75);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
@@ -127,7 +123,11 @@
   }
   html {
     @apply font-sans;
+    /* Opting out of browser-side forced darkening (Chrome Android auto-dark,
+       WebView force-dark). `only` is the stronger signal; the plain value
+       stays as a fallback for engines that reject the `only` keyword. */
     color-scheme: dark;
+    color-scheme: only dark;
   }
   body {
     @apply bg-background text-foreground font-sans text-[15px] leading-relaxed tracking-normal;
