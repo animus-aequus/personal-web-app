@@ -28,6 +28,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
+      language?: string | null;
       [TURNSTILE_TOKEN_FIELD]?: string;
     };
 
@@ -45,10 +46,15 @@ export async function POST(request: Request) {
     const data = await createAgentSession(body.session_id ?? undefined, {
       clientIp: getClientIp(request),
       sessionSecret: existingSecret,
+      language: body.language ?? null,
     });
 
     const response = NextResponse.json(
-      { session_id: data.session_id, thread_id: data.thread_id },
+      {
+        session_id: data.session_id,
+        thread_id: data.thread_id,
+        language: data.language ?? "en",
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
 

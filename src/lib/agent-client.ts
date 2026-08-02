@@ -33,6 +33,8 @@ function agentHeaders(options?: AgentRequestOptions): Record<string, string> {
 export type CreateSessionResponse = {
   session_id: string;
   thread_id: string;
+  /** Authoritative session locale from the agent (en|pl|de|es|fr). */
+  language?: string | null;
   session_secret?: string | null;
   session_expires_at?: string | null;
 };
@@ -164,12 +166,15 @@ export async function fetchChatHistory(
 
 export async function createAgentSession(
   sessionId: string | undefined,
-  options?: AgentRequestOptions,
+  options?: AgentRequestOptions & { language?: string | null },
 ): Promise<CreateSessionResponse> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/sessions`, {
     method: "POST",
     headers: agentHeaders(options),
-    body: JSON.stringify({ session_id: sessionId ?? null }),
+    body: JSON.stringify({
+      session_id: sessionId ?? null,
+      language: options?.language ?? null,
+    }),
     cache: "no-store",
   });
 

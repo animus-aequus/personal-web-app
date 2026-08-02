@@ -28,7 +28,7 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 1. On first load (after Zustand rehydration), `ChatPanel` calls `POST /api/session` → agent API returns `session_id`.
 2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
-3. `sessionId` alone is stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally.
+3. `sessionId`, UI `language` (`en|pl|de|es|fr`), and `voiceLanguage` are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative).
 4. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
 5. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
 

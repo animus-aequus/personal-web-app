@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useTurnstile } from "@/components/turnstile/turnstile-provider";
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
+import {
+  normalizeLocale,
+  resolveBrowserLocale,
+  type LocaleCode,
+} from "@/lib/i18n/locales";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
@@ -50,8 +55,11 @@ type UseChatSessionResult = {
 async function ensureServerSession(
   persistedId: string | null,
   turnstileToken: string,
-): Promise<string> {
-  const body: Record<string, string> = {};
+  language: LocaleCode,
+): Promise<{ sessionId: string; language: LocaleCode }> {
+  const body: Record<string, string> = {
+    language,
+  };
   if (persistedId) {
     body.session_id = persistedId;
   }
@@ -70,8 +78,15 @@ async function ensureServerSession(
     throw new Error(await response.text());
   }
 
-  const data = (await response.json()) as { session_id: string };
-  return data.session_id;
+  const data = (await response.json()) as {
+    session_id: string;
+    language?: string;
+  };
+  return {
+    sessionId: data.session_id,
+    // Server is authoritative once a session exists (DB wins over early path).
+    language: normalizeLocale(data.language, language),
+  };
 }
 
 async function rehydratePendingBooking(sessionId: string): Promise<void> {
@@ -205,7 +220,14 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
       return;
     }
 
-    const persistedId = useChatStore.getState().sessionId;
+    const storeState = useChatStore.getState();
+    const persistedId = storeState.sessionId;
+    // Early path: persisted language from rehydrate/merge, else navigator.
+    // Store starts as null when storage is empty (persist skips merge then).
+    const earlyLanguage = storeState.language ?? resolveBrowserLocale();
+    if (storeState.language == null) {
+      useChatStore.getState().setLanguage(earlyLanguage);
+    }
     setIsReverification(Boolean(persistedId) || hadReadySession());
 
     if (turnstileEnabled) {
@@ -224,8 +246,15 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     setBootstrapStage("loading");
 
     let activeSessionId: string;
+    let sessionLanguage: LocaleCode;
     try {
-      activeSessionId = await ensureServerSession(persistedId, turnstileToken);
+      const session = await ensureServerSession(
+        persistedId,
+        turnstileToken,
+        earlyLanguage,
+      );
+      activeSessionId = session.sessionId;
+      sessionLanguage = session.language;
     } finally {
       resetAfterUse();
     }
@@ -235,6 +264,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     }
 
     useChatStore.getState().setSessionId(activeSessionId);
+    useChatStore.getState().setLanguage(sessionLanguage);
     setSessionId(activeSessionId);
 
     await Promise.all([
