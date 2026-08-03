@@ -13,6 +13,7 @@ Base path: `/api/v1` on the agent API host.
 | `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused", "pause_message" }` |
 | `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` |
 | `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null }` | `{ "session_id", "thread_id", "language", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `language` is `en\|pl\|de\|es\|fr` |
+| `PATCH` | `/sessions/{session_id}` | `{ "language": string }` | `{ "session_id", "language" }` — authoritative normalized locale |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
 | `POST` | `/chat` | `{ "session_id", "message" }` | `{ "session_id", "reply" }` (single JSON; non-streaming) |
@@ -44,6 +45,13 @@ While paused, every LLM turn is refused by the agent itself, so LiveKit voice (w
 - **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language`.
 - **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; returns stored `language` + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language from the response.
 - Without binding: legacy stateless id normalization (pre-E4); response `language` is normalized from the request hint or `en`.
+
+### `PATCH /sessions/{session_id}`
+
+- Body: `{ "language": "en"|"pl"|"de"|"es"|"fr" }` (unsupported values normalize to `en`).
+- When binding enabled: requires `X-Session-Secret` for the session; updates `web_sessions.language` and returns authoritative `language`.
+- Without binding: returns normalized body `language` without persisting (legacy mode).
+- BFF: `PATCH /api/session` with `{ session_id, language }`; forwards cookie secret.
 
 ### `/sessions/{session_id}/messages` history pagination
 

@@ -9,6 +9,7 @@ import {
   Video,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -56,12 +57,13 @@ function formatSlot(slotStart?: string, durationMinutes?: number): string {
 }
 
 function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
+  const { t } = useTranslation();
   const dismiss = useBookingOtpStore((s) => s.dismiss);
   const [copied, setCopied] = useState(false);
   const open = active.status === "success";
   const meetUrl = active.meetUrl?.trim() || null;
   const icalUid = active.icalUid?.trim() || null;
-  const eventName = active.eventName?.trim() || "Meeting";
+  const eventName = active.eventName?.trim() || t("common.meeting");
   const slotLabel = formatSlot(active.slotStart, active.durationMinutes);
   const showInviteDownload =
     Boolean(icalUid) && Boolean(active.slotStart) && Boolean(active.durationMinutes);
@@ -110,11 +112,9 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
               aria-hidden
             />
           </div>
-          <DialogTitle>Meeting confirmed</DialogTitle>
+          <DialogTitle>{t("booking.successTitle")}</DialogTitle>
           <DialogDescription>
-            An invitation was sent to {active.emailMasked}. The meeting should
-            already be in your calendar — check your inbox if you do not see it
-            yet.
+            {t("booking.successDescription", { email: active.emailMasked })}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,14 +135,14 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
                 className={cn(buttonVariants({ variant: "default" }), "flex-1")}
               >
                 <Video className="size-4" aria-hidden />
-                Join with Google Meet
+                {t("booking.joinMeet")}
                 <ExternalLink className="size-3.5 opacity-70" aria-hidden />
               </a>
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
-                aria-label={copied ? "Copied" : "Copy Meet link"}
+                aria-label={copied ? t("common.copied") : t("common.copyMeetLink")}
                 onClick={() => void handleCopyMeet()}
               >
                 {copied ? <Check /> : <Copy />}
@@ -153,8 +153,7 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
           {showInviteDownload ? (
             <div className="space-y-1.5">
               <p className="text-xs text-muted-foreground">
-                Backup option — only if the invite did not appear in your
-                calendar.
+                {t("booking.backupInviteHint")}
               </p>
               <div className="flex items-center gap-1.5">
                 <Button
@@ -164,7 +163,7 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
                   onClick={handleDownloadIcs}
                 >
                   <Download className="size-4" aria-hidden />
-                  Download the invitation
+                  {t("booking.downloadInvite")}
                 </Button>
                 <TooltipProvider delay={200}>
                   <Tooltip>
@@ -174,14 +173,12 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
                         buttonVariants({ variant: "ghost", size: "icon" }),
                         "shrink-0 text-muted-foreground",
                       )}
-                      aria-label="About downloading the invitation"
+                      aria-label={t("booking.aboutDownload")}
                     >
                       <CircleHelp className="size-4" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-[16rem] text-pretty">
-                      If the meeting was not added to your calendar
-                      automatically, open this file to add it manually (works
-                      with Google Calendar, Outlook, and Apple Calendar).
+                      {t("booking.inviteTooltip")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -192,7 +189,7 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
 
         <DialogFooter className="sm:justify-end">
           <Button type="button" variant="ghost" onClick={() => dismiss()}>
-            Close
+            {t("common.close")}
           </Button>
         </DialogFooter>
       </DialogContent>

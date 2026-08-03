@@ -1,28 +1,10 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AURA_PALETTE_CSS } from "@/lib/visualizer/aura-palette";
-
-const HINTS = [
-  "Ask anything about Kacper",
-  "Book a meeting",
-  "Contact Kacper directly",
-] as const;
-
-type HeadlineToken = {
-  text: string;
-  accent?: string;
-};
-
-const HEADLINE_TOKENS: HeadlineToken[] = [
-  { text: "Hey!" },
-  { text: "Kacper's", accent: AURA_PALETTE_CSS[0] },
-  { text: "AI", accent: AURA_PALETTE_CSS[1] },
-  { text: "assistant" },
-  { text: "here." },
-];
 
 const WORD_STAGGER_S = 0.05;
 const WORD_DURATION_S = 0.4;
@@ -81,6 +63,26 @@ type GreetingContentProps = {
 };
 
 function GreetingContent({ reducedMotion }: GreetingContentProps) {
+  const { t } = useTranslation();
+  const headlineTokens = useMemo(
+    () => [
+      { text: t("greeting.hey") },
+      { text: t("greeting.kacpers"), accent: AURA_PALETTE_CSS[0] },
+      { text: t("greeting.ai"), accent: AURA_PALETTE_CSS[1] },
+      { text: t("greeting.assistant") },
+      { text: t("greeting.here") },
+    ],
+    [t],
+  );
+  const hints = useMemo(
+    () => [
+      t("greeting.hints.ask"),
+      t("greeting.hints.book"),
+      t("greeting.hints.contact"),
+    ],
+    [t],
+  );
+
   const headlineDoneRef = useRef(false);
   const [headlineReady, setHeadlineReady] = useState(reducedMotion);
   const [hintIndex, setHintIndex] = useState(0);
@@ -94,7 +96,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
     let cancelled = false;
 
     void (async () => {
-      const hint = HINTS[hintIndex];
+      const hint = hints[hintIndex];
 
       for (let i = 1; i <= hint.length; i++) {
         if (cancelled) {
@@ -117,14 +119,14 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
       await delay(GAP_MS);
 
       if (!cancelled) {
-        setHintIndex((prev) => (prev + 1) % HINTS.length);
+        setHintIndex((prev) => (prev + 1) % hints.length);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [headlineReady, reducedMotion, hintIndex]);
+  }, [headlineReady, reducedMotion, hintIndex, hints]);
 
   useEffect(() => {
     if (!headlineReady || !reducedMotion) {
@@ -132,11 +134,11 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
     }
 
     const id = window.setInterval(() => {
-      setHintIndex((prev) => (prev + 1) % HINTS.length);
+      setHintIndex((prev) => (prev + 1) % hints.length);
     }, REDUCED_HINT_ROTATE_MS);
 
     return () => window.clearInterval(id);
-  }, [headlineReady, reducedMotion]);
+  }, [headlineReady, reducedMotion, hints.length]);
 
   const handleHeadlineComplete = () => {
     if (headlineDoneRef.current || reducedMotion) {
@@ -147,8 +149,8 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
   };
 
   const displayedHint = reducedMotion
-    ? HINTS[hintIndex]
-    : HINTS[hintIndex].slice(0, charCount);
+    ? hints[hintIndex]
+    : hints[hintIndex].slice(0, charCount);
 
   const showCaret = headlineReady && !reducedMotion;
 
@@ -157,13 +159,13 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
       <p className="text-2xl font-normal leading-snug text-foreground/90 md:text-4xl">
         {reducedMotion ? (
           <>
-            {HEADLINE_TOKENS.map((token, index) => (
+            {headlineTokens.map((token, index) => (
               <span
-                key={token.text}
+                key={`${token.text}-${index}`}
                 style={token.accent ? { color: token.accent } : undefined}
               >
                 {token.text}
-                {index < HEADLINE_TOKENS.length - 1 ? " " : ""}
+                {index < headlineTokens.length - 1 ? " " : ""}
               </span>
             ))}
           </>
@@ -179,9 +181,9 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
               }
             }}
           >
-            {HEADLINE_TOKENS.map((token, index) => (
+            {headlineTokens.map((token, index) => (
               <span
-                key={token.text}
+                key={`${token.text}-${index}`}
                 className="inline-block overflow-hidden align-bottom pb-[0.1em]"
               >
                 <motion.span
@@ -190,7 +192,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
                   style={token.accent ? { color: token.accent } : undefined}
                 >
                   {token.text}
-                  {index < HEADLINE_TOKENS.length - 1 ? "\u00A0" : ""}
+                  {index < headlineTokens.length - 1 ? "\u00A0" : ""}
                 </motion.span>
               </span>
             ))}

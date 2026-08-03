@@ -2,9 +2,9 @@
 
 import { AlertTriangle } from "lucide-react";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { DEFAULT_PAUSE_MESSAGE } from "@/lib/public-access-config";
 
 type PublicPauseModalProps = {
   message: string | null;
@@ -19,6 +19,8 @@ export function PublicPauseModal({
   message,
   onAcknowledge,
 }: PublicPauseModalProps) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -41,13 +43,13 @@ export function PublicPauseModal({
           <AlertTriangle className="size-5 text-amber-600 dark:text-amber-400" />
         </span>
         <h2 id="public-pause-title" className="text-base font-medium text-foreground">
-          Assistant paused
+          {t("pause.title")}
         </h2>
         <p className="text-sm leading-relaxed text-muted-foreground">
-          {message?.trim() || DEFAULT_PAUSE_MESSAGE}
+          {message?.trim() || t("pause.defaultMessage")}
         </p>
         <Button autoFocus type="button" className="mt-1 w-24" onClick={onAcknowledge}>
-          OK
+          {t("common.ok")}
         </Button>
       </div>
     </div>

@@ -1,13 +1,8 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
 import { MessageContent } from "@/components/chat/message-content";
@@ -62,6 +57,7 @@ export function MessageList({
   showOtpInline = false,
   onNote,
 }: MessageListProps) {
+  const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -261,12 +257,12 @@ export function MessageList({
           <ChatLoadingSpinner
             size="sm"
             className="mb-4"
-            label="Loading older messages"
+            label={t("chat.loadingOlder")}
           />
         ) : null}
         {!isLoadingOlder && hasMoreHistory && historyStatus === "ready" ? (
           <p className="text-center text-xs text-muted-foreground">
-            Scroll up for older messages
+            {t("chat.scrollUpOlder")}
           </p>
         ) : null}
         {messages.map((message) => {
@@ -310,8 +306,8 @@ export function MessageList({
                   <MessageContent content={message.content} />
                   <span
                     className="absolute -right-2.5 -top-2.5 flex items-center justify-center bg-background p-1 text-amber-600/55 dark:text-amber-500/50"
-                    title="Interrupted before finishing"
-                    aria-label="Interrupted before finishing"
+                    title={t("chat.interrupted")}
+                    aria-label={t("chat.interrupted")}
                   >
                     <CirclePause className="size-3.5" aria-hidden />
                   </span>
@@ -357,7 +353,7 @@ export function MessageList({
           </div>
         ) : null}
         {awaitingFirstToken ? (
-          <p className="text-sm text-muted-foreground">Assistant is thinking…</p>
+          <p className="text-sm text-muted-foreground">{t("chat.assistantThinking")}</p>
         ) : null}
       </div>
     </div>

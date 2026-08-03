@@ -2,13 +2,11 @@
 
 import { toast } from "sonner";
 
+import i18n from "@/lib/i18n/client";
 import { TURNSTILE_ERROR_CODE } from "@/lib/turnstile/turnstile-config";
 
-const TURNSTILE_TOAST_MESSAGE =
-  "Verification failed. Please try again.";
-
 export function showTurnstileErrorToast(): void {
-  toast.error(TURNSTILE_TOAST_MESSAGE);
+  toast.error(i18n.t("turnstile.verificationFailed"));
 }
 
 export async function responseIndicatesTurnstileFailure(

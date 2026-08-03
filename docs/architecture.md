@@ -28,7 +28,7 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 1. On first load (after Zustand rehydration), `ChatPanel` calls `POST /api/session` → agent API returns `session_id`.
 2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
-3. `sessionId`, UI `language` (`en|pl|de|es|fr`), and `voiceLanguage` are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative).
+3. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
 4. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
 5. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
 
@@ -67,13 +67,13 @@ and retries: only the latest run may commit state.
 ### Web voice (LiveKit)
 
 1. User toggles voice on → new `voiceConnectionId` (`crypto.randomUUID()`).
-2. `useSession` uses `livekitVoiceRoomName(sessionId, connectionId)`, `participantMetadata: sessionId`, and `agentMetadata: {"voice_language": …}` from the voice language select (persisted in Zustand; default `en`).
+2. `useSession` uses `livekitVoiceRoomName(sessionId, connectionId)`, `participantMetadata: sessionId`, and `agentMetadata: {"voice_language": …}` from the same Zustand `language` as the UI.
 3. Effect on `voiceEnabled`: `await start()` then `await session.room.startAudio()`.
 4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`) — forwards `voice_language` into `RoomAgentDispatch.metadata`.
 5. Worker (agent API) configures Deepgram STT/TTS from that metadata and publishes `voice_user` / `voice_assistant` on `chat_sync`.
 6. `useVoiceChatSync` appends live voice rows to in-memory history state (`appendLive`).
 7. Voice off → browser publishes `voice_mode_exit` on `voice_control`, then effect cleanup calls `session.end()`.
-8. Changing the language select while voice is on bumps `voiceConnectionId` (new room + agent) so STT/TTS rebuild cleanly. For Polish, the UI shows an amber warning that spoken replies stay in English (no Deepgram Polish TTS).
+8. Changing `language` while voice is on bumps `voiceConnectionId` (new room + agent) so STT/TTS rebuild cleanly. When the selected locale lacks full TTS support (e.g. Polish), voice mode shows an inline language select + amber warning; otherwise language is changed only from the settings sidebar.
 
 Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` stays the same.
 

@@ -39,6 +39,11 @@ export type CreateSessionResponse = {
   session_expires_at?: string | null;
 };
 
+export type UpdateSessionLanguageResponse = {
+  session_id: string;
+  language: string;
+};
+
 export type AgentClientConfig = {
   features: Record<string, boolean>;
   paused?: boolean;
@@ -181,6 +186,29 @@ export async function createAgentSession(
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Session creation failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
+
+export async function updateAgentSessionLanguage(
+  sessionId: string,
+  language: string,
+  options?: AgentRequestOptions,
+): Promise<UpdateSessionLanguageResponse> {
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/sessions/${encodeURIComponent(sessionId)}`,
+    {
+      method: "PATCH",
+      headers: agentHeaders(options),
+      body: JSON.stringify({ language }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Session language update failed (${response.status}): ${detail}`);
   }
 
   return response.json();

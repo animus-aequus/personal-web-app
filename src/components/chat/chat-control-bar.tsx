@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AgentWaveVisualizer } from "@/components/agents-ui/agent-wave-visualizer";
 import { UserRadialDots } from "@/components/agents-ui/user-radial-dots";
@@ -23,14 +24,16 @@ import {
   textSlotWidthForBar,
   type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
+import { changeAppLanguage } from "@/lib/i18n/change-language";
 import {
-  DEFAULT_VOICE_LANGUAGE,
-  TTS_FALLBACK_WARNING,
-  VOICE_LANGUAGES,
-  hasTtsFallback,
-  type VoiceLanguageCode,
-} from "@/lib/livekit/voice-languages";
+  LOCALE_CODES,
+  LOCALE_LABELS,
+  normalizeLocale,
+  type LocaleCode,
+} from "@/lib/i18n/locales";
+import { hasTtsFallback } from "@/lib/livekit/voice-languages";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
+import { useChatStore } from "@/lib/stores/chat-store";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
@@ -60,13 +63,13 @@ type ChatControlBarProps = {
   onStopSpeech?: () => void;
   voiceEnabled: boolean;
   voiceChromeReady: boolean;
-  voiceLanguage?: VoiceLanguageCode;
-  onVoiceLanguageChange?: (language: VoiceLanguageCode) => void;
+  sessionId?: string;
+  onVoiceReconnect?: () => void;
   userTrack?: TrackReferenceOrPlaceholder;
   disabled?: boolean;
   isLoading?: boolean;
   /** Reports the live pixel height reserved by this bar (incl. its bottom
-   * viewport offset) so other fixed/absolute UI can avoid overlapping it. */
+   * offset) so other absolute UI in the chat panel can avoid overlapping it. */
   onChromeHeightChange?: (heightPx: number) => void;
 };
 
@@ -76,13 +79,15 @@ export function ChatControlBar({
   onStopSpeech,
   voiceEnabled,
   voiceChromeReady,
-  voiceLanguage = DEFAULT_VOICE_LANGUAGE,
-  onVoiceLanguageChange,
+  sessionId,
+  onVoiceReconnect,
   userTrack,
   disabled,
   isLoading,
   onChromeHeightChange,
 }: ChatControlBarProps) {
+  const { t } = useTranslation();
+  const language = useChatStore((state) => normalizeLocale(state.language));
   const agentPhase = useAgentActivityStore((state) => state.phase);
   const [value, setValue] = useState("");
   const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
@@ -103,10 +108,9 @@ export function ChatControlBar({
   const agentBusy =
     voiceEnabled &&
     (agentPhase === "thinking" || agentPhase === "responding");
-  const showTtsFallbackWarning =
-    voiceEnabled && hasTtsFallback(voiceLanguage);
-  const languageSelectDisabled =
-    disabled || !onVoiceLanguageChange || agentBusy;
+  const showTtsFallbackWarning = voiceEnabled && hasTtsFallback(language);
+  const showVoiceLanguageSelect = showTtsFallbackWarning;
+  const languageSelectDisabled = disabled || agentBusy;
 
   const stackedLayout =
     !voiceEnabled &&
@@ -139,15 +143,16 @@ export function ChatControlBar({
       return;
     }
 
-    // `anchor` hugs its content exactly (no padding of its own), and the
-    // outer wrapper only adds horizontal padding + the fixed bottom offset —
-    // so its live bounding box is exactly the chrome height other UI (e.g.
-    // the voice GenUI overlay) must reserve at the bottom of the viewport.
     const sync = () => {
       setBarMaxWidth(Math.min(anchor.clientWidth, CHAT_CONTROL.BAR_MAX_PX));
       if (onChromeHeightChange) {
         const rect = anchor.getBoundingClientRect();
-        onChromeHeightChange(Math.max(0, window.innerHeight - rect.top));
+        const panel = anchor.closest("[data-chat-panel]");
+        const bottom =
+          panel instanceof HTMLElement
+            ? panel.getBoundingClientRect().bottom
+            : window.innerHeight;
+        onChromeHeightChange(Math.max(0, bottom - rect.top));
       }
     };
 
@@ -227,14 +232,21 @@ export function ChatControlBar({
     }
   };
 
+  const handleVoiceLanguageChange = (next: LocaleCode) => {
+    void changeAppLanguage(next, {
+      sessionId,
+      onVoiceReconnect,
+    });
+  };
+
   return (
-    <div className="fixed inset-x-0 bottom-6 z-20 px-4">
+    <div className="absolute inset-x-0 bottom-6 z-20 px-4">
       <div
         ref={anchorRef}
         className="mx-auto flex w-full max-w-2xl flex-col items-center"
       >
         <AnimatePresence>
-          {voiceEnabled ? (
+          {showVoiceLanguageSelect ? (
             <motion.div
               key="voice-language"
               className="mb-3 flex w-full max-w-xs flex-col items-center gap-2"
@@ -244,16 +256,14 @@ export function ChatControlBar({
               transition={{ duration: 0.3, ease: EASE }}
             >
               <label className="sr-only" htmlFor="voice-language-select">
-                Voice language
+                {t("chat.voiceLanguageLabel")}
               </label>
               <select
                 id="voice-language-select"
-                value={voiceLanguage}
+                value={language}
                 disabled={languageSelectDisabled}
                 onChange={(event) => {
-                  onVoiceLanguageChange?.(
-                    event.target.value as VoiceLanguageCode,
-                  );
+                  handleVoiceLanguageChange(event.target.value as LocaleCode);
                 }}
                 className={cn(
                   "h-9 w-full max-w-[12rem] appearance-none rounded-full border bg-card px-4 text-center text-sm text-foreground shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
@@ -262,9 +272,9 @@ export function ChatControlBar({
                     : "border-border",
                 )}
               >
-                {VOICE_LANGUAGES.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.label}
+                {LOCALE_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {LOCALE_LABELS[code]}
                   </option>
                 ))}
               </select>
@@ -273,7 +283,7 @@ export function ChatControlBar({
                   role="status"
                   className="px-2 text-center text-xs leading-snug text-amber-700 dark:text-amber-400"
                 >
-                  {TTS_FALLBACK_WARNING}
+                  {t("voice.ttsFallbackWarning")}
                 </p>
               ) : null}
             </motion.div>
@@ -348,7 +358,7 @@ export function ChatControlBar({
                 disabled={disabled || (agentBusy && !onStopSpeech)}
                 aria-pressed={voiceEnabled}
                 aria-label={
-                  agentBusy ? "Stop response" : "End voice conversation"
+                  agentBusy ? t("chat.stopResponse") : t("chat.endVoice")
                 }
                 className={cn(
                   "absolute z-10 flex items-center justify-center rounded-full transition-colors duration-300",
@@ -409,7 +419,7 @@ export function ChatControlBar({
                     value={value}
                     onChange={(event) => handleTextChange(event.target.value)}
                     onKeyDown={onKeyDown}
-                    placeholder="Ask anything…"
+                    placeholder={t("chat.placeholder")}
                     disabled={disabled || isLoading}
                     rows={1}
                     style={{
@@ -430,7 +440,7 @@ export function ChatControlBar({
                   onClick={onVoiceToggle}
                   disabled={disabled}
                   aria-pressed={voiceEnabled}
-                  aria-label="Start voice conversation"
+                  aria-label={t("chat.startVoice")}
                   className={cn(
                     "absolute z-10 flex items-center justify-center rounded-full text-foreground/80 hover:bg-muted/60 hover:text-foreground",
                     disabled && "opacity-50",
@@ -453,7 +463,7 @@ export function ChatControlBar({
                       key="send"
                       type="submit"
                       disabled={disabled || isLoading}
-                      aria-label="Send message"
+                      aria-label={t("chat.sendMessage")}
                       className={cn(
                         "absolute z-10 flex items-center justify-center rounded-full bg-primary hover:bg-primary/90",
                         (disabled || isLoading) && "opacity-50",

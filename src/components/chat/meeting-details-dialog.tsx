@@ -2,6 +2,7 @@
 
 import { Check, Copy, ExternalLink, Loader2, Video } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -81,6 +82,7 @@ function CountdownUnit({ value, label }: { value: number; label: string }) {
 }
 
 function MeetingCountdown({ slotStart }: { slotStart: string }) {
+  const { t } = useTranslation();
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -100,7 +102,7 @@ function MeetingCountdown({ slotStart }: { slotStart: string }) {
   if (parts.totalSeconds === 0) {
     return (
       <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-center text-sm text-muted-foreground">
-        This meeting has started.
+        {t("meetings.started")}
       </p>
     );
   }
@@ -114,14 +116,25 @@ function MeetingCountdown({ slotStart }: { slotStart: string }) {
       aria-live="polite"
       aria-label={
         showDays
-          ? `${parts.days} days, ${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds remaining`
-          : `${parts.hours} hours, ${parts.minutes} minutes, ${parts.seconds} seconds remaining`
+          ? t("meetings.countdownDays", {
+              days: parts.days,
+              hours: parts.hours,
+              minutes: parts.minutes,
+              seconds: parts.seconds,
+            })
+          : t("meetings.countdownShort", {
+              hours: parts.hours,
+              minutes: parts.minutes,
+              seconds: parts.seconds,
+            })
       }
     >
-      {showDays ? <CountdownUnit value={parts.days} label="Days" /> : null}
-      <CountdownUnit value={parts.hours} label="Hours" />
-      <CountdownUnit value={parts.minutes} label="Min" />
-      <CountdownUnit value={parts.seconds} label="Sec" />
+      {showDays ? (
+        <CountdownUnit value={parts.days} label={t("common.days")} />
+      ) : null}
+      <CountdownUnit value={parts.hours} label={t("common.hours")} />
+      <CountdownUnit value={parts.minutes} label={t("meetings.countdownMin")} />
+      <CountdownUnit value={parts.seconds} label={t("meetings.countdownSec")} />
     </div>
   );
 }
@@ -133,6 +146,7 @@ export function MeetingDetailsDialog({
   sessionId,
   canCancel,
 }: MeetingDetailsDialogProps) {
+  const { t } = useTranslation();
   const upsertCancel = useBookingCancelOtpStore((s) => s.upsert);
   const [copied, setCopied] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
@@ -171,10 +185,10 @@ export function MeetingDetailsDialog({
         };
         showBookingOtpErrorToast(
           payload.error?.includes("email_suppressed")
-            ? "This email cannot receive codes. Use a different address or contact the host."
+            ? t("cancellation.emailSuppressed")
             : payload.error?.includes("not_confirmed")
-              ? "That meeting can no longer be cancelled."
-              : "Could not start cancellation.",
+              ? t("cancellation.cannotCancel")
+              : t("cancellation.startFailed"),
         );
         return;
       }
@@ -198,7 +212,7 @@ export function MeetingDetailsDialog({
       });
       onOpenChange(false);
     } catch {
-      showBookingOtpErrorToast("Could not start cancellation.");
+      showBookingOtpErrorToast(t("cancellation.startFailed"));
     } finally {
       setCancelBusy(false);
     }
@@ -233,7 +247,7 @@ export function MeetingDetailsDialog({
                     )}
                   >
                     <Video className="size-4" aria-hidden />
-                    Join with Google Meet
+                    {t("booking.joinMeet")}
                     <ExternalLink
                       className="size-3.5 opacity-70"
                       aria-hidden
@@ -243,7 +257,7 @@ export function MeetingDetailsDialog({
                     type="button"
                     variant="outline"
                     size="icon"
-                    aria-label={copied ? "Copied" : "Copy Meet link"}
+                    aria-label={copied ? t("common.copied") : t("common.copyMeetLink")}
                     onClick={() => void handleCopyMeet()}
                   >
                     {copied ? <Check /> : <Copy />}
@@ -251,7 +265,7 @@ export function MeetingDetailsDialog({
                 </div>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  No Google Meet link is available for this meeting.
+                  {t("meetings.noMeetLink")}
                 </p>
               )}
             </div>
@@ -272,7 +286,7 @@ export function MeetingDetailsDialog({
                   {cancelBusy ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden />
                   ) : (
-                    "Cancel meeting"
+                    t("meetings.cancelMeeting")
                   )}
                 </Button>
               ) : null}
@@ -282,7 +296,7 @@ export function MeetingDetailsDialog({
                 disabled={cancelBusy}
                 onClick={() => onOpenChange(false)}
               >
-                Close
+                {t("common.close")}
               </Button>
             </DialogFooter>
           </>

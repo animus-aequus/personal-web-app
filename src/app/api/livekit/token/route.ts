@@ -11,7 +11,6 @@ import { NextResponse } from "next/server";
 import { verifyAgentSession } from "@/lib/agent-client";
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
 import {
-  DEFAULT_VOICE_LANGUAGE,
   parseVoiceLanguage,
   type VoiceLanguageCode,
 } from "@/lib/livekit/voice-languages";
@@ -25,13 +24,13 @@ import {
 
 function resolveVoiceLanguage(agentMetadata: unknown): VoiceLanguageCode {
   if (typeof agentMetadata !== "string" || !agentMetadata.trim()) {
-    return DEFAULT_VOICE_LANGUAGE;
+    return "en";
   }
   try {
     const parsed = JSON.parse(agentMetadata) as { voice_language?: unknown };
     return parseVoiceLanguage(parsed?.voice_language);
   } catch {
-    return DEFAULT_VOICE_LANGUAGE;
+    return "en";
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +83,7 @@ function BookingCancelOtpCardInner({
   className,
   onNote,
 }: BookingCancelOtpCardProps) {
+  const { t } = useTranslation();
   const dismiss = useBookingCancelOtpStore((s) => s.dismiss);
   const updateAttempts = useBookingCancelOtpStore((s) => s.updateAttempts);
   const [code, setCode] = useState("");
@@ -104,12 +106,12 @@ function BookingCancelOtpCardInner({
       return;
     }
     expiredHandledRef.current = true;
-    showBookingOtpErrorToast("Cancellation code expired.");
+    showBookingOtpErrorToast(t("cancellation.codeExpired"));
     dismiss(card.cancellationId);
-  }, [secondsLeft, card.cancellationId, dismiss]);
+  }, [secondsLeft, card.cancellationId, dismiss, t]);
 
-  const finishSuccess = (message = "Meeting cancelled.") => {
-    showBookingOtpSuccessToast(message);
+  const finishSuccess = (message?: string) => {
+    showBookingOtpSuccessToast(message ?? t("cancellation.cancelled"));
     dismiss(card.cancellationId);
   };
 
@@ -146,18 +148,18 @@ function BookingCancelOtpCardInner({
       };
       const detail = payload.error ?? "";
       if (detail.includes("otp_expired")) {
-        finishError("Cancellation code expired.");
+        finishError(t("cancellation.codeExpired"));
       } else if (detail.includes("too_many_attempts")) {
-        finishError("Too many incorrect attempts.");
+        finishError(t("cancellation.tooManyAttempts"));
       } else if (detail.includes("otp_invalid")) {
-        showBookingOtpErrorToast("Incorrect code. Try again.");
+        showBookingOtpErrorToast(t("cancellation.incorrectCode"));
         updateAttempts(card.cancellationId, Math.max(0, card.attemptsLeft - 1));
         setCode("");
       } else {
-        finishError("Could not cancel the meeting.");
+        finishError(t("cancellation.cancelFailed"));
       }
     } catch {
-      finishError("Could not cancel the meeting.");
+      finishError(t("cancellation.cancelFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -182,12 +184,12 @@ function BookingCancelOtpCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        finishSuccess("Cancellation aborted.");
+        finishSuccess(t("cancellation.aborted"));
         return;
       }
-      finishError("Could not abort cancellation.");
+      finishError(t("cancellation.abortFailed"));
     } catch {
-      finishError("Could not abort cancellation.");
+      finishError(t("cancellation.abortFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -202,15 +204,18 @@ function BookingCancelOtpCardInner({
         className,
       )}
       role="group"
-      aria-label={`Cancel meeting ${card.eventName}`}
+      aria-label={`${t("cancellation.title")} ${card.eventName}`}
     >
-      <p className="text-sm font-medium text-foreground">Cancel meeting</p>
+      <p className="text-sm font-medium text-foreground">{t("cancellation.title")}</p>
       <p className="mt-1 truncate text-xs text-muted-foreground" title={card.eventName}>
         {card.eventName}
         {card.slotStart ? ` · ${formatSlot(card.slotStart)}` : ""}
       </p>
       <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-        {`Code sent to ${card.emailMasked}. Expires in ${formatTimer(secondsLeft)}.`}
+        {t("cancellation.otpSent", {
+          email: card.emailMasked,
+          timer: formatTimer(secondsLeft),
+        })}
       </p>
       <div className="mt-4 flex justify-center">
         <InputOTP
@@ -241,7 +246,7 @@ function BookingCancelOtpCardInner({
           {pendingAction === "confirm" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Confirm cancel"
+            t("cancellation.confirmCancel")
           )}
         </Button>
         <Button
@@ -255,7 +260,7 @@ function BookingCancelOtpCardInner({
           {pendingAction === "abort" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Keep meeting"
+            t("cancellation.keepMeeting")
           )}
         </Button>
       </div>

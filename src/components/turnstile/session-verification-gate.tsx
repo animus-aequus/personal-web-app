@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { TurnstileChallenge } from "@/components/turnstile/turnstile-provider";
 
@@ -11,9 +12,10 @@ type SessionVerificationGateProps = {
 export function SessionVerificationGate({
   isReverification,
 }: SessionVerificationGateProps) {
+  const { t } = useTranslation();
   const message = isReverification
-    ? "Session expired. We need to verify you are human to continue."
-    : "We need to verify you are human to continue.";
+    ? t("turnstile.verifyExpired")
+    : t("turnstile.verifyNew");
 
   return (
     <div className="flex h-dvh w-full flex-col items-center justify-center gap-6 px-4 text-center">

@@ -5,16 +5,13 @@ import { useSession } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
+import { I18nProvider } from "@/components/i18n/i18n-provider";
+import { AppShell } from "@/components/layout/app-shell";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { BookingSuccessDialog } from "@/components/chat/booking-success-dialog";
@@ -40,9 +37,8 @@ import {
   refreshPublicPauseState,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
-import { DEFAULT_PAUSE_MESSAGE } from "@/lib/public-access-config";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
-import type { VoiceLanguageCode } from "@/lib/livekit/voice-languages";
+import { normalizeLocale } from "@/lib/i18n/locales";
 import {
   endVoiceSession,
   publishStopSpeech,
@@ -70,6 +66,8 @@ const CHAT_SCROLL_FADE_MIN_PX = 1024;
 /**
  * Softens scroll content just above the control bar.
  * Tracks live chrome height; lg+ only.
+ * Positioned absolute within the chat panel (not viewport-fixed) so it
+ * follows the sidebar push layout on desktop.
  */
 function ChatScrollFade({ bottomPx }: { bottomPx: number }) {
   const [isLgUp, setIsLgUp] = useState(false);
@@ -92,7 +90,7 @@ function ChatScrollFade({ bottomPx }: { bottomPx: number }) {
     <div
       data-chat-scroll-fade
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 z-[15] mx-auto h-8 w-full max-w-3xl"
+      className="pointer-events-none absolute inset-x-0 z-[15] mx-auto h-8 w-full max-w-3xl"
       style={{
         bottom: bottomPx,
         background:
@@ -168,8 +166,7 @@ type TextChatAreaProps = {
   ) => void;
   voiceConnectionId: string | null;
   voiceEnabled: boolean;
-  voiceLanguage: VoiceLanguageCode;
-  onVoiceLanguageChange: (language: VoiceLanguageCode) => void;
+  onVoiceReconnect: () => void;
   onVoiceDisconnect: () => void;
   onVoiceToggle: () => void;
 };
@@ -188,14 +185,16 @@ function TextChatArea({
   onVoiceMessage,
   voiceConnectionId,
   voiceEnabled,
-  voiceLanguage,
-  onVoiceLanguageChange,
+  onVoiceReconnect,
   onVoiceDisconnect,
   onVoiceToggle,
 }: TextChatAreaProps) {
+  const { t } = useTranslation();
+  const language = useChatStore((state) => normalizeLocale(state.language));
+
   const agentMetadata = useMemo(
-    () => JSON.stringify({ voice_language: voiceLanguage }),
-    [voiceLanguage],
+    () => JSON.stringify({ voice_language: language }),
+    [language],
   );
 
   const tokenSource = useMemo(
@@ -500,8 +499,15 @@ function TextChatArea({
   return (
     <AgentSessionProvider session={session}>
       <VoiceAuraBridge active={voiceEnabled} />
-      <StartAudioButton session={session} label="Enable audio" className="sr-only" />
-      <div className="relative flex h-dvh min-h-0 flex-col">
+      <StartAudioButton
+        session={session}
+        label={t("chat.enableAudio")}
+        className="sr-only"
+      />
+      <div
+        data-chat-panel
+        className="relative flex h-dvh min-h-0 flex-col"
+      >
         <ChatGreeting visible={showGreeting} />
 
         <motion.div
@@ -577,8 +583,8 @@ function TextChatArea({
           onStopSpeech={handleStopSpeech}
           voiceEnabled={voiceEnabled}
           voiceChromeReady={voiceChromeReady}
-          voiceLanguage={voiceLanguage}
-          onVoiceLanguageChange={onVoiceLanguageChange}
+          sessionId={sessionId}
+          onVoiceReconnect={onVoiceReconnect}
           userTrack={userTrack}
           disabled={paused}
           isLoading={isLoading}
@@ -596,6 +602,15 @@ function TextChatArea({
 }
 
 export function ChatPanel() {
+  return (
+    <I18nProvider>
+      <ChatPanelInner />
+    </I18nProvider>
+  );
+}
+
+function ChatPanelInner() {
+  const { t } = useTranslation();
   const {
     sessionId,
     phase,
@@ -633,11 +648,9 @@ export function ChatPanel() {
   if (phase === "error") {
     return (
       <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-sm text-muted-foreground">
-          Something went wrong. Please try again.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("chat.errorGeneric")}</p>
         <Button type="button" variant="default" onClick={retry}>
-          Retry
+          {t("common.retry")}
         </Button>
       </div>
     );
@@ -645,13 +658,14 @@ export function ChatPanel() {
 
   return (
     <div className="flex h-dvh w-full flex-col items-center justify-center overflow-hidden">
-      <ChatLoadingSpinner label="Loading chat" />
+      <ChatLoadingSpinner label={t("chat.loadingChat")} />
     </div>
   );
 }
 
 /** Bootstrap stopped before Turnstile and session creation — nothing to chat with. */
 function PausedChatPanel() {
+  const { t } = useTranslation();
   const message = usePublicPauseStore((s) => s.message);
   const dismissed = usePublicPauseStore((s) => s.dismissed);
   const dismiss = usePublicPauseStore((s) => s.dismiss);
@@ -663,7 +677,7 @@ function PausedChatPanel() {
   return (
     <div className="flex h-dvh w-full items-center justify-center px-6 text-center">
       <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-        {message?.trim() || DEFAULT_PAUSE_MESSAGE}
+        {message?.trim() || t("pause.defaultMessage")}
       </p>
     </div>
   );
@@ -687,9 +701,6 @@ function ReadyChatPanel({
   loadOlder,
   appendLive,
 }: ReadyChatPanelProps) {
-  const voiceLanguage = useChatStore((state) => state.voiceLanguage);
-  const setVoiceLanguage = useChatStore((state) => state.setVoiceLanguage);
-
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
@@ -709,34 +720,30 @@ function ReadyChatPanel({
     });
   }, []);
 
-  const handleVoiceLanguageChange = useCallback(
-    (language: VoiceLanguageCode) => {
-      setVoiceLanguage(language);
-      if (voiceEnabled) {
-        // New room + agent dispatch so STT/TTS/reply language rebuild cleanly.
-        setVoiceConnectionId(crypto.randomUUID());
-      }
-    },
-    [setVoiceLanguage, voiceEnabled],
-  );
+  const handleVoiceReconnect = useCallback(() => {
+    if (voiceEnabled) {
+      setVoiceConnectionId(crypto.randomUUID());
+    }
+  }, [voiceEnabled]);
 
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden">
-      <TextChatArea
-        sessionId={sessionId}
-        historyRows={historyRows}
-        hasMoreHistory={hasMoreHistory}
-        isLoadingOlder={historyStatus === "loading_more"}
-        historyStatus={historyStatus}
-        onLoadOlder={loadOlder}
-        onVoiceMessage={appendLive}
-        voiceConnectionId={voiceConnectionId}
-        voiceEnabled={voiceEnabled}
-        voiceLanguage={voiceLanguage}
-        onVoiceLanguageChange={handleVoiceLanguageChange}
-        onVoiceDisconnect={handleVoiceDisconnect}
-        onVoiceToggle={handleVoiceToggle}
-      />
-    </div>
+    <AppShell sessionId={sessionId} onVoiceReconnect={handleVoiceReconnect}>
+      <div className="flex h-dvh w-full flex-col overflow-hidden">
+        <TextChatArea
+          sessionId={sessionId}
+          historyRows={historyRows}
+          hasMoreHistory={hasMoreHistory}
+          isLoadingOlder={historyStatus === "loading_more"}
+          historyStatus={historyStatus}
+          onLoadOlder={loadOlder}
+          onVoiceMessage={appendLive}
+          voiceConnectionId={voiceConnectionId}
+          voiceEnabled={voiceEnabled}
+          onVoiceReconnect={handleVoiceReconnect}
+          onVoiceDisconnect={handleVoiceDisconnect}
+          onVoiceToggle={handleVoiceToggle}
+        />
+      </div>
+    </AppShell>
   );
 }

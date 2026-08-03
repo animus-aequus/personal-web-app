@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { MeetingDetailsDialog } from "@/components/chat/meeting-details-dialog";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ export function MeetingsListCard({
   sessionId,
   className,
 }: MeetingsListCardProps) {
+  const { t } = useTranslation();
   const activeListId = useMeetingsListStore((s) => s.activeListId);
   const canCancel = activeListId === listId;
   const [detailsMeeting, setDetailsMeeting] = useState<MeetingListItem | null>(
@@ -56,11 +58,11 @@ export function MeetingsListCard({
         className,
       )}
       role="list"
-      aria-label="Your upcoming meetings"
+      aria-label={t("meetings.upcomingAria")}
     >
       {meetings.length === 0 ? (
         <p className="px-4 py-4 text-sm text-muted-foreground">
-          No upcoming meetings in this session.
+          {t("meetings.noUpcoming")}
         </p>
       ) : (
         <div className="divide-y divide-border">
@@ -74,7 +76,7 @@ export function MeetingsListCard({
                 className="shrink-0"
                 onClick={() => setDetailsMeeting(meeting)}
               >
-                Details
+                {t("meetings.details")}
               </Button>
             );
 

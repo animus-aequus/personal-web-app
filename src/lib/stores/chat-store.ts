@@ -8,11 +8,6 @@ import {
   resolveBrowserLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
-import {
-  DEFAULT_VOICE_LANGUAGE,
-  parseVoiceLanguage,
-  type VoiceLanguageCode,
-} from "@/lib/livekit/voice-languages";
 
 export type MessageSource = "text" | "voice";
 
@@ -50,16 +45,12 @@ type ChatStore = {
    */
   language: LocaleCode | null;
   setLanguage: (language: LocaleCode) => void;
-  /** STT language for LiveKit voice (persisted). */
-  voiceLanguage: VoiceLanguageCode;
-  setVoiceLanguage: (voiceLanguage: VoiceLanguageCode) => void;
 };
 
 /**
- * Persists `sessionId`, `language`, and `voiceLanguage`. Hydration is deferred
- * (`skipHydration`) and driven explicitly by `useChatSession` so there is a
- * single, deterministic point where the persisted id is read — no SSR
- * mismatch, no module-load race.
+ * Persists `sessionId` and `language`. Hydration is deferred (`skipHydration`)
+ * and driven explicitly by `useChatSession` so there is a single, deterministic
+ * point where the persisted id is read — no SSR mismatch, no module-load race.
  *
  * Initial `language` is ``null`` (not ``en``): Zustand persist skips ``merge``
  * when storage is empty, so a DEFAULT_LOCALE initializer would permanently
@@ -72,16 +63,12 @@ export const useChatStore = create<ChatStore>()(
       setSessionId: (sessionId) => set({ sessionId }),
       language: null,
       setLanguage: (language) => set({ language: normalizeLocale(language) }),
-      voiceLanguage: DEFAULT_VOICE_LANGUAGE,
-      setVoiceLanguage: (voiceLanguage) =>
-        set({ voiceLanguage: parseVoiceLanguage(voiceLanguage) }),
     }),
     {
       name: "personal-agent-chat",
       partialize: (state) => ({
         sessionId: state.sessionId,
         ...(state.language != null ? { language: state.language } : {}),
-        voiceLanguage: state.voiceLanguage,
       }),
       merge: (persisted, current) => {
         const partial = (persisted ?? {}) as Partial<ChatStore>;
@@ -93,10 +80,6 @@ export const useChatStore = create<ChatStore>()(
           language: hasStoredLanguage
             ? normalizeLocale(partial.language)
             : resolveBrowserLocale(),
-          voiceLanguage: parseVoiceLanguage(
-            partial.voiceLanguage,
-            current.voiceLanguage,
-          ),
         };
       },
       skipHydration: true,

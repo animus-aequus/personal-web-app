@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_ALLOWED_RE = /^\+?[\d\s().-]{8,32}$/;
 
@@ -27,23 +29,26 @@ function isValidPhone(raw: string): boolean {
 /** Returns field errors; empty object means valid. */
 export function validateDirectMessageForm(
   values: DirectMessageFormValues,
+  t: TFunction,
 ): DirectMessageFieldErrors {
   const errors: DirectMessageFieldErrors = {};
   const name = values.name.trim();
   if (!name) {
-    errors.name = "Name is required.";
+    errors.name = t("directMessage.errors.nameRequired");
   } else if (name.length > DIRECT_MESSAGE_NAME_MAX) {
-    errors.name = `Name must be at most ${DIRECT_MESSAGE_NAME_MAX} characters.`;
+    errors.name = t("directMessage.errors.nameMax", {
+      max: DIRECT_MESSAGE_NAME_MAX,
+    });
   }
 
   const email = values.email.trim().toLowerCase();
   if (!email || !EMAIL_RE.test(email)) {
-    errors.email = "Enter a valid email address.";
+    errors.email = t("directMessage.errors.emailInvalid");
   }
 
   const phoneRaw = values.phoneNumber.trim();
   if (phoneRaw && !isValidPhone(phoneRaw)) {
-    errors.phoneNumber = "Enter a valid phone number.";
+    errors.phoneNumber = t("directMessage.errors.phoneInvalid");
   }
 
   const message = values.message.trim();
@@ -51,7 +56,10 @@ export function validateDirectMessageForm(
     message.length < DIRECT_MESSAGE_MESSAGE_MIN ||
     message.length > DIRECT_MESSAGE_MESSAGE_MAX
   ) {
-    errors.message = `Message must be ${DIRECT_MESSAGE_MESSAGE_MIN}–${DIRECT_MESSAGE_MESSAGE_MAX} characters.`;
+    errors.message = t("directMessage.errors.messageLength", {
+      min: DIRECT_MESSAGE_MESSAGE_MIN,
+      max: DIRECT_MESSAGE_MESSAGE_MAX,
+    });
   }
 
   return errors;

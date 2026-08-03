@@ -8,9 +8,11 @@ import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { buildAuraPaletteGlsl } from "@/lib/visualizer/aura-palette";
 
 /**
- * Background "aura": a gradient glow that hugs the viewport edges and comes
+ * Background "aura": a gradient glow that hugs the chat panel edges and comes
  * alive while the agent is thinking or streaming a reply (text or voice).
  * Phase + live audio amplitude are read from `agent-activity-store`.
+ * Mounted inside the chat shell (outside the sidebar) so the glow tracks the
+ * sidebar push layout on desktop.
  */
 
 const VERTEX_SHADER = /* glsl */ `
@@ -297,7 +299,7 @@ export function AgentAura() {
   }, []);
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
+    <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
       <Canvas
         frameloop={active ? "always" : "never"}
         dpr={[1, 1.5]}

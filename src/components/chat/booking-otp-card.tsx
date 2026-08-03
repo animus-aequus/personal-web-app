@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -105,6 +106,7 @@ function BookingOtpCardInner({
   className?: string;
   onNote?: OnSystemNote;
 }) {
+  const { t } = useTranslation();
   const setStatus = useBookingOtpStore((s) => s.setStatus);
   const setSuccess = useBookingOtpStore((s) => s.setSuccess);
   const [code, setCode] = useState("");
@@ -127,8 +129,8 @@ function BookingOtpCardInner({
       return;
     }
     expiredHandledRef.current = true;
-    finishWithError("Confirmation code expired.");
-  }, [secondsLeft]);
+    finishWithError(t("booking.codeExpired"));
+  }, [secondsLeft, t]);
 
   const handleConfirm = async () => {
     if (code.length < 6 || pendingAction) {
@@ -163,20 +165,20 @@ function BookingOtpCardInner({
       };
       const detail = payload.error ?? "";
       if (detail.includes("otp_expired")) {
-        finishWithError("Confirmation code expired.");
+        finishWithError(t("booking.codeExpired"));
       } else if (detail.includes("too_many_attempts")) {
-        finishWithError("Too many incorrect attempts.");
+        finishWithError(t("booking.tooManyAttempts"));
       } else if (detail.includes("slot_taken")) {
-        finishWithError("That time slot is no longer available.");
+        finishWithError(t("booking.slotUnavailable"));
       } else if (detail.includes("otp_invalid")) {
-        showBookingOtpErrorToast("Incorrect code. Try again.");
+        showBookingOtpErrorToast(t("booking.incorrectCode"));
         setStatus("pending", undefined, Math.max(0, active.attemptsLeft - 1));
         setCode("");
       } else {
-        finishWithError("Could not confirm the booking.");
+        finishWithError(t("booking.confirmFailed"));
       }
     } catch {
-      finishWithError("Could not confirm the booking.");
+      finishWithError(t("booking.confirmFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -194,12 +196,12 @@ function BookingOtpCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        finishWithSuccess("Booking cancelled.");
+        finishWithSuccess(t("booking.cancelled"));
         return;
       }
-      finishWithError("Could not cancel the booking.");
+      finishWithError(t("booking.cancelFailed"));
     } catch {
-      finishWithError("Could not cancel the booking.");
+      finishWithError(t("booking.cancelFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -214,11 +216,14 @@ function BookingOtpCardInner({
         className,
       )}
       role="group"
-      aria-label="Booking confirmation code"
+      aria-label={t("booking.otpAria")}
     >
-      <p className="text-sm font-medium text-foreground">Enter confirmation code</p>
+      <p className="text-sm font-medium text-foreground">{t("booking.otpTitle")}</p>
       <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-        {`Code sent to ${active.emailMasked}. Expires in ${formatTimer(secondsLeft)}.`}
+        {t("booking.otpSent", {
+          email: active.emailMasked,
+          timer: formatTimer(secondsLeft),
+        })}
       </p>
       <div className="mt-4 flex justify-center">
         <InputOTP
@@ -249,7 +254,7 @@ function BookingOtpCardInner({
           {pendingAction === "confirm" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Confirm"
+            t("common.confirm")
           )}
         </Button>
         <Button
@@ -263,7 +268,7 @@ function BookingOtpCardInner({
           {pendingAction === "cancel" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Cancel"
+            t("common.cancel")
           )}
         </Button>
       </div>

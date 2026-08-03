@@ -1,0 +1,150 @@
+import type { TranslationDictionary } from "@/lib/i18n/messages/en";
+
+export const fr = {
+  common: {
+    confirm: "Confirmer",
+    cancel: "Annuler",
+    retry: "Réessayer",
+    ok: "OK",
+    send: "Envoyer",
+    loading: "Chargement",
+    copied: "Copié",
+    copyMeetLink: "Copier le lien Meet",
+    days: "Jours",
+    hours: "Heures",
+    minutes: "Minutes",
+    seconds: "Secondes",
+    meeting: "Réunion",
+    close: "Fermer",
+  },
+  sidebar: {
+    language: "Langue",
+    openMenu: "Ouvrir le menu",
+    closeMenu: "Fermer le menu",
+  },
+  greeting: {
+    hey: "Salut !",
+    kacpers: "L'assistant",
+    ai: "IA",
+    assistant: "de Kacper",
+    here: "est là.",
+    hints: {
+      ask: "Demandez tout sur Kacper",
+      book: "Réserver une réunion",
+      contact: "Contacter Kacper directement",
+    },
+  },
+  chat: {
+    placeholder: "Demandez n'importe quoi…",
+    loadingChat: "Chargement du chat",
+    loadingOlder: "Chargement des messages plus anciens",
+    assistantThinking: "L'assistant réfléchit…",
+    scrollUpOlder: "Faites défiler vers le haut pour les messages plus anciens",
+    errorGeneric: "Une erreur s'est produite. Veuillez réessayer.",
+    stopResponse: "Arrêter la réponse",
+    endVoice: "Terminer la conversation vocale",
+    startVoice: "Démarrer la conversation vocale",
+    sendMessage: "Envoyer le message",
+    enableAudio: "Activer l'audio",
+    interrupted: "Interrompu avant la fin",
+    voiceLanguageLabel: "Langue vocale",
+  },
+  voice: {
+    ttsFallbackWarning:
+      "Les réponses vocales dans cette langue ne sont pas encore prises en charge. L'assistant répondra en anglais.",
+  },
+  pause: {
+    title: "Assistant en pause",
+    defaultMessage:
+      "En raison d'un fort intérêt, l'accès public à l'assistant est temporairement suspendu.",
+  },
+  turnstile: {
+    verifyNew: "Nous devons vérifier que vous êtes humain pour continuer.",
+    verifyExpired:
+      "Session expirée. Nous devons vérifier que vous êtes humain pour continuer.",
+    verificationFailed: "La vérification a échoué. Veuillez réessayer.",
+    securityVerification: "Vérification de sécurité",
+  },
+  language: {
+    changeFailed: "Impossible de changer la langue. Veuillez réessayer.",
+  },
+  booking: {
+    otpTitle: "Entrez le code de confirmation",
+    otpSent: "Code envoyé à {{email}}. Expire dans {{timer}}.",
+    otpAria: "Code de confirmation de réservation",
+    codeExpired: "Le code de confirmation a expiré.",
+    tooManyAttempts: "Trop de tentatives incorrectes.",
+    slotUnavailable: "Ce créneau n'est plus disponible.",
+    incorrectCode: "Code incorrect. Réessayez.",
+    confirmFailed: "Impossible de confirmer la réservation.",
+    cancelled: "Réservation annulée.",
+    cancelFailed: "Impossible d'annuler la réservation.",
+    successTitle: "Réunion confirmée",
+    successDescription:
+      "Une invitation a été envoyée à {{email}}. La réunion devrait déjà être dans votre calendrier — vérifiez votre boîte de réception si vous ne la voyez pas.",
+    joinMeet: "Rejoindre avec Google Meet",
+    downloadInvite: "Télécharger l'invitation",
+    backupInviteHint:
+      "Option de secours — uniquement si l'invitation n'est pas apparue dans votre calendrier.",
+    inviteTooltip:
+      "Si la réunion n'a pas été ajoutée automatiquement à votre calendrier, ouvrez ce fichier pour l'ajouter manuellement (fonctionne avec Google Calendar, Outlook et Apple Calendar).",
+    aboutDownload: "À propos du téléchargement de l'invitation",
+  },
+  cancellation: {
+    title: "Annuler la réunion",
+    otpSent: "Code envoyé à {{email}}. Expire dans {{timer}}.",
+    codeExpired: "Le code d'annulation a expiré.",
+    tooManyAttempts: "Trop de tentatives incorrectes.",
+    incorrectCode: "Code incorrect. Réessayez.",
+    cancelFailed: "Impossible d'annuler la réunion.",
+    cancelled: "Réunion annulée.",
+    aborted: "Annulation interrompue.",
+    abortFailed: "Impossible d'interrompre l'annulation.",
+    confirmCancel: "Confirmer l'annulation",
+    keepMeeting: "Garder la réunion",
+    emailSuppressed:
+      "Cet e-mail ne peut pas recevoir de codes. Utilisez une autre adresse ou contactez l'hôte.",
+    cannotCancel: "Cette réunion ne peut plus être annulée.",
+    startFailed: "Impossible de démarrer l'annulation.",
+  },
+  meetings: {
+    upcomingAria: "Vos prochaines réunions",
+    noUpcoming: "Aucune réunion à venir dans cette session.",
+    details: "Détails",
+    detailsTitle: "Détails de la réunion",
+    startsIn: "Commence dans",
+    started: "Cette réunion a commencé.",
+    countdownDays:
+      "{{days}} jours, {{hours}} heures, {{minutes}} minutes, {{seconds}} secondes restantes",
+    countdownShort:
+      "{{hours}} heures, {{minutes}} minutes, {{seconds}} secondes restantes",
+    countdownMin: "Min",
+    countdownSec: "Sec",
+    noMeetLink: "Aucun lien Google Meet n'est disponible pour cette réunion.",
+    cancelMeeting: "Annuler la réunion",
+  },
+  directMessage: {
+    formAria: "Formulaire de message privé",
+    title: "Envoyer un message privé",
+    description:
+      "Votre message va directement au propriétaire. Le téléphone est facultatif.",
+    name: "Nom",
+    email: "E-mail",
+    phoneOptional: "Numéro de téléphone (facultatif)",
+    message: "Message",
+    placeholder: "Écrivez votre message…",
+    sent: "Message privé envoyé.",
+    rateLimited: "Trop de messages. Réessayez plus tard.",
+    sendFailed: "Impossible d'envoyer le message.",
+    cancelled: "Message annulé.",
+    cancelFailed: "Impossible d'annuler le formulaire de message.",
+    errors: {
+      nameRequired: "Le nom est obligatoire.",
+      nameMax: "Le nom doit comporter au maximum {{max}} caractères.",
+      emailInvalid: "Entrez une adresse e-mail valide.",
+      phoneInvalid: "Entrez un numéro de téléphone valide.",
+      messageLength:
+        "Le message doit comporter entre {{min}} et {{max}} caractères.",
+    },
+  },
+} satisfies TranslationDictionary;

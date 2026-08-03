@@ -6,6 +6,15 @@ export type LocaleCode = (typeof LOCALE_CODES)[number];
 
 export const DEFAULT_LOCALE: LocaleCode = "en";
 
+/** English display names for locale codes (never translated). */
+export const LOCALE_LABELS: Record<LocaleCode, string> = {
+  en: "English",
+  pl: "Polish",
+  de: "German",
+  es: "Spanish",
+  fr: "French",
+};
+
 export function isLocaleCode(value: unknown): value is LocaleCode {
   return (
     typeof value === "string" &&

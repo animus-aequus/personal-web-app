@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -99,6 +100,7 @@ function DirectMessageCardInner({
   className?: string;
   onNote?: OnSystemNote;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(active.name ?? "");
   const [email, setEmail] = useState(active.email ?? "");
   const [phoneNumber, setPhoneNumber] = useState(active.phoneNumber ?? "");
@@ -113,7 +115,7 @@ function DirectMessageCardInner({
       return;
     }
     const values = { name, email, phoneNumber, message };
-    const nextErrors = validateDirectMessageForm(values);
+    const nextErrors = validateDirectMessageForm(values, t);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       return;
@@ -128,17 +130,17 @@ function DirectMessageCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        showBookingOtpSuccessToast("Private message sent.");
+        showBookingOtpSuccessToast(t("directMessage.sent"));
         useDirectMessageStore.getState().dismiss();
         return;
       }
       if (response.status === 429) {
-        showBookingOtpErrorToast("Too many messages. Please try again later.");
+        showBookingOtpErrorToast(t("directMessage.rateLimited"));
       } else {
-        showBookingOtpErrorToast("Could not send the message.");
+        showBookingOtpErrorToast(t("directMessage.sendFailed"));
       }
     } catch {
-      showBookingOtpErrorToast("Could not send the message.");
+      showBookingOtpErrorToast(t("directMessage.sendFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -156,13 +158,13 @@ function DirectMessageCardInner({
           note?: SystemNoteInfo | null;
         };
         appendSystemNote(onNote, data.note);
-        showBookingOtpSuccessToast("Message cancelled.");
+        showBookingOtpSuccessToast(t("directMessage.cancelled"));
         useDirectMessageStore.getState().dismiss();
         return;
       }
-      showBookingOtpErrorToast("Could not cancel the message form.");
+      showBookingOtpErrorToast(t("directMessage.cancelFailed"));
     } catch {
-      showBookingOtpErrorToast("Could not cancel the message form.");
+      showBookingOtpErrorToast(t("directMessage.cancelFailed"));
     } finally {
       setPendingAction(null);
     }
@@ -175,16 +177,16 @@ function DirectMessageCardInner({
         className,
       )}
       role="form"
-      aria-label="Private message form"
+      aria-label={t("directMessage.formAria")}
     >
-      <p className="text-sm font-medium text-foreground">Send a private message</p>
+      <p className="text-sm font-medium text-foreground">{t("directMessage.title")}</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Your message goes directly to the owner. Phone is optional.
+        {t("directMessage.description")}
       </p>
 
       <div className="mt-4 flex flex-col gap-3">
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground">Name</span>
+          <span className="text-xs font-medium text-foreground">{t("directMessage.name")}</span>
           <input
             type="text"
             name="name"
@@ -202,7 +204,7 @@ function DirectMessageCardInner({
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground">Email</span>
+          <span className="text-xs font-medium text-foreground">{t("directMessage.email")}</span>
           <input
             type="email"
             name="email"
@@ -220,8 +222,7 @@ function DirectMessageCardInner({
 
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-foreground">
-            Phone number{" "}
-            <span className="font-normal text-muted-foreground">(optional)</span>
+            {t("directMessage.phoneOptional")}
           </span>
           <input
             type="tel"
@@ -239,7 +240,7 @@ function DirectMessageCardInner({
         </label>
 
         <label className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-foreground">Message</span>
+          <span className="text-xs font-medium text-foreground">{t("directMessage.message")}</span>
           <Textarea
             name="message"
             rows={4}
@@ -247,7 +248,7 @@ function DirectMessageCardInner({
             value={message}
             disabled={isBusy}
             aria-invalid={Boolean(errors.message)}
-            placeholder="Write your message…"
+            placeholder={t("directMessage.placeholder")}
             onChange={(event) => setMessage(event.target.value)}
           />
           <span className="text-xs text-muted-foreground tabular-nums">
@@ -270,7 +271,7 @@ function DirectMessageCardInner({
           {pendingAction === "send" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Send"
+            t("common.send")
           )}
         </Button>
         <Button
@@ -284,7 +285,7 @@ function DirectMessageCardInner({
           {pendingAction === "cancel" ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
-            "Cancel"
+            t("common.cancel")
           )}
         </Button>
       </div>
