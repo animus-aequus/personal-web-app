@@ -1,8 +1,9 @@
 "use client";
 
-import { Menu, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { LogoIconButton } from "@/components/layout/logo-icon-button";
 import { changeAppLanguage } from "@/lib/i18n/change-language";
 import {
   LOCALE_CODES,
@@ -92,21 +93,28 @@ function SettingsSidebar({
 
   return (
     <Sidebar collapsible="icon" variant="sidebar">
-      <SidebarHeader className="flex flex-row items-center justify-between gap-2 border-b border-border p-2 group-data-[collapsible=icon]:justify-center">
-        {isMobile ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="ml-auto size-8 shrink-0"
-            onClick={() => setOpenMobile(false)}
-            aria-label={t("sidebar.closeMenu")}
-          >
-            <X className="size-4" />
-          </Button>
-        ) : (
-          <SidebarTrigger className="size-8" />
-        )}
+      <SidebarHeader className="flex flex-row items-center gap-2 border-b border-border p-2 group-data-[collapsible=icon]:justify-center">
+        <LogoIconButton
+          appearance="sidebar"
+          className="shrink-0 group-data-[collapsible=icon]:mx-auto"
+          label="Kacper Fleming"
+        />
+        <div className="ml-auto flex shrink-0 group-data-[collapsible=icon]:hidden">
+          {isMobile ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              onClick={() => setOpenMobile(false)}
+              aria-label={t("sidebar.closeMenu")}
+            >
+              <X className="size-4" />
+            </Button>
+          ) : (
+            <SidebarTrigger className="size-8" />
+          )}
+        </div>
       </SidebarHeader>
       <SidebarContent className="py-4 group-data-[collapsible=icon]:hidden">
         <LanguageSelect
@@ -131,16 +139,12 @@ function MobileMenuButton() {
   }
 
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      className="fixed left-4 top-4 z-30 size-10 rounded-full border-border bg-card/90 shadow-md backdrop-blur-sm"
+    <LogoIconButton
+      appearance="fab"
+      className="fixed left-4 top-4 z-30"
       onClick={() => setOpenMobile(true)}
-      aria-label={t("sidebar.openMenu")}
-    >
-      <Menu className="size-5" />
-    </Button>
+      label={t("sidebar.openMenu")}
+    />
   );
 }
 

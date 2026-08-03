@@ -16,8 +16,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Personal Voice Agent",
-  description: "Text and voice scheduling assistant",
+  title: "Kacper Fleming's Personal Website",
+  description: "Homepage of Kacper Fleming, a software engineer and AI enthusiast.",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 // The UI is dark-only. Declaring it in the document head (not just CSS) stops

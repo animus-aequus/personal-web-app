@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradient od głębokiego niebieskiego do cyjanu -->
+    <linearGradient id="blue-cyan-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0044FF" />   <!-- Głęboki niebieski -->
+      <stop offset="50%" stop-color="#0099FF" />  <!-- Jasny niebieski -->
+      <stop offset="100%" stop-color="#00FFFF" /> <!-- Jaskrawy cyjan -->
+    </linearGradient>
+  </defs>
+
+  <!-- Solidna litera F z zewnętrznie zaokrąglonymi rogami -->
+  <path d="M 160 100 
+           L 400 100 
+           L 400 180 
+           L 260 180 
+           L 260 250 
+           L 360 250 
+           L 360 330 
+           L 260 330 
+           L 260 420 
+           L 160 420 Z" 
+        fill="url(#blue-cyan-grad)" 
+        stroke="url(#blue-cyan-grad)" 
+        stroke-width="24" 
+        stroke-linejoin="round" />
+</svg>
