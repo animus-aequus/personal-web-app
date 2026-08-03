@@ -26,7 +26,7 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 ## Session identity
 
-1. On first load (after Zustand rehydration), `ChatPanel` calls `POST /api/session` → agent API returns `session_id`.
+1. On first load (after Zustand rehydration), `SiteShell` (`app/(site)/layout.tsx`) runs `useChatSession` → `POST /api/session` → agent API returns `session_id`. Bootstrap runs once for the shared layout lifetime (chat + sibling pages such as `/terms`), not on every client navigation.
 2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
 3. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
 4. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
@@ -38,7 +38,9 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 `useChatSession` (`src/lib/chat/use-chat-session.ts`) is the single source of truth
 for startup. It runs one ordered sequence and exposes a coarse `phase`
-(`loading` → `ready` → `error`) that `ChatPanel` renders directly:
+(`loading` → `ready` → `error`) that `SiteShell` renders directly. The ready chat
+surface stays mounted (hidden) when navigating to sibling routes under
+`app/(site)/` so Turnstile and history are not repeated:
 
 1. Explicitly rehydrate the persisted `sessionId` (`useChatStore.persist.rehydrate()`;
    the store uses `skipHydration: true` to avoid SSR mismatch and module-load races).

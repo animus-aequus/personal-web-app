@@ -20,7 +20,9 @@ personal-website/                 # this repo
 
 | Path | Responsibility |
 |------|----------------|
-| `app/page.tsx` | Main page — renders `ChatPanel` |
+| `app/(site)/layout.tsx` | Shared site shell — Turnstile, i18n, session bootstrap, AppShell |
+| `app/(site)/page.tsx` | Chat route (UI owned by `SiteShell`; page is empty) |
+| `app/(site)/terms/page.tsx` | Terms of use (sidebar + session preserved) |
 | `app/layout.tsx` | Root layout, fonts, global styles |
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
 | `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp` + `data-meetings-list`) |
@@ -31,7 +33,9 @@ personal-website/                 # this repo
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `app/api/public-status/route.ts` | Public access pause state for the UI |
 | `app/api/webhooks/langsmith/route.ts` | LangSmith cost alert → pause the assistant |
-| `components/chat/chat-panel.tsx` | Chat UI, voice toggle, `useSession`, merge |
+| `components/layout/site-shell.tsx` | Persistent Turnstile + session + AppShell across chat/terms |
+| `components/layout/app-shell.tsx` | Sidebar settings chrome |
+| `components/chat/chat-panel.tsx` | Chat surface (`TextChatArea`, voice, merge); mounted by SiteShell |
 | `components/chat/message-list.tsx` | Renders merged message list |
 | `components/chat/message-input.tsx` | Text input + send |
 | `components/agents-ui/*` | Thin LiveKit Agents UI wrappers |
@@ -57,7 +61,7 @@ personal-website/                 # this repo
 
 | Task | Touch these files |
 |------|-------------------|
-| Chat UI / voice toggle / merge logic | `src/components/chat/chat-panel.tsx` |
+| Chat UI / voice toggle / merge logic | `src/components/chat/chat-panel.tsx`, `src/components/layout/site-shell.tsx` |
 | Message list / input styling | `src/components/chat/message-*.tsx` |
 | LiveKit session UI (audio, visualizer) | `src/components/agents-ui/*` |
 | Background aura / agent activity state | `src/components/visualizer/*`, `src/lib/stores/agent-activity-store.ts` |
@@ -67,7 +71,7 @@ personal-website/                 # this repo
 | Agent API REST proxy | `src/lib/agent-client.ts`, `src/app/api/session/route.ts`, `src/app/api/chat/route.ts`, `src/app/api/bookings/*`, `src/app/api/direct-messages/*` |
 | LiveKit token / agent dispatch | `src/app/api/livekit/token/route.ts` |
 | Message persistence / session store | `src/lib/stores/chat-store.ts` |
-| Page shell / routing | `src/app/page.tsx`, `src/app/layout.tsx` |
+| Page shell / routing | `src/app/(site)/layout.tsx`, `src/app/(site)/page.tsx`, `src/app/(site)/terms/page.tsx`, `src/app/layout.tsx` |
 | Styling / design tokens | `src/app/globals.css`, `src/components/ui/*` |
 | Public access pause (early reject, status, modal) | `src/lib/public-access.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx` |
 | Agent API contract / cross-service behaviour | `docs/agent_api_contract.md`, then agent API repo if in workspace |
@@ -77,7 +81,7 @@ personal-website/                 # this repo
 ```
 Browser UI          Route Handlers (BFF)       Agent API (external)
 ──────────          ────────────────────       ─────────────────────
-ChatPanel    ──►    /api/session, /api/chat  ──►  /api/v1/*
+ChatPanel / SiteShell ──►    /api/session, /api/chat  ──►  /api/v1/*
 useSession   ──►    /api/livekit/token       ──►  LiveKit Cloud → worker
 useVoiceChatSync ◄── chat_sync ◄──────────────  worker data channel
 ```

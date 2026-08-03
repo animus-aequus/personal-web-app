@@ -44,6 +44,41 @@ export const es = {
     enableAudio: "Activar audio",
     interrupted: "Interrumpido antes de terminar",
     voiceLanguageLabel: "Idioma de voz",
+    aiTermsNotice:
+      "Al usar el chat, aceptas los <termsLink>términos</termsLink>.",
+  },
+  terms: {
+    title: "Términos de uso",
+    backToChat: "Volver al chat",
+    updated: "Última actualización: 3 de agosto de 2026",
+    intro:
+      "Estos términos se aplican a este sitio personal y al asistente de chat con IA disponible en él. Al usar el chat (texto o voz), los aceptas.",
+    sections: {
+      service: {
+        title: "Qué es este servicio",
+        body: "El asistente es una demo experimental de IA en mi sitio personal. Puede responder preguntas sobre mí, ayudar a reservar una reunión o reenviar un mensaje privado. No es un producto comercial, no sustituye el contacto directo conmigo y no es un soporte profesional continuo.",
+      },
+      ai: {
+        title: "Respuestas generadas por IA",
+        body: "Las respuestas de chat y voz las genera la inteligencia artificial. Pueden ser incompletas, desactualizadas o incorrectas. Verifica siempre la información importante antes de confiar en ella.",
+      },
+      noAdvice: {
+        title: "Sin asesoramiento profesional",
+        body: "Nada de lo que diga el asistente constituye asesoramiento legal, médico, financiero u otro asesoramiento profesional. No trates las respuestas como instrucciones para decisiones con consecuencias legales, de salud o financieras.",
+      },
+      liability: {
+        title: "Responsabilidad",
+        body: "No garantizo que las respuestas sean exactas, completas o adecuadas para ningún fin. En la mayor medida permitida por la ley, no soy responsable de decisiones, acciones o pérdidas derivadas del uso del asistente o de confiar en su resultado.",
+      },
+      data: {
+        title: "Datos y sesiones",
+        body: "Usar el chat crea una sesión y puede almacenar el contenido de la conversación necesario para el servicio (incluidos los datos de reserva o contacto que proporciones). No envíes datos personales sensibles que no quieras compartir. El abuso, el spam o los intentos de interrumpir el servicio pueden limitar o pausar el acceso.",
+      },
+      changes: {
+        title: "Cambios",
+        body: "Puedo actualizar estos términos o pausar el acceso público en cualquier momento. Seguir usando el chat tras los cambios implica aceptar los términos actualizados.",
+      },
+    },
   },
   voice: {
     ttsFallbackWarning:

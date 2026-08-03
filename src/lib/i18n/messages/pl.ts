@@ -44,6 +44,41 @@ export const pl = {
     enableAudio: "Włącz dźwięk",
     interrupted: "Przerwano przed zakończeniem",
     voiceLanguageLabel: "Język głosu",
+    aiTermsNotice:
+      "Korzystając z czatu, akceptujesz <termsLink>regulamin</termsLink>.",
+  },
+  terms: {
+    title: "Regulamin",
+    backToChat: "Wróć do czatu",
+    updated: "Ostatnia aktualizacja: 3 sierpnia 2026",
+    intro:
+      "Niniejszy regulamin dotyczy tej strony osobistej oraz dostępnego na niej asystenta AI. Korzystając z czatu (tekstowego lub głosowego), akceptujesz jego treść.",
+    sections: {
+      service: {
+        title: "Czym jest ta usługa",
+        body: "Asystent to eksperymentalne demo AI na mojej stronie osobistej. Może odpowiadać na pytania o mnie, pomagać w umówieniu spotkania lub przekazać prywatną wiadomość. Nie jest produktem komercyjnym, nie zastępuje kontaktu ze mną bezpośrednio i nie stanowi stałego wsparcia zawodowego.",
+      },
+      ai: {
+        title: "Odpowiedzi generowane przez AI",
+        body: "Odpowiedzi w czacie i głosie generuje sztuczna inteligencja. Mogą być niepełne, nieaktualne lub błędne. Ważne informacje zawsze weryfikuj samodzielnie, zanim się na nich oprzesz.",
+      },
+      noAdvice: {
+        title: "Brak porady fachowej",
+        body: "Żadna wypowiedź asystenta nie stanowi porady prawnej, medycznej, finansowej ani innej porady zawodowej. Nie traktuj odpowiedzi jako wskazówek do decyzji mających skutki prawne, zdrowotne lub finansowe.",
+      },
+      liability: {
+        title: "Odpowiedzialność",
+        body: "Nie gwarantuję, że odpowiedzi są poprawne, kompletne ani przydatne do jakiegokolwiek celu. W najszerszym zakresie dozwolonym przez prawo nie ponoszę odpowiedzialności za decyzje, działania ani szkody wynikające z korzystania z asystenta lub polegania na jego treściach.",
+      },
+      data: {
+        title: "Dane i sesje",
+        body: "Korzystanie z czatu tworzy sesję i może przechowywać treść rozmowy potrzebną do działania usługi (w tym dane do rezerwacji lub kontaktu, które podasz). Nie przesyłaj wrażliwych danych osobowych, których nie chcesz udostępniać. Nadużycia, spam lub próby zakłócania działania mogą skutkować ograniczeniem lub wstrzymaniem dostępu.",
+      },
+      changes: {
+        title: "Zmiany",
+        body: "Mogę w każdej chwili zaktualizować ten regulamin lub wstrzymać publiczny dostęp. Dalsze korzystanie z czatu po zmianach oznacza ich akceptację.",
+      },
+    },
   },
   voice: {
     ttsFallbackWarning:

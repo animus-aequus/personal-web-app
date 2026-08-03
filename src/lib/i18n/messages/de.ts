@@ -44,6 +44,41 @@ export const de = {
     enableAudio: "Audio aktivieren",
     interrupted: "Vor Fertigstellung unterbrochen",
     voiceLanguageLabel: "Sprachsprache",
+    aiTermsNotice:
+      "Mit der Nutzung des Chats akzeptierst du die <termsLink>Nutzungsbedingungen</termsLink>.",
+  },
+  terms: {
+    title: "Nutzungsbedingungen",
+    backToChat: "Zurück zum Chat",
+    updated: "Zuletzt aktualisiert: 3. August 2026",
+    intro:
+      "Diese Bedingungen gelten für diese persönliche Website und den darauf verfügbaren KI-Chat-Assistenten. Mit der Nutzung des Chats (Text oder Sprache) stimmst du ihnen zu.",
+    sections: {
+      service: {
+        title: "Was dieser Dienst ist",
+        body: "Der Assistent ist eine experimentelle KI-Demo auf meiner persönlichen Website. Er kann Fragen zu mir beantworten, bei der Terminbuchung helfen oder eine private Nachricht weiterleiten. Er ist kein kommerzielles Produkt, kein Ersatz für den direkten Kontakt zu mir und keine laufende professionelle Unterstützung.",
+      },
+      ai: {
+        title: "KI-generierte Antworten",
+        body: "Chat- und Sprachantworten werden von künstlicher Intelligenz erzeugt. Sie können unvollständig, veraltet oder falsch sein. Wichtige Informationen solltest du selbst prüfen, bevor du dich darauf stützt.",
+      },
+      noAdvice: {
+        title: "Keine Fachberatung",
+        body: "Nichts, was der Assistent sagt, ist rechtliche, medizinische, finanzielle oder sonstige professionelle Beratung. Behandle Antworten nicht als Anleitung für Entscheidungen mit rechtlichen, gesundheitlichen oder finanziellen Folgen.",
+      },
+      liability: {
+        title: "Verantwortung",
+        body: "Ich garantiere nicht, dass Antworten richtig, vollständig oder für einen bestimmten Zweck geeignet sind. Soweit gesetzlich zulässig, hafte ich nicht für Entscheidungen, Handlungen oder Schäden, die aus der Nutzung des Assistenten oder dem Vertrauen auf seine Ausgaben entstehen.",
+      },
+      data: {
+        title: "Daten und Sitzungen",
+        body: "Die Chat-Nutzung erzeugt eine Sitzung und kann Gesprächsinhalte speichern, die für den Betrieb nötig sind (einschließlich Buchungs- oder Kontaktdaten, die du angibst). Sende keine sensiblen personenbezogenen Daten, die du nicht teilen möchtest. Missbrauch, Spam oder Störungen können zu einer Einschränkung oder Pausierung des Zugangs führen.",
+      },
+      changes: {
+        title: "Änderungen",
+        body: "Ich kann diese Bedingungen jederzeit aktualisieren oder den öffentlichen Zugang pausieren. Die weitere Nutzung des Chats nach Änderungen bedeutet die Annahme der aktualisierten Bedingungen.",
+      },
+    },
   },
   voice: {
     ttsFallbackWarning:

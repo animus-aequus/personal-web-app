@@ -10,8 +10,6 @@ import { useTranslation } from "react-i18next";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
-import { I18nProvider } from "@/components/i18n/i18n-provider";
-import { AppShell } from "@/components/layout/app-shell";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { BookingSuccessDialog } from "@/components/chat/booking-success-dialog";
@@ -22,7 +20,6 @@ import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { PublicPauseModal } from "@/components/chat/public-pause-modal";
-import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { Button } from "@/components/ui/button";
 import { AgentAura } from "@/components/visualizer/agent-aura";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
@@ -52,7 +49,7 @@ import {
   type ChatMessage,
   type ChatMessagePart,
 } from "@/lib/stores/chat-store";
-
+import { cn } from "@/lib/utils";
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
 
@@ -605,70 +602,8 @@ function TextChatArea({
   );
 }
 
-export function ChatPanel() {
-  return (
-    <I18nProvider>
-      <ChatPanelInner />
-    </I18nProvider>
-  );
-}
-
-function ChatPanelInner() {
-  const { t } = useTranslation();
-  const {
-    sessionId,
-    phase,
-    isReverification,
-    retry,
-    historyStatus,
-    rows: historyRows,
-    hasMore: hasMoreHistory,
-    loadOlder,
-    appendLive,
-  } = useChatSession();
-
-  if (phase === "ready" && sessionId) {
-    return (
-      <ReadyChatPanel
-        key={sessionId}
-        sessionId={sessionId}
-        historyRows={historyRows}
-        hasMoreHistory={hasMoreHistory}
-        historyStatus={historyStatus}
-        loadOlder={loadOlder}
-        appendLive={appendLive}
-      />
-    );
-  }
-
-  if (phase === "paused") {
-    return <PausedChatPanel />;
-  }
-
-  if (phase === "verifying") {
-    return <SessionVerificationGate isReverification={isReverification} />;
-  }
-
-  if (phase === "error") {
-    return (
-      <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="text-sm text-muted-foreground">{t("chat.errorGeneric")}</p>
-        <Button type="button" variant="default" onClick={retry}>
-          {t("common.retry")}
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-dvh w-full flex-col items-center justify-center overflow-hidden">
-      <ChatLoadingSpinner label={t("chat.loadingChat")} />
-    </div>
-  );
-}
-
 /** Bootstrap stopped before Turnstile and session creation — nothing to chat with. */
-function PausedChatPanel() {
+export function PausedChatPanel() {
   const { t } = useTranslation();
   const message = usePublicPauseStore((s) => s.message);
   const dismissed = usePublicPauseStore((s) => s.dismissed);
@@ -687,24 +622,53 @@ function PausedChatPanel() {
   );
 }
 
-type ReadyChatPanelProps = {
+export function ChatSessionError({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-dvh w-full flex-col items-center justify-center gap-4 px-4 text-center">
+      <p className="text-sm text-muted-foreground">{t("chat.errorGeneric")}</p>
+      <Button type="button" variant="default" onClick={onRetry}>
+        {t("common.retry")}
+      </Button>
+    </div>
+  );
+}
+
+export function ChatSessionLoading() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-dvh w-full flex-col items-center justify-center overflow-hidden">
+      <ChatLoadingSpinner label={t("chat.loadingChat")} />
+    </div>
+  );
+}
+
+type ReadyChatSurfaceProps = {
   sessionId: string;
   historyRows: ReturnType<typeof useChatSession>["rows"];
   hasMoreHistory: boolean;
   historyStatus: HistoryStatus;
   loadOlder: ReturnType<typeof useChatSession>["loadOlder"];
   appendLive: ReturnType<typeof useChatSession>["appendLive"];
+  /** Keep mounted while navigating away so session/voice/useChat state survives. */
+  hidden?: boolean;
+  onVoiceReconnectChange?: (reconnect: (() => void) | null) => void;
 };
 
-/** Owns voice toggle state so leaving `ready` unmounts and clears LiveKit cleanly. */
-function ReadyChatPanel({
+/**
+ * Owns voice toggle state for the session lifetime. Stays mounted across
+ * in-app routes (chat ↔ terms) so Turnstile/bootstrap are not repeated.
+ */
+export function ReadyChatSurface({
   sessionId,
   historyRows,
   hasMoreHistory,
   historyStatus,
   loadOlder,
   appendLive,
-}: ReadyChatPanelProps) {
+  hidden = false,
+  onVoiceReconnectChange,
+}: ReadyChatSurfaceProps) {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
@@ -730,24 +694,34 @@ function ReadyChatPanel({
     }
   }, [voiceEnabled]);
 
+  useEffect(() => {
+    onVoiceReconnectChange?.(handleVoiceReconnect);
+    return () => onVoiceReconnectChange?.(null);
+  }, [handleVoiceReconnect, onVoiceReconnectChange]);
+
   return (
-    <AppShell sessionId={sessionId} onVoiceReconnect={handleVoiceReconnect}>
-      <div className="flex h-dvh w-full flex-col overflow-hidden">
-        <TextChatArea
-          sessionId={sessionId}
-          historyRows={historyRows}
-          hasMoreHistory={hasMoreHistory}
-          isLoadingOlder={historyStatus === "loading_more"}
-          historyStatus={historyStatus}
-          onLoadOlder={loadOlder}
-          onVoiceMessage={appendLive}
-          voiceConnectionId={voiceConnectionId}
-          voiceEnabled={voiceEnabled}
-          onVoiceReconnect={handleVoiceReconnect}
-          onVoiceDisconnect={handleVoiceDisconnect}
-          onVoiceToggle={handleVoiceToggle}
-        />
-      </div>
-    </AppShell>
+    <div
+      className={cn(
+        "flex h-dvh w-full flex-col overflow-hidden",
+        hidden && "hidden",
+      )}
+      inert={hidden || undefined}
+      aria-hidden={hidden}
+    >
+      <TextChatArea
+        sessionId={sessionId}
+        historyRows={historyRows}
+        hasMoreHistory={hasMoreHistory}
+        isLoadingOlder={historyStatus === "loading_more"}
+        historyStatus={historyStatus}
+        onLoadOlder={loadOlder}
+        onVoiceMessage={appendLive}
+        voiceConnectionId={voiceConnectionId}
+        voiceEnabled={voiceEnabled}
+        onVoiceReconnect={handleVoiceReconnect}
+        onVoiceDisconnect={handleVoiceDisconnect}
+        onVoiceToggle={handleVoiceToggle}
+      />
+    </div>
   );
 }

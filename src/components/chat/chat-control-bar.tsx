@@ -11,7 +11,8 @@ import {
   useRef,
   useState,
 } from "react";
-import { useTranslation } from "react-i18next";
+import Link from "next/link";
+import { Trans, useTranslation } from "react-i18next";
 
 import { AgentWaveVisualizer } from "@/components/agents-ui/agent-wave-visualizer";
 import { UserRadialDots } from "@/components/agents-ui/user-radial-dots";
@@ -495,6 +496,20 @@ export function ChatControlBar({
             )}
           </motion.form>
         </motion.div>
+
+        <p className="mt-2 px-1 text-center text-xs leading-snug text-muted-foreground/80">
+          <Trans
+            i18nKey="chat.aiTermsNotice"
+            components={{
+              termsLink: (
+                <Link
+                  href="/terms"
+                  className="underline underline-offset-2 transition-colors hover:text-muted-foreground"
+                />
+              ),
+            }}
+          />
+        </p>
       </div>
     </div>
   );

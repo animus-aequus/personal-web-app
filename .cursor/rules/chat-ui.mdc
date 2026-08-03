@@ -1,6 +1,6 @@
 ---
 description: Chat UI, useChat transport, Zustand message store, and merge logic
-globs: src/components/chat/**,src/lib/stores/**
+globs: src/components/chat/**,src/lib/stores/**,src/components/layout/site-shell.tsx
 alwaysApply: false
 ---
 
@@ -12,13 +12,15 @@ Read `docs/architecture.md` (Message merge, Session identity) before non-trivial
 
 | File | Role |
 |------|------|
-| `chat-panel.tsx` | Bootstrap session, voice toggle, `TextChatArea`, `useChat`, `useSession`, merge |
+| `site-shell.tsx` | Turnstile + i18n + `useChatSession` + `AppShell`; keeps chat mounted across `/` and `/terms` |
+| `chat-panel.tsx` | `TextChatArea`, voice toggle, `useChat` / `useSession`, merge (`ReadyChatSurface`) |
 | `message-list.tsx` | Renders `ChatMessage[]` |
 | `message-input.tsx` | Text send callback |
 
 ## Session bootstrap
 
-- `ChatPanel` POSTs `/api/session` when Zustand has no `sessionId`
+- `SiteShell` runs `useChatSession` once for the `(site)` layout lifetime (not on every navigation)
+- `ReadyChatSurface` stays mounted (hidden on non-chat routes) so Turnstile / history / `useChat` are not reset
 - `TextChatArea` mounts only when `sessionId` exists, with `key={sessionId}`
 - **Why:** `useChat` + `DefaultChatTransport` bind `sessionId` at creation time
 
@@ -58,3 +60,4 @@ new DefaultChatTransport({ api: "/api/chat", body: { sessionId } })
 - Mount/unmount `useSession` when toggling voice (see rule `livekit-voice`)
 - Use session transcriptions as persisted chat history
 - Create `useChat` before `sessionId` is known
+- Remount session bootstrap when navigating between `(site)` pages (chat ↔ terms)

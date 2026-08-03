@@ -44,6 +44,41 @@ export const fr = {
     enableAudio: "Activer l'audio",
     interrupted: "Interrompu avant la fin",
     voiceLanguageLabel: "Langue vocale",
+    aiTermsNotice:
+      "En utilisant le chat, vous acceptez les <termsLink>conditions d'utilisation</termsLink>.",
+  },
+  terms: {
+    title: "Conditions d'utilisation",
+    backToChat: "Retour au chat",
+    updated: "Dernière mise à jour : 3 août 2026",
+    intro:
+      "Ces conditions s'appliquent à ce site personnel et à l'assistant de chat IA qui y est disponible. En utilisant le chat (texte ou voix), vous les acceptez.",
+    sections: {
+      service: {
+        title: "Nature du service",
+        body: "L'assistant est une démo IA expérimentale sur mon site personnel. Il peut répondre à des questions sur moi, aider à réserver un rendez-vous ou transmettre un message privé. Ce n'est pas un produit commercial, ni un substitut à un contact direct avec moi, ni un support professionnel continu.",
+      },
+      ai: {
+        title: "Réponses générées par l'IA",
+        body: "Les réponses textuelles et vocales sont générées par l'intelligence artificielle. Elles peuvent être incomplètes, obsolètes ou incorrectes. Vérifiez toujours les informations importantes avant de vous y fier.",
+      },
+      noAdvice: {
+        title: "Aucun conseil professionnel",
+        body: "Rien de ce que dit l'assistant ne constitue un conseil juridique, médical, financier ou professionnel. Ne traitez pas les réponses comme des instructions pour des décisions ayant des conséquences juridiques, sanitaires ou financières.",
+      },
+      liability: {
+        title: "Responsabilité",
+        body: "Je ne garantis pas que les réponses sont exactes, complètes ou adaptées à un usage particulier. Dans toute la mesure permise par la loi, je ne suis pas responsable des décisions, actes ou pertes découlant de l'utilisation de l'assistant ou de la confiance accordée à ses résultats.",
+      },
+      data: {
+        title: "Données et sessions",
+        body: "L'utilisation du chat crée une session et peut stocker le contenu de conversation nécessaire au service (y compris les détails de réservation ou de contact que vous fournissez). N'envoyez pas de données personnelles sensibles que vous ne souhaitez pas partager. Les abus, le spam ou les tentatives de perturbation peuvent entraîner une limitation ou une suspension de l'accès.",
+      },
+      changes: {
+        title: "Modifications",
+        body: "Je peux mettre à jour ces conditions ou suspendre l'accès public à tout moment. Continuer à utiliser le chat après des modifications vaut acceptation des conditions mises à jour.",
+      },
+    },
   },
   voice: {
     ttsFallbackWarning:
