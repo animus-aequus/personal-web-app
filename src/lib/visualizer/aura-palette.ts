@@ -1,8 +1,9 @@
 /**
- * Stoic Meridian — shared aura palette for the background shader and
+ * Ocean Tide — shared aura palette for the background shader and
  * streaming token color reveals.
  *
- * vivid indigo → bright cyan → rich amber → luminous violet → periwinkle
+ * Anchored on logo.svg: deep ocean → oceanic mid (#0099FF) → turquoise-ocean
+ * → soft cyan → cool indigo (closed loop, no amber/violet).
  */
 
 type AuraPaletteStop = {
@@ -13,11 +14,16 @@ type AuraPaletteStop = {
 };
 
 export const AURA_PALETTE: readonly AuraPaletteStop[] = [
-  { css: "oklch(0.70 0.16 260)", rgb: [0.42, 0.45, 0.91] },
-  { css: "oklch(0.74 0.18 215)", rgb: [0.18, 0.72, 0.91] },
-  { css: "oklch(0.80 0.18 72)", rgb: [0.95, 0.75, 0.25] },
-  { css: "oklch(0.67 0.17 290)", rgb: [0.66, 0.33, 0.94] },
-  { css: "oklch(0.76 0.13 245)", rgb: [0.42, 0.56, 0.94] },
+  // Deep ocean ≈ logo #0044FF
+  { css: "oklch(0.55 0.22 255)", rgb: [0.0, 0.27, 1.0] },
+  // Oceanic mid ≈ logo #0099FF (brand)
+  { css: "oklch(0.68 0.16 240)", rgb: [0.0, 0.6, 1.0] },
+  // Turquoise–ocean hero mid (hue ~210)
+  { css: "oklch(0.74 0.14 210)", rgb: [0.12, 0.75, 0.88] },
+  // Soft cyan (toned down from logo #00FFFF)
+  { css: "oklch(0.82 0.12 195)", rgb: [0.28, 0.88, 0.92] },
+  // Cool indigo depth — closes the fract(t) loop
+  { css: "oklch(0.62 0.14 260)", rgb: [0.35, 0.42, 0.91] },
 ] as const;
 
 /** CSS colors for token reveal (same stops as {@link AURA_PALETTE}). */

@@ -66,7 +66,7 @@ const FRAGMENT_SHADER_HEAD = /* glsl */ `
     return v;
   }
 
-  // Stoic Meridian ramp — colors from lib/visualizer/aura-palette.
+  // Ocean Tide ramp — colors from lib/visualizer/aura-palette.
 `;
 
 const FRAGMENT_SHADER_TAIL = /* glsl */ `
@@ -78,16 +78,18 @@ const FRAGMENT_SHADER_TAIL = /* glsl */ `
 
     float motion = 1.0 - uReduceMotion * 0.85;
     float t = uTime * motion;
-    // Presence-scaled advection: colours swim along the band while responding.
-    float flow = t * (0.04 + 0.14 * uPresence);
+    // Horizontal current: always a calm baseline while visible, plus presence boost.
+    // Avoids a "frozen" look during stream gaps (no tokens / no audio).
+    float flow = t * (0.055 + 0.09 * uPresence);
+    vec2 flowVec = vec2(flow * 1.15, flow * 0.22);
 
-    // Domain warping -> organic, irregular (but smooth) field.
-    float warpAmt = 0.28 + 0.32 * uPresence;
+    // Domain warping -> soft organic water field (secondary to sine swell/ripples).
+    float warpAmt = 0.22 + 0.28 * uPresence;
     vec2 warp = vec2(
-      fbm(p * 2.2 + vec2(0.0, flow * 1.35)),
-      fbm(p * 2.2 + vec2(6.4, flow * 1.1))
+      fbm(p * 2.0 + vec2(flowVec.x * 1.1, 0.0)),
+      fbm(p * 2.0 + vec2(5.8, flowVec.x * 0.55))
     );
-    float n = fbm(p * 1.7 + warp * warpAmt + vec2(flow * 0.7, flow * 0.25));
+    float n = fbm(p * 1.55 + warp * warpAmt + flowVec * vec2(1.0, 0.35));
 
     // Distance from a ROUNDED rectangle border (signed-distance to a round box)
     // so the glow curves smoothly around the corners instead of creasing where
@@ -97,28 +99,33 @@ const FRAGMENT_SHADER_TAIL = /* glsl */ `
     float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - cornerR;
     float edge = -sd; // 0 at the rounded border, grows inward
 
-    // Irregular, organic border thickness driven by the same field, so the
-    // glow swells and recedes around the perimeter instead of a uniform band.
-    float thick = 0.17 + 0.14 * n;
-    float band = pow(1.0 - clamp(edge / thick, 0.0, 1.0), 2.3);
+    // Perimeter coordinate for layered ocean waves (swell + ripples).
+    // uTime (t) keeps a default tide alive even when uFlPhase boosts are quiet.
+    float along = uv.x * 1.15 + uv.y * 0.35;
+    float swell = sin(along * 6.28318 * 0.55 + uFlPhase * 0.85 + t * 0.55)
+                + 0.45 * sin(along * 6.28318 * 0.28 - uFlPhase * 0.4 + t * 0.32);
+    float ripples = sin(along * 6.28318 * 2.1 + uFlPhase * 2.4 + n * 3.0 + t * 1.1)
+                  * (0.55 + 0.45 * uPresence);
+    float tide = 0.55 * swell + 0.35 * ripples;
 
-    // Multicolor coordinate. uColorShift advances quickly while responding
-    // (text has no audio), and a second noise axis rides that phase so hues
-    // shear along the perimeter instead of only sliding as a rigid gradient.
-    float along = (uv.x - uv.y) * 0.55 + (uv.x + uv.y) * 0.28;
-    float colorNoise = fbm(vec2(along * 2.4 + n * 1.1, uColorShift * 1.6));
-    float ct = n * (1.35 + 0.40 * uAudio + 0.45 * uPresence)
-             + along
-             + 0.85 * uColorShift
-             + 0.55 * colorNoise;
+    // Band thickness swells like surf along the perimeter.
+    float thick = 0.16 + 0.11 * n + 0.05 * tide + 0.04 * uAudio;
+    float edgeWaved = edge - 0.025 * tide;
+    float band = pow(1.0 - clamp(edgeWaved / thick, 0.0, 1.0), 2.3);
+
+    // Caustics-lite: hue shear rides the tide phase, not a rigid diagonal gradient.
+    float colorNoise = fbm(vec2(along * 2.2 + n * 1.0 + tide * 0.8, uColorShift * 1.35));
+    float ct = n * (1.2 + 0.35 * uAudio + 0.4 * uPresence)
+             + along * 0.75
+             + 0.7 * uColorShift
+             + 0.45 * colorNoise
+             + 0.22 * tide;
     vec3 col = palette(ct);
 
-    // Randomized but smooth waving: fbm sampled along the integrated phase axis
-    // (uFlPhase), with neighbouring regions rippling independently so it never
-    // looks periodic. High floor keeps it from blinking to invisible.
-    float wave = fbm(vec2(n * 2.4 + (uv.x - uv.y) * 1.3, uFlPhase));
-    float wave2 = fbm(vec2(n * 1.2 - (uv.x + uv.y) * 0.8, uFlPhase * 0.75 + 4.0));
-    float fl = 0.62 + 0.52 * mix(wave, wave2, 0.5);
+    // Soft luminance ripple (high floor so the glow never blinks out).
+    float wave = fbm(vec2(n * 2.2 + along * 1.1, uFlPhase * 0.9));
+    float wave2 = fbm(vec2(n * 1.1 - along * 0.7, uFlPhase * 0.65 + 4.0));
+    float fl = 0.64 + 0.28 * mix(wave, wave2, 0.5) + 0.18 * (0.5 + 0.5 * tide);
 
     float baseAlpha = 0.92;
     float alpha = band * uPresence * baseAlpha * fl;
@@ -225,23 +232,30 @@ function AuraQuad({ reduceMotion }: { reduceMotion: boolean }) {
     const audio = phase === "responding" ? audioRef.current : 0;
     // Text streaming has no audioLevel — drive motion from presence/phase too.
     const respondingBoost = phase === "responding" ? 1 : 0;
+    // Calmer tide while thinking; quicker swell when responding / audio.
+    const thinkingCalm = phase === "thinking" ? 0.72 : 1.0;
 
     // Integrate the shimmer + colour-drift phases so their speed can change
     // smoothly without a frequency lurch while presence ramps in / out.
     const motionFactor = reduceMotion ? 0.15 : 1.0;
     const intensity = intensityRef.current;
+    // Calm default tide whenever the glow is on screen — stream token gaps and
+    // TTS pauses must not look like a freeze (boosts only add energy on top).
+    const visible = intensity > 0.02 ? 1 : 0;
     const flSpeed =
-      (0.16 +
-        0.95 * intensity +
+      (0.28 * visible +
+        0.45 * intensity +
         0.7 * audio +
-        0.45 * respondingBoost) *
-      motionFactor;
+        0.35 * respondingBoost) *
+      motionFactor *
+      thinkingCalm;
     const colorSpeed =
-      (0.04 +
-        0.28 * intensity +
+      (0.1 * visible +
+        0.14 * intensity +
         0.22 * audio +
-        0.22 * respondingBoost) *
-      motionFactor;
+        0.18 * respondingBoost) *
+      motionFactor *
+      thinkingCalm;
     flPhaseRef.current += flSpeed * dt;
     colorPhaseRef.current += colorSpeed * dt;
 
