@@ -5,7 +5,7 @@ import { useSession } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
@@ -24,6 +24,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { PublicPauseModal } from "@/components/chat/public-pause-modal";
 import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { Button } from "@/components/ui/button";
+import { AgentAura } from "@/components/visualizer/agent-aura";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
 import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
@@ -59,33 +60,28 @@ const EASE = [0.4, 0, 0.2, 1] as const;
 const CHAT_FADE_MS = 350;
 /** Fallback bottom reservation until `ChatControlBar` reports its live height. */
 const DEFAULT_CHROME_HEIGHT_PX = 96;
+/** Extra scroll padding so the last message clears the control bar visually. */
+const CHAT_MESSAGE_CHROME_GAP_PX = 24;
 
-/** Tailwind `lg` — fade is not rendered below this width. */
-const CHAT_SCROLL_FADE_MIN_PX = 1024;
+/**
+ * Must match `bg-background/70` on the chrome wash so the scroll fade lands on
+ * the same alpha instead of an opaque hard edge.
+ */
+const CHAT_CHROME_BG_MIX =
+  "color-mix(in oklab, var(--background) 70%, transparent)";
 
 /**
  * Softens scroll content just above the control bar.
- * Tracks live chrome height; lg+ only.
+ * Tracks live chrome height on all breakpoints.
  * Positioned absolute within the chat panel (not viewport-fixed) so it
  * follows the sidebar push layout on desktop.
+ * Gradient: fully transparent → same alpha as the chrome wash below.
+ *
+ * Stack (bottom → top): messages → fade (15) → chrome wash (16) →
+ * AgentAura (18) → control bar (20). Aura sits above the wash so the
+ * fade trick is not lit from behind by the glow.
  */
 function ChatScrollFade({ bottomPx }: { bottomPx: number }) {
-  const [isLgUp, setIsLgUp] = useState(false);
-
-  useLayoutEffect(() => {
-    const mediaQuery = window.matchMedia(
-      `(min-width: ${CHAT_SCROLL_FADE_MIN_PX}px)`,
-    );
-    const sync = () => setIsLgUp(mediaQuery.matches);
-    sync();
-    mediaQuery.addEventListener("change", sync);
-    return () => mediaQuery.removeEventListener("change", sync);
-  }, []);
-
-  if (!isLgUp) {
-    return null;
-  }
-
   return (
     <div
       data-chat-scroll-fade
@@ -93,8 +89,7 @@ function ChatScrollFade({ bottomPx }: { bottomPx: number }) {
       className="pointer-events-none absolute inset-x-0 z-[15] mx-auto h-8 w-full max-w-3xl"
       style={{
         bottom: bottomPx,
-        background:
-          "linear-gradient(to top, var(--background) 0%, transparent 100%)",
+        background: `linear-gradient(to top, ${CHAT_CHROME_BG_MIX} 0%, transparent 100%)`,
       }}
     />
   );
@@ -520,7 +515,6 @@ function TextChatArea({
           transition={{ duration: 0.35, ease: EASE }}
           style={{
             pointerEvents: voiceEnabled ? "none" : "auto",
-            paddingBottom: chromeHeight,
           }}
           aria-hidden={voiceEnabled}
         >
@@ -534,6 +528,7 @@ function TextChatArea({
             sessionId={sessionId}
             showOtpInline={!voiceEnabled}
             onNote={onVoiceMessage}
+            bottomInsetPx={chromeHeight + CHAT_MESSAGE_CHROME_GAP_PX}
           />
         </motion.div>
 
@@ -576,6 +571,15 @@ function TextChatArea({
         ) : null}
 
         {!voiceEnabled ? <ChatScrollFade bottomPx={chromeHeight} /> : null}
+
+        <div
+          data-chat-chrome-wash
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[16] bg-background/70"
+          style={{ height: chromeHeight }}
+        />
+
+        <AgentAura />
 
         <ChatControlBar
           onSend={handleSend}

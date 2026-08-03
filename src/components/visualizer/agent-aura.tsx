@@ -11,8 +11,10 @@ import { buildAuraPaletteGlsl } from "@/lib/visualizer/aura-palette";
  * Background "aura": a gradient glow that hugs the chat panel edges and comes
  * alive while the agent is thinking or streaming a reply (text or voice).
  * Phase + live audio amplitude are read from `agent-activity-store`.
- * Mounted inside the chat shell (outside the sidebar) so the glow tracks the
- * sidebar push layout on desktop.
+ *
+ * Mounted inside the chat panel stacking context above the semi-transparent
+ * chrome wash (so the message-fade trick is not revealed through the glow)
+ * but below the interactive control bar. Always `pointer-events-none`.
  */
 
 const VERTEX_SHADER = /* glsl */ `
@@ -299,13 +301,26 @@ export function AgentAura() {
   }, []);
 
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-0">
+    <div
+      aria-hidden
+      data-agent-aura
+      className="absolute inset-0 z-[18] [&_canvas]:pointer-events-none [&_div]:pointer-events-none"
+      style={{ pointerEvents: "none" }}
+    >
       <Canvas
+        style={{ pointerEvents: "none" }}
         frameloop={active ? "always" : "never"}
         dpr={[1, 1.5]}
         gl={{ antialias: false, alpha: true, premultipliedAlpha: true }}
         orthographic
         camera={{ position: [0, 0, 1] }}
+        onCreated={({ gl }) => {
+          gl.domElement.style.pointerEvents = "none";
+          const root = gl.domElement.parentElement;
+          if (root) {
+            root.style.pointerEvents = "none";
+          }
+        }}
       >
         <AuraQuad reduceMotion={reduceMotion} />
       </Canvas>

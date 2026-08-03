@@ -28,6 +28,9 @@ type MessageListProps = {
   historyStatus?: HistoryStatus;
   sessionId?: string | null;
   showOtpInline?: boolean;
+  /** Bottom padding so the last message clears the control-bar chrome while
+   * content can still scroll underneath the semi-transparent wash. */
+  bottomInsetPx?: number;
   onNote?: (
     message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
   ) => void;
@@ -56,6 +59,7 @@ export function MessageList({
   historyStatus,
   sessionId,
   showOtpInline = false,
+  bottomInsetPx,
   onNote,
 }: MessageListProps) {
   const { t } = useTranslation();
@@ -251,7 +255,10 @@ export function MessageList({
     >
       <div
         ref={contentRef}
-        className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-6 md:px-6"
+        className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 pt-6 md:px-6"
+        style={{
+          paddingBottom: bottomInsetPx ?? 24,
+        }}
       >
         <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
         {isLoadingOlder ? (

@@ -14,7 +14,6 @@ import {
 } from "@/lib/i18n/locales";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { cn } from "@/lib/utils";
-import { AgentAura } from "@/components/visualizer/agent-aura";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -266,7 +265,6 @@ export function AppShell({
       />
       <MobileMenuButton />
       <SidebarInset className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent">
-        <AgentAura />
         <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
           {children}
         </div>
