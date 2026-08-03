@@ -12,6 +12,7 @@ import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { SmoothStreamingText } from "@/components/chat/smooth-streaming-text";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
+import { formatSystemNoteText } from "@/lib/i18n/system-note";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
@@ -273,7 +274,11 @@ export function MessageList({
                 role="status"
                 className="mx-auto rounded-full bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
               >
-                {message.content}
+                {formatSystemNoteText(t, {
+                  kind: message.kind,
+                  params: message.params,
+                  fallback: message.content,
+                })}
               </div>
             );
           }

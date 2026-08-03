@@ -71,7 +71,14 @@ Response:
   "session_id": "…",
   "thread_id": "web:…",
   "messages": [
-    { "id": "…", "role": "user", "content": "…", "sent_at": "…", "interrupted": false, "parts": null }
+    {
+      "id": "…",
+      "role": "system-note",
+      "content": "Booking \"Intro call\" confirmed",
+      "sent_at": "…",
+      "kind": "booking_confirmed",
+      "params": { "name": "Intro call" }
+    }
   ],
   "has_more": true,
   "next_before": "…"
@@ -135,7 +142,7 @@ Confirm errors (**409**): `otp_invalid`, `otp_expired`, `too_many_attempts`, `sl
 
 Cancel-request errors (**409**): `not_confirmed`, `email_suppressed` (address on SES bounce/complaint suppress list).
 
-**Out-of-band system notes:** the confirm/cancel/abort booking endpoints and the direct-message send/cancel endpoints run outside the LLM turn loop, but still need the agent to know what happened. Each appends a checkpointed, tagged `HumanMessage` (`role="system-note"` once projected) and returns it as `note: { id, label, sent_at }` in the response body, so the BFF can render it in the transcript immediately instead of waiting for the next history fetch. `label` is a short human-facing summary (e.g. "Booking confirmed"); the LLM-facing instruction text is longer and never shown verbatim in the UI.
+**Out-of-band system notes:** the confirm/cancel/abort booking endpoints and the direct-message send/cancel endpoints run outside the LLM turn loop, but still need the agent to know what happened. Each appends a checkpointed, tagged `HumanMessage` (`role="system-note"` once projected) and returns it as `note: { id, label, sent_at, kind, params? }` in the response body, so the BFF can render it in the transcript immediately instead of waiting for the next history fetch. `content` / `label` is a short English summary (e.g. `Booking "Intro call" confirmed`); `kind` + `params` drive localized UI on the frontend (`systemNotes.*` in i18n, mapped from `kind`). Booking kinds always include `params.name` (event name). The LLM-facing instruction text is longer and never shown verbatim in the UI.
 
 ### Direct messages (private message GenUI)
 

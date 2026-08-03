@@ -23,11 +23,7 @@ export const pl = {
     closeMenu: "Zamknij menu",
   },
   greeting: {
-    hey: "Hej!",
-    kacpers: "Asystent",
-    ai: "AI",
-    assistant: "Kacpra",
-    here: "jest tutaj.",
+    headline: "Cześć! Jestem asystentem AI Kacpra.",
     hints: {
       ask: "Zapytaj o cokolwiek dotyczące Kacpra",
       book: "Umów spotkanie",
@@ -67,6 +63,23 @@ export const pl = {
   },
   language: {
     changeFailed: "Nie udało się zmienić języka. Spróbuj ponownie.",
+  },
+  systemNotes: {
+    booking: {
+      confirmed: 'Rezerwacja „{{name}}” potwierdzona',
+      cancelled: 'Rezerwacja „{{name}}” anulowana',
+    },
+    meeting: {
+      cancelled: 'Spotkanie „{{name}}” anulowane',
+    },
+    cancellation: {
+      aborted: 'Anulowanie „{{name}}” przerwane',
+    },
+    private: {
+      message_sent:
+        "Prywatna wiadomość od {{name}} ({{email}}): {{message}}",
+      message_cancelled: "Prywatna wiadomość anulowana",
+    },
   },
   booking: {
     otpTitle: "Wpisz kod potwierdzający",

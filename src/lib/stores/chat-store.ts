@@ -33,6 +33,10 @@ export type ChatMessage = {
   /** Voice assistant row stopped by user barge-in (verified partial only). */
   interrupted?: boolean;
   parts?: ChatMessagePart[];
+  /** System-note i18n kind (from agent API). */
+  kind?: string;
+  /** Interpolation params for system-note i18n. */
+  params?: Record<string, string>;
 };
 
 type ChatStore = {

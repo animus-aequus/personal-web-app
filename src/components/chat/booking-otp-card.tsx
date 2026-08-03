@@ -15,31 +15,12 @@ import {
   showBookingOtpSuccessToast,
 } from "@/lib/chat/booking-otp-toast";
 import { cn } from "@/lib/utils";
+import { appendSystemNote, type OnSystemNote } from "@/lib/chat/append-system-note";
 import type { SystemNoteInfo } from "@/lib/agent-client";
 import {
   useBookingOtpStore,
   type BookingOtpState,
 } from "@/lib/stores/booking-otp-store";
-import type { ChatMessage } from "@/lib/stores/chat-store";
-
-/** Appends a system-note row immediately, without waiting for a history refetch. */
-type OnSystemNote = (
-  message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
-) => void;
-
-function appendSystemNote(onNote: OnSystemNote | undefined, note?: SystemNoteInfo | null): void {
-  if (!onNote || !note) {
-    return;
-  }
-  const parsed = Date.parse(note.sent_at);
-  onNote({
-    id: note.id,
-    role: "system-note",
-    content: note.label,
-    source: "text",
-    timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
-  });
-}
 
 type BookingOtpCardProps = {
   sessionId: string;

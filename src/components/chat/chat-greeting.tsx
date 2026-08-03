@@ -40,6 +40,39 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+type HeadlineToken = {
+  text: string;
+  accent?: string;
+};
+
+/** Split a localized headline for staggered word animation; accent brand tokens. */
+function tokenizeHeadline(headline: string): HeadlineToken[] {
+  const raw = headline.trim().split(/\s+/).filter(Boolean);
+  const words: string[] = [];
+  for (const part of raw) {
+    // Keep lone punctuation with the previous word (e.g. French "Salut !").
+    if (/^[!?.…¡¿:;,]+$/.test(part) && words.length > 0) {
+      words[words.length - 1] += `\u00A0${part}`;
+      continue;
+    }
+    words.push(part);
+  }
+
+  return words.map((text) => {
+    if (/kacper/i.test(text)) {
+      return { text, accent: AURA_PALETTE_CSS[0] };
+    }
+    // AI / KI / IA as a word or hyphenated prefix (e.g. KI-Assistent).
+    if (
+      /^(AI|KI|IA)([-–.].*)?$/i.test(text) ||
+      /(^|[^a-zA-ZÀ-ÿ])(AI|KI|IA)([^a-zA-ZÀ-ÿ]|$)/i.test(text)
+    ) {
+      return { text, accent: AURA_PALETTE_CSS[1] };
+    }
+    return { text };
+  });
+}
+
 function usePrefersReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
 
@@ -65,13 +98,7 @@ type GreetingContentProps = {
 function GreetingContent({ reducedMotion }: GreetingContentProps) {
   const { t } = useTranslation();
   const headlineTokens = useMemo(
-    () => [
-      { text: t("greeting.hey") },
-      { text: t("greeting.kacpers"), accent: AURA_PALETTE_CSS[0] },
-      { text: t("greeting.ai"), accent: AURA_PALETTE_CSS[1] },
-      { text: t("greeting.assistant") },
-      { text: t("greeting.here") },
-    ],
+    () => tokenizeHeadline(t("greeting.headline")),
     [t],
   );
   const hints = useMemo(
@@ -155,7 +182,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
   const showCaret = headlineReady && !reducedMotion;
 
   return (
-    <div className="flex max-w-lg flex-col items-center gap-3 text-center">
+    <div className="flex w-full flex-col items-center gap-3 text-center">
       <p className="text-2xl font-normal leading-snug text-foreground/90 md:text-4xl">
         {reducedMotion ? (
           <>
@@ -218,6 +245,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
 
 export function ChatGreeting({ visible }: ChatGreetingProps) {
   const reducedMotion = usePrefersReducedMotion();
+  const { i18n } = useTranslation();
 
   return (
     <motion.div
@@ -231,7 +259,10 @@ export function ChatGreeting({ visible }: ChatGreetingProps) {
       aria-hidden={!visible}
     >
       {visible ? (
-        <GreetingContent key="greeting-active" reducedMotion={reducedMotion} />
+        <GreetingContent
+          key={`greeting-${i18n.language}`}
+          reducedMotion={reducedMotion}
+        />
       ) : null}
     </motion.div>
   );

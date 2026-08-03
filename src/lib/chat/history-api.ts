@@ -52,6 +52,12 @@ export function historyMessageToChatMessage(message: HistoryMessage): ChatMessag
     timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
     interrupted: message.interrupted ?? false,
     parts: mapHistoryParts(message.parts),
+    ...(message.role === "system-note" && message.kind
+      ? {
+          kind: message.kind,
+          params: message.params ?? undefined,
+        }
+      : {}),
   };
 }
 

@@ -23,11 +23,7 @@ export const en = {
     closeMenu: "Close menu",
   },
   greeting: {
-    hey: "Hey!",
-    kacpers: "Kacper's",
-    ai: "AI",
-    assistant: "assistant",
-    here: "here.",
+    headline: "Hey! Kacper's AI assistant here.",
     hints: {
       ask: "Ask anything about Kacper",
       book: "Book a meeting",
@@ -67,6 +63,23 @@ export const en = {
   },
   language: {
     changeFailed: "Could not update language. Please try again.",
+  },
+  systemNotes: {
+    booking: {
+      confirmed: 'Booking "{{name}}" confirmed',
+      cancelled: 'Booking "{{name}}" cancelled',
+    },
+    meeting: {
+      cancelled: 'Meeting "{{name}}" cancelled',
+    },
+    cancellation: {
+      aborted: 'Cancellation of "{{name}}" aborted',
+    },
+    private: {
+      message_sent:
+        "Private message sent from {{name}} ({{email}}): {{message}}",
+      message_cancelled: "Private message cancelled",
+    },
   },
   booking: {
     otpTitle: "Enter confirmation code",

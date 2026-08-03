@@ -18,33 +18,12 @@ import {
   type DirectMessageFieldErrors,
 } from "@/lib/chat/direct-message-validation";
 import { cn } from "@/lib/utils";
+import { appendSystemNote, type OnSystemNote } from "@/lib/chat/append-system-note";
 import type { SystemNoteInfo } from "@/lib/agent-client";
 import {
   useDirectMessageStore,
   type DirectMessageState,
 } from "@/lib/stores/direct-message-store";
-import type { ChatMessage } from "@/lib/stores/chat-store";
-
-type OnSystemNote = (
-  message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
-) => void;
-
-function appendSystemNote(
-  onNote: OnSystemNote | undefined,
-  note?: SystemNoteInfo | null,
-): void {
-  if (!onNote || !note) {
-    return;
-  }
-  const parsed = Date.parse(note.sent_at);
-  onNote({
-    id: note.id,
-    role: "system-note",
-    content: note.label,
-    source: "text",
-    timestamp: Number.isNaN(parsed) ? Date.now() : parsed,
-  });
-}
 
 const inputClassName =
   "flex h-9 w-full rounded-lg border border-input bg-transparent px-2.5 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20";

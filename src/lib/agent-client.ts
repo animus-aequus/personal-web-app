@@ -131,6 +131,8 @@ export type HistoryMessage = {
   sent_at: string;
   interrupted?: boolean;
   parts?: HistoryMessagePart[] | null;
+  kind?: string | null;
+  params?: Record<string, string> | null;
 };
 
 export type HistoryPageResponse = {
@@ -415,7 +417,9 @@ export type PendingBookingResponse = {
 export type SystemNoteInfo = {
   id: string;
   label: string;
+  kind: string;
   sent_at: string;
+  params?: Record<string, string> | null;
 };
 
 export type ConfirmBookingResponse = {

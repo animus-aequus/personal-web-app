@@ -23,11 +23,7 @@ export const fr = {
     closeMenu: "Fermer le menu",
   },
   greeting: {
-    hey: "Salut !",
-    kacpers: "L'assistant",
-    ai: "IA",
-    assistant: "de Kacper",
-    here: "est là.",
+    headline: "Salut! Je suis l'assistant IA de Kacper.",
     hints: {
       ask: "Demandez tout sur Kacper",
       book: "Réserver une réunion",
@@ -67,6 +63,23 @@ export const fr = {
   },
   language: {
     changeFailed: "Impossible de changer la langue. Veuillez réessayer.",
+  },
+  systemNotes: {
+    booking: {
+      confirmed: 'Réservation « {{name}} » confirmée',
+      cancelled: 'Réservation « {{name}} » annulée',
+    },
+    meeting: {
+      cancelled: 'Rendez-vous « {{name}} » annulé',
+    },
+    cancellation: {
+      aborted: 'Annulation de « {{name}} » interrompue',
+    },
+    private: {
+      message_sent:
+        "Message privé de {{name}} ({{email}}) : {{message}}",
+      message_cancelled: "Message privé annulé",
+    },
   },
   booking: {
     otpTitle: "Entrez le code de confirmation",
