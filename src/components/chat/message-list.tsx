@@ -1,7 +1,7 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
