@@ -1,9 +1,10 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { buildAuraPaletteGlsl } from "@/lib/visualizer/aura-palette";
 
@@ -147,20 +148,6 @@ const PRESENCE_EASE_RATE = 1.7;
 const AUDIO_EASE_RATE = 10;
 // Keep rendering long enough for the slow fade-out to fully settle to ~0.
 const FADE_OUT_TAIL_MS = 2600;
-
-function subscribeReducedMotion(callback: () => void): () => void {
-  const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-  media.addEventListener("change", callback);
-  return () => media.removeEventListener("change", callback);
-}
-
-function usePrefersReducedMotion(): boolean {
-  return useSyncExternalStore(
-    subscribeReducedMotion,
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    () => false,
-  );
-}
 
 function createUniforms() {
   return {

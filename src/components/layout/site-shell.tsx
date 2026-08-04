@@ -14,6 +14,8 @@ import { AppShell } from "@/components/layout/app-shell";
 import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { TurnstileProvider } from "@/components/turnstile/turnstile-provider";
 import { useChatSession } from "@/lib/chat/use-chat-session";
+// Eager client import so device profiling runs with the app shell (module init).
+import "@/lib/stores/device-profile-store";
 
 const CHAT_PATH = "/";
 

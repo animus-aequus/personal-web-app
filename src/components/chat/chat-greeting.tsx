@@ -4,6 +4,8 @@ import { motion } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { GreetingBlob } from "@/components/visualizer/greeting-blob";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { AURA_PALETTE_CSS } from "@/lib/visualizer/aura-palette";
 
 const WORD_STAGGER_S = 0.05;
@@ -71,20 +73,6 @@ function tokenizeHeadline(headline: string): HeadlineToken[] {
     }
     return { text };
   });
-}
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  return reduced;
 }
 
 type ChatGreetingProps = {
@@ -258,11 +246,14 @@ export function ChatGreeting({ visible }: ChatGreetingProps) {
       transition={{ duration: 0.35, ease: EASE }}
       aria-hidden={!visible}
     >
+      <GreetingBlob active={visible} />
       {visible ? (
-        <GreetingContent
-          key={`greeting-${i18n.language}`}
-          reducedMotion={reducedMotion}
-        />
+        <div className="relative z-10 w-full">
+          <GreetingContent
+            key={`greeting-${i18n.language}`}
+            reducedMotion={reducedMotion}
+          />
+        </div>
       ) : null}
     </motion.div>
   );

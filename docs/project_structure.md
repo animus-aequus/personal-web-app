@@ -40,6 +40,10 @@ personal-website/                 # this repo
 | `components/chat/message-input.tsx` | Text input + send |
 | `components/agents-ui/*` | Thin LiveKit Agents UI wrappers |
 | `components/visualizer/agent-aura.tsx` | three.js/R3F background aura (reasoning + streaming) |
+| `components/visualizer/greeting-blob.tsx` | three.js/R3F 3D water blob behind empty-state greeting |
+| `lib/device-profile.ts` | Client device form-factor + performance-tier inference |
+| `lib/stores/device-profile-store.ts` | Ephemeral device profile (`formFactor`, `tier`) for UI LOD |
+| `hooks/use-prefers-reduced-motion.ts` | Shared `prefers-reduced-motion` subscription |
 | `components/visualizer/voice-aura-bridge.tsx` | Voice agent state + TTS volume → aura phase |
 | `lib/stores/agent-activity-store.ts` | Ephemeral aura `phase` + transient `audioLevel` |
 | `components/ui/*` | shadcn/ui primitives |
@@ -65,6 +69,8 @@ personal-website/                 # this repo
 | Message list / input styling | `src/components/chat/message-*.tsx` |
 | LiveKit session UI (audio, visualizer) | `src/components/agents-ui/*` |
 | Background aura / agent activity state | `src/components/visualizer/*`, `src/lib/stores/agent-activity-store.ts` |
+| Empty-state greeting blob | `src/components/visualizer/greeting-blob.tsx`, `src/components/chat/chat-greeting.tsx` |
+| Device form / performance tier | `src/lib/device-profile.ts`, `src/lib/stores/device-profile-store.ts` (bootstrapped in `site-shell.tsx`) |
 | Voice transcript sync | `src/lib/livekit/voice-chat-sync.ts` |
 | LiveKit room naming | `src/lib/livekit/room.ts` |
 | Voice language select options | `src/lib/livekit/voice-languages.ts` |

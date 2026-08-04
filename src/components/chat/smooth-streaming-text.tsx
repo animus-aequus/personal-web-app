@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import { MessageContent } from "@/components/chat/message-content";
+import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import {
   SMOOTH_REVEAL_CROSSFADE_MS,
   useSmoothTextReveal,
@@ -17,20 +18,6 @@ type SmoothStreamingTextProps = {
   /** Fired once after plain → markdown crossfade completes. */
   onSettled?: () => void;
 };
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, []);
-
-  return reduced;
-}
 
 export function SmoothStreamingText({
   messageId,
