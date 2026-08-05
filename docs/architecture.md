@@ -164,13 +164,14 @@ A soft, shape-shifting **3D water blob** (three.js / `@react-three/fiber`) sits 
 | Piece | Location | Role |
 |-------|----------|------|
 | Blob renderer | `components/visualizer/greeting-blob.tsx` | R3F `<Canvas>` + deformed icosphere; Fresnel/IOR water shader; LOD from device profile + runtime FPS trend |
+| Radial aura (low tier) | `components/visualizer/greeting-radial-aura.tsx` | Cheap centered radial shimmer (inverse of edge `AgentAura`); used when profile tier is `low` |
 | Host | `components/chat/chat-greeting.tsx` | Mounts blob while greeting `visible`; text sits above at `z-10` |
 | Device profile | `lib/device-profile.ts` + `lib/stores/device-profile-store.ts` | Form factor + performance tier; bootstrapped in `SiteShell` |
 
 - Mesh density / shader features / DPR / AA follow `formFactor` × effective `tier` (`medium`/`high`, plus runtime `low` after downgrade). Phones cap below desktop high.
-- **Initial profile `low`:** no WebGL — static CSS radial only. **Runtime downgrade to `low`:** WebGL stays mounted at the cheap LOD so the blob does not vanish mid-session.
+- **Initial profile `low`:** lightweight radial aura (not the 3D blob). **Runtime downgrade to `low`:** 3D blob stays at cheap LOD so it does not vanish mid-session.
 - Local `performanceOverride` may **step down only** on a sustained slow-frame trend (no mid-session upgrade; refresh re-profiles). Sampling uses clamped R3F `delta` + warmup after render-loop resumes.
-- Loop only while greeting + tab are visible; `prefers-reduced-motion` skips WebGL for a static CSS radial. `webglcontextlost` remounts the canvas.
+- Loop only while greeting + tab are visible; `prefers-reduced-motion` skips WebGL for a static CSS radial. `webglcontextlost` remounts the 3D canvas.
 
 ## Device profile
 

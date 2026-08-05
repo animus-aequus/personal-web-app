@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { GreetingBlob } from "@/components/visualizer/greeting-blob";
@@ -81,9 +81,14 @@ type ChatGreetingProps = {
 
 type GreetingContentProps = {
   reducedMotion: boolean;
+  /** Fired once the headline reveal finishes (or immediately under reduced motion). */
+  onHeadlineReady?: () => void;
 };
 
-function GreetingContent({ reducedMotion }: GreetingContentProps) {
+function GreetingContent({
+  reducedMotion,
+  onHeadlineReady,
+}: GreetingContentProps) {
   const { t } = useTranslation();
   const headlineTokens = useMemo(
     () => tokenizeHeadline(t("greeting.headline")),
@@ -155,12 +160,19 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
     return () => window.clearInterval(id);
   }, [headlineReady, reducedMotion, hints.length]);
 
+  useEffect(() => {
+    if (reducedMotion) {
+      onHeadlineReady?.();
+    }
+  }, [reducedMotion, onHeadlineReady]);
+
   const handleHeadlineComplete = () => {
     if (headlineDoneRef.current || reducedMotion) {
       return;
     }
     headlineDoneRef.current = true;
     setHeadlineReady(true);
+    onHeadlineReady?.();
   };
 
   const displayedHint = reducedMotion
@@ -171,7 +183,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
 
   return (
     <div className="flex w-full flex-col items-center gap-3 text-center">
-      <p className="text-2xl font-normal leading-snug text-foreground/90 md:text-4xl">
+      <p className="text-2xl font-normal leading-snug text-foreground/90 drop-shadow-[2px_2px_2px_rgba(0,0,0,1)] md:text-4xl">
         {reducedMotion ? (
           <>
             {headlineTokens.map((token, index) => (
@@ -216,7 +228,7 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
       </p>
 
       <p
-        className="inline-flex min-h-[1.5rem] items-center justify-center text-base leading-none text-muted-foreground md:text-lg"
+        className="inline-flex min-h-[1.5rem] items-center justify-center text-base leading-none text-muted-foreground drop-shadow-[1px_1px_1px_rgba(0,0,0,1)] md:text-lg"
         aria-hidden
       >
         <span>{displayedHint}</span>
@@ -231,9 +243,39 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
   );
 }
 
+/** Safety cap if Motion's onAnimationComplete never fires. */
+const BLOB_DEFER_FALLBACK_MS = 800;
+
 export function ChatGreeting({ visible }: ChatGreetingProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { i18n } = useTranslation();
+  /** Defer WebGL mount until the headline has claimed the main thread. */
+  const [blobReady, setBlobReady] = useState(false);
+  const [wasVisible, setWasVisible] = useState(visible);
+
+  // Reset / arm blob gate when visibility flips (avoid sync setState in effects).
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (!visible) {
+      setBlobReady(false);
+    } else if (reducedMotion) {
+      setBlobReady(true);
+    }
+  }
+
+  const markBlobReady = useCallback(() => {
+    setBlobReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!visible || reducedMotion) {
+      return;
+    }
+    const id = window.setTimeout(() => {
+      setBlobReady(true);
+    }, BLOB_DEFER_FALLBACK_MS);
+    return () => window.clearTimeout(id);
+  }, [visible, reducedMotion]);
 
   return (
     <motion.div
@@ -246,12 +288,13 @@ export function ChatGreeting({ visible }: ChatGreetingProps) {
       transition={{ duration: 0.35, ease: EASE }}
       aria-hidden={!visible}
     >
-      <GreetingBlob active={visible} />
+      <GreetingBlob active={visible && blobReady} />
       {visible ? (
         <div className="relative z-10 w-full">
           <GreetingContent
             key={`greeting-${i18n.language}`}
             reducedMotion={reducedMotion}
+            onHeadlineReady={markBlobReady}
           />
         </div>
       ) : null}
