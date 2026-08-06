@@ -103,7 +103,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 - Sliding-window limits per route; defaults match the security rollout plan (configurable via env — see `rate-limit-config.ts`).
 - **Dual keys** on session-scoped routes: generous per `IP:sessionId` bucket plus a stricter aggregate per-IP bucket (blocks session-rotation bots while leaving headroom for a normal single-session user).
 - **Abuse escalation:** repeated limit hits increment an IP strike counter (`RATE_LIMIT_ABUSE_*` env). Higher strikes tighten effective limits (moderate → strict tiers).
-- **429** body: `{ "error": "rate_limit_exceeded" }` with optional `Retry-After`.
+- **429** body: `{ "error": "rate_limit_exceeded", "action"?: "chat"|"voice"|"direct_message", "retry_at"?: "<ISO>" }` with optional `Retry-After`. Chat/voice/DM show a localized modal with countdown (`rate-limit-modal.tsx`).
 - **Local dev:** when Upstash env is missing, limits are skipped (console warning). Production may set `RATE_LIMIT_FAIL_CLOSED=true` to return 503 if Redis is unavailable.
 
 **Env (defaults in parentheses):**

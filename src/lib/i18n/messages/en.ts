@@ -89,6 +89,17 @@ export const en = {
     defaultMessage:
       "Due to high interest, public access to the assistant is temporarily paused.",
   },
+  rateLimit: {
+    title: "Limit reached",
+    bodyChat:
+      "You've reached the chat message limit. You can try again in {{time}}.",
+    bodyVoice:
+      "You've reached the voice message limit. You can try again in {{time}}.",
+    bodyDirectMessage:
+      "You've reached the private message limit. You can try again in {{time}}.",
+    tryAgainNow: "You can try again now.",
+    understand: "I understand",
+  },
   turnstile: {
     verifyNew: "We need to verify you are human to continue.",
     verifyExpired:
@@ -182,7 +193,6 @@ export const en = {
     message: "Message",
     placeholder: "Write your message…",
     sent: "Private message sent.",
-    rateLimited: "Too many messages. Please try again later.",
     sendFailed: "Could not send the message.",
     cancelled: "Message cancelled.",
     cancelFailed: "Could not cancel the message form.",

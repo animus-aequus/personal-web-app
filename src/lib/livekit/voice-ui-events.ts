@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
+import { useRateLimitStore } from "@/lib/stores/rate-limit-store";
 
 const UI_EVENTS_TOPIC = "ui_events";
 
@@ -39,7 +40,17 @@ type DirectMessagePayload = {
   phoneNumber?: string;
 };
 
-type UiPayload = BookingOtpPayload | MeetingsListPayload | DirectMessagePayload;
+type RateLimitPayload = {
+  type: "rate_limit";
+  action: "voice";
+  retryAt: string;
+};
+
+type UiPayload =
+  | BookingOtpPayload
+  | MeetingsListPayload
+  | DirectMessagePayload
+  | RateLimitPayload;
 
 function parseUiEvent(raw: Uint8Array): UiPayload | null {
   try {
@@ -106,6 +117,19 @@ function parseUiEvent(raw: Uint8Array): UiPayload | null {
           typeof data.phoneNumber === "string" ? data.phoneNumber : undefined,
       };
     }
+    if (data.type === "rate_limit") {
+      if (
+        data.action !== "voice" ||
+        typeof data.retryAt !== "string"
+      ) {
+        return null;
+      }
+      return {
+        type: "rate_limit",
+        action: "voice",
+        retryAt: data.retryAt,
+      };
+    }
     return null;
   } catch {
     return null;
@@ -117,6 +141,7 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
   const setFromPayload = useBookingOtpStore((s) => s.setFromPayload);
   const setActiveList = useMeetingsListStore((s) => s.setActiveList);
   const setDirectMessage = useDirectMessageStore((s) => s.setFromPayload);
+  const showRateLimit = useRateLimitStore((s) => s.show);
 
   useEffect(() => {
     const room = session.room;
@@ -155,6 +180,13 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
         });
         return;
       }
+      if (event.type === "rate_limit") {
+        showRateLimit({
+          action: event.action,
+          retryAt: event.retryAt,
+        });
+        return;
+      }
       setActiveList(event.listId, event.meetings);
     };
 
@@ -162,5 +194,5 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
     return () => {
       room.off(RoomEvent.DataReceived, onDataReceived);
     };
-  }, [session.room, setFromPayload, setActiveList, setDirectMessage]);
+  }, [session.room, setFromPayload, setActiveList, setDirectMessage, showRateLimit]);
 }

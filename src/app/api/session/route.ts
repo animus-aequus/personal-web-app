@@ -21,11 +21,6 @@ export async function PATCH(request: Request) {
     return paused;
   }
 
-  const rateLimited = await enforceRateLimit(request, RateLimitRoute.Session);
-  if (rateLimited) {
-    return rateLimited;
-  }
-
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;

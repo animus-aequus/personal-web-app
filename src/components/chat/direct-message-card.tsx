@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { appendSystemNote, type OnSystemNote } from "@/lib/chat/append-system-note";
 import type { SystemNoteInfo } from "@/lib/agent-client";
+import { handleRateLimitResponse } from "@/lib/rate-limit-client";
 import {
   useDirectMessageStore,
   type DirectMessageState,
@@ -114,7 +115,8 @@ function DirectMessageCardInner({
         return;
       }
       if (response.status === 429) {
-        showBookingOtpErrorToast(t("directMessage.rateLimited"));
+        await handleRateLimitResponse(response, "direct_message");
+        return;
       } else {
         showBookingOtpErrorToast(t("directMessage.sendFailed"));
       }

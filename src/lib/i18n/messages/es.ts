@@ -89,6 +89,17 @@ export const es = {
     defaultMessage:
       "Debido al gran interés, el acceso público al asistente está temporalmente en pausa.",
   },
+  rateLimit: {
+    title: "Límite alcanzado",
+    bodyChat:
+      "Has alcanzado el límite de mensajes del chat. Puedes intentarlo de nuevo en {{time}}.",
+    bodyVoice:
+      "Has alcanzado el límite de mensajes de voz. Puedes intentarlo de nuevo en {{time}}.",
+    bodyDirectMessage:
+      "Has alcanzado el límite de mensajes privados. Puedes intentarlo de nuevo en {{time}}.",
+    tryAgainNow: "Ya puedes intentarlo de nuevo.",
+    understand: "Entendido",
+  },
   turnstile: {
     verifyNew: "Necesitamos verificar que eres humano para continuar.",
     verifyExpired:
@@ -182,7 +193,6 @@ export const es = {
     message: "Mensaje",
     placeholder: "Escribe tu mensaje…",
     sent: "Mensaje privado enviado.",
-    rateLimited: "Demasiados mensajes. Inténtalo más tarde.",
     sendFailed: "No se pudo enviar el mensaje.",
     cancelled: "Mensaje cancelado.",
     cancelFailed: "No se pudo cancelar el formulario de mensaje.",

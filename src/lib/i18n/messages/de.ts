@@ -89,6 +89,17 @@ export const de = {
     defaultMessage:
       "Aufgrund des großen Interesses ist der öffentliche Zugang zum Assistenten vorübergehend pausiert.",
   },
+  rateLimit: {
+    title: "Limit erreicht",
+    bodyChat:
+      "Du hast das Nachrichtenlimit im Chat erreicht. Versuche es in {{time}} erneut.",
+    bodyVoice:
+      "Du hast das Sprachnachrichtenlimit erreicht. Versuche es in {{time}} erneut.",
+    bodyDirectMessage:
+      "Du hast das Limit für private Nachrichten erreicht. Versuche es in {{time}} erneut.",
+    tryAgainNow: "Du kannst es jetzt erneut versuchen.",
+    understand: "Verstanden",
+  },
   turnstile: {
     verifyNew: "Wir müssen verifizieren, dass du ein Mensch bist, um fortzufahren.",
     verifyExpired:
@@ -182,7 +193,6 @@ export const de = {
     message: "Nachricht",
     placeholder: "Schreibe deine Nachricht…",
     sent: "Private Nachricht gesendet.",
-    rateLimited: "Zu viele Nachrichten. Bitte versuche es später erneut.",
     sendFailed: "Nachricht konnte nicht gesendet werden.",
     cancelled: "Nachricht abgebrochen.",
     cancelFailed: "Nachrichtenformular konnte nicht abgebrochen werden.",

@@ -14,12 +14,27 @@ import {
   type RateLimitConfig,
 } from "@/lib/rate-limit-config";
 
+export type RateLimitAction = "chat" | "voice" | "direct_message";
+
 export type RateLimitCheckResult = {
   allowed: boolean;
   retryAfterSeconds?: number;
 };
 
 export { AbuseTier, RateLimitRoute, RateLimitScope } from "@/lib/rate-limit-config";
+
+function actionForRoute(route: RateLimitRoute): RateLimitAction | undefined {
+  switch (route) {
+    case RateLimitRoute.Chat:
+      return "chat";
+    case RateLimitRoute.DirectMessage:
+      return "direct_message";
+    case RateLimitRoute.Livekit:
+      return "voice";
+    default:
+      return undefined;
+  }
+}
 
 let cachedConfig: RateLimitConfig | undefined;
 let cachedRedis: Redis | undefined;
@@ -265,16 +280,37 @@ async function checkRouteLimits(
   return { allowed: true };
 }
 
-function rateLimitResponse(retryAfterSeconds?: number): NextResponse {
+export function rateLimitResponse(
+  retryAfterSeconds?: number,
+  action?: RateLimitAction,
+  retryAt?: string,
+): NextResponse {
   const headers: Record<string, string> = {};
-  if (retryAfterSeconds !== undefined) {
+  const body: {
+    error: string;
+    action?: RateLimitAction;
+    retry_at?: string;
+  } = { error: "rate_limit_exceeded" };
+
+  if (retryAt !== undefined) {
+    body.retry_at = retryAt;
+    const remainingMs = new Date(retryAt).getTime() - Date.now();
+    if (remainingMs > 0) {
+      headers["Retry-After"] = String(Math.max(1, Math.ceil(remainingMs / 1000)));
+    } else if (retryAfterSeconds !== undefined) {
+      headers["Retry-After"] = String(retryAfterSeconds);
+    }
+  } else if (retryAfterSeconds !== undefined) {
     headers["Retry-After"] = String(retryAfterSeconds);
+    body.retry_at = new Date(
+      Date.now() + retryAfterSeconds * 1000,
+    ).toISOString();
+  }
+  if (action !== undefined) {
+    body.action = action;
   }
 
-  return NextResponse.json(
-    { error: "rate_limit_exceeded" },
-    { status: 429, headers },
-  );
+  return NextResponse.json(body, { status: 429, headers });
 }
 
 function warnMissingUpstashOnce(): void {
@@ -323,7 +359,7 @@ export async function enforceRateLimit(
   );
 
   if (!result.allowed) {
-    return rateLimitResponse(result.retryAfterSeconds);
+    return rateLimitResponse(result.retryAfterSeconds, actionForRoute(route));
   }
 
   return null;

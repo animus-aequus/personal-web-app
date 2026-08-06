@@ -2,9 +2,9 @@ import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } 
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { streamAgentChat } from "@/lib/agent-client";
+import { openAgentChatStream, RateLimitExceededError, streamAgentChatFromResponse } from "@/lib/agent-client";
 import { enforcePublicAccess } from "@/lib/public-access";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { enforceRateLimit, getClientIp, RateLimitRoute, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -66,15 +66,31 @@ export async function POST(request: Request) {
       return missingSessionSecretResponse();
     }
 
+    const agentOptions = {
+      clientIp: getClientIp(request),
+      sessionSecret,
+    };
+
+    let agentResponse: Response;
+    try {
+      agentResponse = await openAgentChatStream(sessionId, userText, agentOptions);
+    } catch (error) {
+      if (error instanceof RateLimitExceededError) {
+        return rateLimitResponse(
+          error.retryAfterSeconds,
+          error.action,
+          error.retryAt,
+        );
+      }
+      throw error;
+    }
+
     const stream = createUIMessageStream({
       execute: async ({ writer }) => {
         const textId = "assistant-text";
         writer.write({ type: "text-start", id: textId });
         try {
-          for await (const event of streamAgentChat(sessionId, userText, {
-            clientIp: getClientIp(request),
-            sessionSecret,
-          })) {
+          for await (const event of streamAgentChatFromResponse(agentResponse)) {
             if (event.type === "delta") {
               if (event.text) {
                 writer.write({ type: "text-delta", id: textId, delta: event.text });

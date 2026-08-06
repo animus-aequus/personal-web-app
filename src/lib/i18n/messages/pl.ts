@@ -89,6 +89,17 @@ export const pl = {
     defaultMessage:
       "Ze względu na duże zainteresowanie publiczny dostęp do asystenta jest tymczasowo wstrzymany.",
   },
+  rateLimit: {
+    title: "Osiągnięto limit",
+    bodyChat:
+      "Osiągnąłeś limit wiadomości na czacie. Spróbuj ponownie za {{time}}.",
+    bodyVoice:
+      "Osiągnąłeś limit wiadomości głosowych. Spróbuj ponownie za {{time}}.",
+    bodyDirectMessage:
+      "Osiągnąłeś limit prywatnych wiadomości. Spróbuj ponownie za {{time}}.",
+    tryAgainNow: "Możesz spróbować ponownie już teraz.",
+    understand: "Rozumiem",
+  },
   turnstile: {
     verifyNew: "Musimy zweryfikować, że jesteś człowiekiem, aby kontynuować.",
     verifyExpired:
@@ -182,7 +193,6 @@ export const pl = {
     message: "Wiadomość",
     placeholder: "Napisz wiadomość…",
     sent: "Prywatna wiadomość wysłana.",
-    rateLimited: "Zbyt wiele wiadomości. Spróbuj ponownie później.",
     sendFailed: "Nie udało się wysłać wiadomości.",
     cancelled: "Wiadomość anulowana.",
     cancelFailed: "Nie udało się anulować formularza wiadomości.",

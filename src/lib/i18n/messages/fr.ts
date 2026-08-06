@@ -89,6 +89,17 @@ export const fr = {
     defaultMessage:
       "En raison d'un fort intérêt, l'accès public à l'assistant est temporairement suspendu.",
   },
+  rateLimit: {
+    title: "Limite atteinte",
+    bodyChat:
+      "Vous avez atteint la limite de messages du chat. Réessayez dans {{time}}.",
+    bodyVoice:
+      "Vous avez atteint la limite de messages vocaux. Réessayez dans {{time}}.",
+    bodyDirectMessage:
+      "Vous avez atteint la limite de messages privés. Réessayez dans {{time}}.",
+    tryAgainNow: "Vous pouvez réessayer maintenant.",
+    understand: "J'ai compris",
+  },
   turnstile: {
     verifyNew: "Nous devons vérifier que vous êtes humain pour continuer.",
     verifyExpired:
@@ -182,7 +193,6 @@ export const fr = {
     message: "Message",
     placeholder: "Écrivez votre message…",
     sent: "Message privé envoyé.",
-    rateLimited: "Trop de messages. Réessayez plus tard.",
     sendFailed: "Impossible d'envoyer le message.",
     cancelled: "Message annulé.",
     cancelFailed: "Impossible d'annuler le formulaire de message.",

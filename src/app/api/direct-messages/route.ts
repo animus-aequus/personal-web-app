@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { sendDirectMessage } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { sendDirectMessage, RateLimitExceededError } from "@/lib/agent-client";
+import { enforceRateLimit, getClientIp, RateLimitRoute, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -73,11 +73,16 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message = error instanceof Error ? error.message : "Send failed";
     let status = 500;
-    if (message.includes("(429)")) {
-      status = 429;
-    } else if (message.includes("(422)")) {
+    if (message.includes("(422)")) {
       status = 422;
     } else if (message.includes("(401)")) {
       status = 401;

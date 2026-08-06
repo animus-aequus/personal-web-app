@@ -20,12 +20,14 @@ import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { PublicPauseModal } from "@/components/chat/public-pause-modal";
+import { RateLimitModal } from "@/components/chat/rate-limit-modal";
 import { Button } from "@/components/ui/button";
 import { AgentAura } from "@/components/visualizer/agent-aura";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
 import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
+import { handleRateLimitResponse } from "@/lib/rate-limit-client";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
@@ -207,6 +209,10 @@ function TextChatArea({
         });
 
         if (!response.ok) {
+          if (response.status === 429) {
+            await handleRateLimitResponse(response, "voice");
+            throw new Error("rate_limit_exceeded");
+          }
           const payload = (await response.json().catch(() => ({}))) as {
             error?: string;
           };
@@ -252,6 +258,10 @@ function TextChatArea({
         if (cancelled) {
           return;
         }
+        if (error instanceof Error && error.message === "rate_limit_exceeded") {
+          onVoiceDisconnect();
+          return;
+        }
         console.error("LiveKit session failed to start", error);
         void refreshPublicPauseState();
         onVoiceDisconnect();
@@ -270,6 +280,14 @@ function TextChatArea({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          if (response.status === 429) {
+            await handleRateLimitResponse(response, "chat");
+            throw new Error("rate_limit_exceeded");
+          }
+          return response;
+        },
         prepareSendMessagesRequest: ({
           body,
           messages,
@@ -299,6 +317,9 @@ function TextChatArea({
     id: sessionId,
     transport,
     onError: (error) => {
+      if (error.message === "rate_limit_exceeded") {
+        return;
+      }
       console.error("Chat turn failed", error);
       void refreshPublicPauseState();
     },
@@ -595,6 +616,8 @@ function TextChatArea({
         {paused && !pauseDismissed ? (
           <PublicPauseModal message={pauseMessage} onAcknowledge={dismissPause} />
         ) : null}
+
+        <RateLimitModal />
 
         <BookingSuccessDialog />
       </div>

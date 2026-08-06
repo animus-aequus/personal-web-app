@@ -30,6 +30,24 @@ Base path: `/api/v1` on the agent API host.
 
 Auth: optional header `X-API-Key` when `WEB_API_KEY` is set on both sides.
 
+### Rate limit (`429`)
+
+When a route is rate-limited, the agent API and BFF return **429** with:
+
+```json
+{
+  "error": "rate_limit_exceeded",
+  "action": "chat",
+  "retry_at": "2026-08-05T01:23:45.000Z"
+}
+```
+
+- `action`: `chat` | `voice` | `direct_message` (set by the route/channel, not inferred from Redis).
+- `retry_at`: UTC ISO timestamp when the sliding window allows another attempt (derived from the same Upstash `limit()` deny — no extra Redis round-trip).
+- `Retry-After` header: seconds until retry (compatibility).
+
+The UI shows a localized dialog with countdown for chat, voice, and direct message. Voice publishes `ui_events` `{ "type": "rate_limit", "action": "voice", "retryAt": "…" }` when a turn is denied before TTS or graph — no `chat_sync` rows and no `reply_stream` call.
+
 **Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
 
 ### `GET /config` and `POST /admin/pause` (public access guard)
@@ -198,6 +216,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 { "type": "booking_otp", "bookingId": "…", "emailMasked": "…", "expiresAt": "…", "attemptsLeft": 5 }
 { "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30, "meetUrl": "…", "htmlLink": "…" } ] }
 { "type": "direct_message", "formId": "…", "name": "…", "email": "…", "phoneNumber": "…" }
+{ "type": "rate_limit", "action": "voice", "retryAt": "2026-08-05T01:23:45.000Z" }
 ```
 
 `interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.

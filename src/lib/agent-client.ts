@@ -1,9 +1,13 @@
+import { parseRateLimitFromResponse } from "@/lib/rate-limit-client";
+
 const AGENT_API_BASE_URL =
   process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
 const WEB_API_KEY = process.env.WEB_API_KEY ?? "";
 const CF_ACCESS_CLIENT_ID = process.env.CF_ACCESS_CLIENT_ID ?? "";
 const CF_ACCESS_CLIENT_SECRET = process.env.CF_ACCESS_CLIENT_SECRET ?? "";
 const ADMIN_PAUSE_SECRET = process.env.ADMIN_PAUSE_SECRET ?? "";
+
+export { RateLimitExceededError } from "@/lib/rate-limit-client";
 
 export type AgentRequestOptions = {
   clientIp?: string;
@@ -346,13 +350,13 @@ function parseSseData(rawEvent: string): AgentStreamEvent | null {
 }
 
 /**
- * Stream a chat turn from the agent API, yielding SSE events (text deltas + UI).
+ * Open the agent chat stream; throws RateLimitExceededError on 429.
  */
-export async function* streamAgentChat(
+export async function openAgentChatStream(
   sessionId: string,
   message: string,
   options?: AgentRequestOptions,
-): AsyncGenerator<AgentStreamEvent, void, unknown> {
+): Promise<Response> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/chat/stream`, {
     method: "POST",
     headers: agentHeaders(options),
@@ -360,12 +364,23 @@ export async function* streamAgentChat(
     cache: "no-store",
   });
 
+  const rateLimit = await parseRateLimitFromResponse(response, "chat");
+  if (rateLimit) {
+    throw rateLimit;
+  }
+
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
     throw new Error(`Chat stream failed (${response.status}): ${detail}`);
   }
 
-  const reader = response.body.getReader();
+  return response;
+}
+
+async function* streamEventsFromResponse(
+  response: Response,
+): AsyncGenerator<AgentStreamEvent, void, unknown> {
+  const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
@@ -403,6 +418,27 @@ export async function* streamAgentChat(
     }
     reader.releaseLock();
   }
+}
+
+/**
+ * Stream SSE events from an already-open agent chat response.
+ */
+export async function* streamAgentChatFromResponse(
+  response: Response,
+): AsyncGenerator<AgentStreamEvent, void, unknown> {
+  yield* streamEventsFromResponse(response);
+}
+
+/**
+ * Stream a chat turn from the agent API, yielding SSE events (text deltas + UI).
+ */
+export async function* streamAgentChat(
+  sessionId: string,
+  message: string,
+  options?: AgentRequestOptions,
+): AsyncGenerator<AgentStreamEvent, void, unknown> {
+  const response = await openAgentChatStream(sessionId, message, options);
+  yield* streamEventsFromResponse(response);
 }
 
 export type PendingBookingResponse = {
@@ -641,6 +677,10 @@ export async function sendDirectMessage(
     cache: "no-store",
   });
   if (!response.ok) {
+    const rateLimit = await parseRateLimitFromResponse(response, "direct_message");
+    if (rateLimit) {
+      throw rateLimit;
+    }
     const detail = await response.text();
     throw new Error(`Direct message send failed (${response.status}): ${detail}`);
   }
