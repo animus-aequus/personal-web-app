@@ -15,7 +15,7 @@ import {
   type VoiceLanguageCode,
 } from "@/lib/livekit/voice-languages";
 import { enforcePublicAccess } from "@/lib/public-access";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -85,11 +85,6 @@ export async function POST(request: Request) {
       tokenRequest.participantMetadata?.trim() ||
       sessionIdFromRoomName(roomName) ||
       "unknown";
-
-    const rateLimited = await enforceRateLimit(request, RateLimitRoute.Livekit, sessionId);
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     const cookieStore = await cookies();
     const sessionSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;

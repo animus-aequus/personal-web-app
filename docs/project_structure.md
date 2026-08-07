@@ -50,8 +50,9 @@ personal-website/                 # this repo
 | `components/ui/*` | shadcn/ui primitives |
 | `lib/agent-client.ts` | Server-side agent API client |
 | `lib/session-cookie.ts` | httpOnly session secret cookie helpers (E4) |
-| `lib/rate-limit-config.ts` | Env-driven rate limit parameters |
-| `lib/rate-limit.ts` | Upstash rate limiter + abuse escalation |
+| `lib/rate-limit-config.ts` | Edge Upstash IP shield parameters |
+| `lib/rate-limit.ts` | Coarse per-IP limiter + `getClientIp` / 429 helpers |
+| `proxy.ts` | Next.js Proxy: edge rate limit for `/api/*` (excl. public-status, webhooks) |
 | `lib/public-access-config.ts` | Shared pause contract (error code, status path, default copy) |
 | `lib/public-access.ts` | Cached pause status + `enforcePublicAccess()` early reject |
 | `lib/stores/public-pause-store.ts` | Pause state for the UI + `refreshPublicPauseState()` |

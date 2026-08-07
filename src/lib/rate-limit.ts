@@ -3,43 +3,23 @@ import { Redis } from "@upstash/redis";
 import { NextResponse } from "next/server";
 
 import {
-  AbuseTier,
-  RateLimitRoute,
-  RateLimitScope,
-  abuseTierForStrikes,
-  effectiveLimit,
-  ipScopeForRoute,
   loadRateLimitConfig,
-  sessionScopeForRoute,
   type RateLimitConfig,
 } from "@/lib/rate-limit-config";
 
-export type RateLimitAction = "chat" | "voice" | "direct_message";
+export type RateLimitAction = "chat" | "voice" | "direct_message" | "edge";
 
 export type RateLimitCheckResult = {
   allowed: boolean;
   retryAfterSeconds?: number;
 };
 
-export { AbuseTier, RateLimitRoute, RateLimitScope } from "@/lib/rate-limit-config";
-
-function actionForRoute(route: RateLimitRoute): RateLimitAction | undefined {
-  switch (route) {
-    case RateLimitRoute.Chat:
-      return "chat";
-    case RateLimitRoute.DirectMessage:
-      return "direct_message";
-    case RateLimitRoute.Livekit:
-      return "voice";
-    default:
-      return undefined;
-  }
-}
-
 let cachedConfig: RateLimitConfig | undefined;
 let cachedRedis: Redis | undefined;
+let cachedLimiter: Ratelimit | undefined;
 let warnedMissingUpstash = false;
-const limiterCache = new Map<string, Ratelimit>();
+let warnedUpstashError = false;
+const ephemeralCache = new Map();
 
 function getConfig(): RateLimitConfig {
   cachedConfig ??= loadRateLimitConfig();
@@ -57,30 +37,21 @@ function getRedis(config: RateLimitConfig): Redis | null {
   return cachedRedis;
 }
 
-function windowLabel(seconds: number): `${number} s` {
-  return `${seconds} s`;
-}
-
-function getLimiter(
-  redis: Redis,
-  scope: RateLimitScope,
-  limit: number,
-  windowSeconds: number,
-): Ratelimit {
-  const cacheKey = `${scope}:${limit}:${windowSeconds}`;
-  const existing = limiterCache.get(cacheKey);
-  if (existing) {
-    return existing;
+function getEdgeLimiter(redis: Redis, config: RateLimitConfig): Ratelimit {
+  if (cachedLimiter) {
+    return cachedLimiter;
   }
-
-  const limiter = new Ratelimit({
+  cachedLimiter = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(limit, windowLabel(windowSeconds)),
-    prefix: `bff:rl:${scope}`,
+    limiter: Ratelimit.fixedWindow(
+      config.edgePerIp,
+      `${config.windowSeconds} s`,
+    ),
+    prefix: "bff:rl:edge_ip",
     analytics: false,
+    ephemeralCache,
   });
-  limiterCache.set(cacheKey, limiter);
-  return limiter;
+  return cachedLimiter;
 }
 
 export function getClientIp(request: Request): string {
@@ -98,186 +69,6 @@ export function getClientIp(request: Request): string {
   }
 
   return "unknown";
-}
-
-async function getAbuseStrikes(redis: Redis, ip: string): Promise<number> {
-  const value = await redis.get<number>(`bff:abuse:${ip}`);
-  return typeof value === "number" && Number.isFinite(value) ? value : 0;
-}
-
-async function recordAbuseStrike(
-  redis: Redis,
-  ip: string,
-  config: RateLimitConfig,
-): Promise<void> {
-  const key = `bff:abuse:${ip}`;
-  const count = await redis.incr(key);
-  if (count === 1) {
-    await redis.expire(key, config.abuse.strikeWindowSeconds);
-  }
-}
-
-async function consumeLimit(
-  redis: Redis,
-  config: RateLimitConfig,
-  scope: RateLimitScope,
-  identifier: string,
-  baseLimit: number,
-  tier: AbuseTier,
-  windowSeconds?: number,
-): Promise<{ allowed: boolean; retryAfterSeconds?: number }> {
-  const limit = effectiveLimit(baseLimit, tier, config);
-  const limiter = getLimiter(
-    redis,
-    scope,
-    limit,
-    windowSeconds ?? config.windowSeconds,
-  );
-  const result = await limiter.limit(identifier);
-
-  if (!result.success) {
-    const retryAfterSeconds = Math.max(
-      1,
-      Math.ceil((result.reset - Date.now()) / 1000),
-    );
-    return { allowed: false, retryAfterSeconds };
-  }
-
-  return { allowed: true };
-}
-
-async function checkDirectMessageLimits(
-  ip: string,
-  sessionId: string,
-  config: RateLimitConfig,
-  redis: Redis,
-): Promise<RateLimitCheckResult> {
-  const strikes = await getAbuseStrikes(redis, ip);
-  const tier = abuseTierForStrikes(strikes, config);
-  const dm = config.directMessage;
-  const sessionKey = `${ip}:${sessionId}`;
-  const checks: Array<{
-    scope: RateLimitScope;
-    identifier: string;
-    baseLimit: number;
-    windowSeconds: number;
-  }> = [
-    {
-      scope: RateLimitScope.DirectMessageSessionHourly,
-      identifier: sessionKey,
-      baseLimit: dm.perSessionHourly,
-      windowSeconds: dm.hourlyWindowSeconds,
-    },
-    {
-      scope: RateLimitScope.DirectMessageIpHourly,
-      identifier: ip,
-      baseLimit: dm.perIpHourly,
-      windowSeconds: dm.hourlyWindowSeconds,
-    },
-    {
-      scope: RateLimitScope.DirectMessageSessionDaily,
-      identifier: sessionKey,
-      baseLimit: dm.perSessionDaily,
-      windowSeconds: dm.dailyWindowSeconds,
-    },
-    {
-      scope: RateLimitScope.DirectMessageIpDaily,
-      identifier: ip,
-      baseLimit: dm.perIpDaily,
-      windowSeconds: dm.dailyWindowSeconds,
-    },
-  ];
-
-  for (const check of checks) {
-    const outcome = await consumeLimit(
-      redis,
-      config,
-      check.scope,
-      check.identifier,
-      check.baseLimit,
-      tier,
-      check.windowSeconds,
-    );
-    if (!outcome.allowed) {
-      await recordAbuseStrike(redis, ip, config);
-      return outcome;
-    }
-  }
-  return { allowed: true };
-}
-
-async function checkRouteLimits(
-  route: RateLimitRoute,
-  ip: string,
-  sessionId: string | undefined,
-  config: RateLimitConfig,
-  redis: Redis,
-): Promise<RateLimitCheckResult> {
-  if (route === RateLimitRoute.DirectMessage) {
-    if (!sessionId) {
-      return { allowed: false, retryAfterSeconds: 60 };
-    }
-    return checkDirectMessageLimits(ip, sessionId, config, redis);
-  }
-
-  const strikes = await getAbuseStrikes(redis, ip);
-  const tier = abuseTierForStrikes(strikes, config);
-  const routeConfig = config.routes[route];
-
-  const checks: Array<{
-    scope: RateLimitScope;
-    identifier: string;
-    baseLimit: number;
-  }> = [];
-
-  if (route === RateLimitRoute.Session) {
-    checks.push({
-      scope: RateLimitScope.Session,
-      identifier: ip,
-      baseLimit: routeConfig.perSession,
-    });
-  } else if (!sessionId) {
-    const ipScope = ipScopeForRoute(route);
-    if (ipScope !== undefined && routeConfig.perIp !== undefined) {
-      checks.push({
-        scope: ipScope,
-        identifier: ip,
-        baseLimit: routeConfig.perIp,
-      });
-    }
-  } else {
-    checks.push({
-      scope: sessionScopeForRoute(route),
-      identifier: `${ip}:${sessionId}`,
-      baseLimit: routeConfig.perSession,
-    });
-
-    const ipScope = ipScopeForRoute(route);
-    if (ipScope !== undefined && routeConfig.perIp !== undefined) {
-      checks.push({
-        scope: ipScope,
-        identifier: ip,
-        baseLimit: routeConfig.perIp,
-      });
-    }
-  }
-
-  for (const check of checks) {
-    const outcome = await consumeLimit(
-      redis,
-      config,
-      check.scope,
-      check.identifier,
-      check.baseLimit,
-      tier,
-    );
-    if (!outcome.allowed) {
-      await recordAbuseStrike(redis, ip, config);
-      return outcome;
-    }
-  }
-
-  return { allowed: true };
 }
 
 export function rateLimitResponse(
@@ -319,17 +110,28 @@ function warnMissingUpstashOnce(): void {
   }
   warnedMissingUpstash = true;
   console.warn(
-    "[rate-limit] Upstash Redis is not configured; rate limiting is disabled for local dev.",
+    "[rate-limit] Upstash Redis is not configured; edge rate limiting is disabled (fail-open).",
+  );
+}
+
+function warnUpstashErrorOnce(error: unknown): void {
+  if (warnedUpstashError) {
+    return;
+  }
+  warnedUpstashError = true;
+  console.warn(
+    "[rate-limit] Upstash edge check failed; failing open so requests reach the agent.",
+    error,
   );
 }
 
 /**
- * Returns a 429 response when limited, otherwise null (request may proceed).
+ * Coarse per-IP edge shield. Returns a 429 only when Upstash successfully
+ * reports the visitor exceeded RATE_LIMIT_EDGE_PER_IP. Infrastructure errors
+ * (missing Redis, timeouts, account quota) always fail open.
  */
-export async function enforceRateLimit(
+export async function enforceEdgeRateLimit(
   request: Request,
-  route: RateLimitRoute,
-  sessionId?: string | null,
 ): Promise<NextResponse | null> {
   const config = getConfig();
   if (!config.enabled) {
@@ -339,28 +141,23 @@ export async function enforceRateLimit(
   const redis = getRedis(config);
   if (!redis) {
     warnMissingUpstashOnce();
-    if (config.failClosed && process.env.NODE_ENV === "production") {
-      return NextResponse.json(
-        { error: "rate_limit_unavailable" },
-        { status: 503 },
-      );
-    }
     return null;
   }
 
-  const ip = getClientIp(request);
-  const normalizedSessionId = sessionId?.trim() || undefined;
-  const result = await checkRouteLimits(
-    route,
-    ip,
-    normalizedSessionId,
-    config,
-    redis,
-  );
-
-  if (!result.allowed) {
-    return rateLimitResponse(result.retryAfterSeconds, actionForRoute(route));
+  try {
+    const limiter = getEdgeLimiter(redis, config);
+    const ip = getClientIp(request);
+    const result = await limiter.limit(ip);
+    if (!result.success) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil((result.reset - Date.now()) / 1000),
+      );
+      return rateLimitResponse(retryAfterSeconds, "edge");
+    }
+    return null;
+  } catch (error) {
+    warnUpstashErrorOnce(error);
+    return null;
   }
-
-  return null;
 }

@@ -28,6 +28,8 @@ function getBodyText(
       return t("rateLimit.bodyVoice", { time: remaining });
     case "direct_message":
       return t("rateLimit.bodyDirectMessage", { time: remaining });
+    case "edge":
+      return t("rateLimit.bodyEdge", { time: remaining });
     default:
       return t("rateLimit.bodyChat", { time: remaining });
   }

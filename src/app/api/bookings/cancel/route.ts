@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { cancelBooking } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { cancelBooking, RateLimitExceededError } from "@/lib/agent-client";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -24,15 +24,6 @@ export async function POST(request: Request) {
     const bookingId = body.bookingId ?? body.booking_id;
     const sessionId = body.sessionId ?? body.session_id;
 
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.Booking,
-      sessionId,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
-
     if (!bookingId) {
       return NextResponse.json({ error: "bookingId is required" }, { status: 400 });
     }
@@ -51,6 +42,13 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message = error instanceof Error ? error.message : "Cancel failed";
     let status = 500;
     if (message.includes("(409)")) {

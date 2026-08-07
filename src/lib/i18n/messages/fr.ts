@@ -97,6 +97,8 @@ export const fr = {
       "Vous avez atteint la limite de messages vocaux. Réessayez dans {{time}}.",
     bodyDirectMessage:
       "Vous avez atteint la limite de messages privés. Réessayez dans {{time}}.",
+    bodyEdge:
+      "Trop de requêtes depuis votre réseau. Réessayez dans {{time}}.",
     tryAgainNow: "Vous pouvez réessayer maintenant.",
     understand: "J'ai compris",
   },

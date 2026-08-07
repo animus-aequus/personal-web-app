@@ -14,6 +14,7 @@ import {
   showBookingOtpErrorToast,
   showBookingOtpSuccessToast,
 } from "@/lib/chat/booking-otp-toast";
+import { handleRateLimitResponse } from "@/lib/rate-limit-client";
 import { cn } from "@/lib/utils";
 import { appendSystemNote, type OnSystemNote } from "@/lib/chat/append-system-note";
 import type { SystemNoteInfo } from "@/lib/agent-client";
@@ -124,6 +125,10 @@ function BookingCancelOtpCardInner({
         finishSuccess();
         return;
       }
+      if (response.status === 429) {
+        await handleRateLimitResponse(response, "chat");
+        return;
+      }
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
@@ -166,6 +171,10 @@ function BookingCancelOtpCardInner({
         };
         appendSystemNote(onNote, data.note);
         finishSuccess(t("cancellation.aborted"));
+        return;
+      }
+      if (response.status === 429) {
+        await handleRateLimitResponse(response, "chat");
         return;
       }
       finishError(t("cancellation.abortFailed"));

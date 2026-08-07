@@ -97,6 +97,8 @@ export const pl = {
       "Osiągnąłeś limit wiadomości głosowych. Spróbuj ponownie za {{time}}.",
     bodyDirectMessage:
       "Osiągnąłeś limit prywatnych wiadomości. Spróbuj ponownie za {{time}}.",
+    bodyEdge:
+      "Zbyt wiele żądań z Twojej sieci. Spróbuj ponownie za {{time}}.",
     tryAgainNow: "Możesz spróbować ponownie już teraz.",
     understand: "Rozumiem",
   },

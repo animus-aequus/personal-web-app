@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { cancelDirectMessage } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { cancelDirectMessage, RateLimitExceededError } from "@/lib/agent-client";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -23,15 +23,6 @@ export async function POST(request: Request) {
     const body = (await request.json()) as CancelBody;
     const sessionId = body.sessionId ?? body.session_id;
     const formId = body.formId ?? body.form_id;
-
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.Booking,
-      sessionId,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     if (!sessionId || !formId) {
       return NextResponse.json(
@@ -57,11 +48,16 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message = error instanceof Error ? error.message : "Cancel failed";
     let status = 500;
-    if (message.includes("(429)")) {
-      status = 429;
-    } else if (message.includes("(422)")) {
+    if (message.includes("(422)")) {
       status = 422;
     } else if (message.includes("(401)")) {
       status = 401;

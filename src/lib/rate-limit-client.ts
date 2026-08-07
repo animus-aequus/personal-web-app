@@ -49,7 +49,8 @@ function normalizeRateLimitPayload(
   const action =
     record.action === "chat" ||
     record.action === "voice" ||
-    record.action === "direct_message"
+    record.action === "direct_message" ||
+    record.action === "edge"
       ? record.action
       : undefined;
   const retryAt =

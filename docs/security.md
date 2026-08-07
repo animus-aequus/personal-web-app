@@ -40,7 +40,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | `WEB_API_KEY` proxied to agent API (server-only) | Implemented |
 | Cloudflare Access service token (`CF-Access-Client-*`) on agent calls | Implemented (env optional; required when Access protects `api.*`) |
 | LiveKit JWT minting (server-only secrets) | Implemented |
-| Rate limiting on Route Handlers | Implemented (Upstash; see below) |
+| Rate limiting on Route Handlers | Implemented (Upstash edge IP shield; see below) |
 | Turnstile | Implemented (`POST /api/session` only; chat/voice rely on session + RL) |
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel / pending proxy routes | **Done** (E7) |
@@ -53,38 +53,38 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 0 | Doc scaffold | **Done** |
-| 1 | Rate limiting (`/api/session`, `/api/chat`, `/api/session/messages`, `/api/livekit/token`) | **Done** |
+| 1 | Coarse edge rate limiting (per-IP Upstash via `proxy.ts`) | **Done** |
 | 3 | Turnstile on session create (chat/voice use session binding + rate limits) | **Done** |
 | 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
 | 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
-| — | Direct message GenUI proxies + dual-window RL | **Done** |
+| — | Direct message GenUI proxies (agent dual-window RL) | **Done** |
 | — | Public access cost guard (early reject, `/api/public-status`, LangSmith webhook) | **Done** |
 | — | Clerk (optional) | Future |
 
-Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice turn RL + shared 60 messages/session/hour across text+voice) is agent-enforced; BFF chat RL stays edge-only and does **not** duplicate the shared `SESSION_MESSAGE` budget.
+Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting on **Postgres**) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice + shared text/voice message budget on `web_sessions`) is agent-enforced; BFF Upstash is a coarse per-IP edge shield only and does **not** duplicate session quotas.
 
 ---
 
 ## Route Handler requirements (target)
 
-| Route | Rate limit (E1) | Turnstile (E3) | Session secret (E4) |
-|-------|-----------------|----------------|---------------------|
-| `POST /api/session` | yes (after pause check) | yes | sets cookie |
-| `POST /api/chat` | yes (after pause check) | — | required |
-| `GET /api/session/messages` | yes | — | required |
-| `POST /api/livekit/token` | yes (after pause check) | — | required |
-| `POST /api/bookings/confirm` | yes | — | required |
-| `POST /api/bookings/cancel` | yes | — | required |
-| `GET /api/bookings/pending` | yes | — | required |
-| `POST /api/bookings/cancel-request` | yes | — | required |
-| `POST /api/cancellations/confirm` | yes | — | required |
-| `POST /api/cancellations/abort` | yes | — | required |
-| `GET /api/cancellations/pending` | yes | — | required |
-| `POST /api/direct-messages` | yes (3/h + 6/24h) | — | required |
-| `POST /api/direct-messages/cancel` | yes | — | required |
-| `GET /api/public-status` | — | — | — |
-| `POST /api/webhooks/langsmith` | — | — | `X-Webhook-Secret` |
+| Route | Edge IP RL (E1) | Turnstile (E3) | Session secret (E4) | Precise RL (agent) |
+|-------|-----------------|----------------|---------------------|--------------------|
+| `POST /api/session` | yes (via proxy) | yes | sets cookie | session create per IP |
+| `POST /api/chat` | yes | — | required | shared message budget |
+| `GET /api/session/messages` | yes | — | required | — (auth + edge only) |
+| `POST /api/livekit/token` | yes | — | required | — (voice turns on agent) |
+| `POST /api/bookings/confirm` | yes | — | required | action budget |
+| `POST /api/bookings/cancel` | yes | — | required | action budget |
+| `GET /api/bookings/pending` | yes | — | required | — |
+| `POST /api/bookings/cancel-request` | yes | — | required | action budget |
+| `POST /api/cancellations/confirm` | yes | — | required | action budget |
+| `POST /api/cancellations/abort` | yes | — | required | action budget |
+| `GET /api/cancellations/pending` | yes | — | required | — |
+| `POST /api/direct-messages` | yes | — | required | dual-window DM |
+| `POST /api/direct-messages/cancel` | yes | — | required | action budget |
+| `GET /api/public-status` | — | — | — | — |
+| `POST /api/webhooks/langsmith` | — | — | `X-Webhook-Secret` | — |
 
 ---
 
@@ -92,38 +92,29 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Phase 1 — BFF rate limiting
 
-**Modules:** `src/lib/rate-limit-config.ts`, `src/lib/rate-limit.ts`
+**Modules:** `src/proxy.ts`, `src/lib/rate-limit-config.ts`, `src/lib/rate-limit.ts`
 
-**Routes:** `POST /api/session`, `POST /api/chat`, `GET /api/session/messages`, `POST /api/livekit/token`
+**Scope:** all `/api/*` except `/api/public-status` and `/api/webhooks/*` (Next.js Proxy matcher).
 
-**Store:** Upstash Redis (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`). Shared with agent API in phase 2.
+**Store:** Upstash Redis (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`) — **BFF only**. Precise session quotas live on the agent in Postgres.
 
 **Behaviour:**
 
-- Sliding-window limits per route; defaults match the security rollout plan (configurable via env — see `rate-limit-config.ts`).
-- **Dual keys** on session-scoped routes: generous per `IP:sessionId` bucket plus a stricter aggregate per-IP bucket (blocks session-rotation bots while leaving headroom for a normal single-session user).
-- **Abuse escalation:** repeated limit hits increment an IP strike counter (`RATE_LIMIT_ABUSE_*` env). Higher strikes tighten effective limits (moderate → strict tiers).
-- **429** body: `{ "error": "rate_limit_exceeded", "action"?: "chat"|"voice"|"direct_message", "retry_at"?: "<ISO>" }` with optional `Retry-After`. Chat/voice/DM show a localized modal with countdown (`rate-limit-modal.tsx`).
-- **Local dev:** when Upstash env is missing, limits are skipped (console warning). Production may set `RATE_LIMIT_FAIL_CLOSED=true` to return 503 if Redis is unavailable.
+- One **fixed-window** bucket per client IP (`RATE_LIMIT_EDGE_PER_IP`, default 120/h).
+- `ephemeralCache` so repeated denials cost zero Redis commands.
+- **429** body matches the agent shape: `{ "error": "rate_limit_exceeded", "action"?: "edge", "retry_at"?: "<ISO>" }` with optional `Retry-After`. Edge IP exhaustion uses `action: "edge"` (distinct from session chat/voice/DM limits on the agent).
+- **Fail-open** on Upstash infra/account errors (missing env, timeout, 5xx, account quota / SDK exception): request continues to Route Handlers; Postgres on the agent still enforces precise limits. Do **not** use fail-closed 503 for edge Upstash on the BFF.
 
 **Env (defaults in parentheses):**
 
 | Variable | Purpose |
 |----------|---------|
 | `RATE_LIMIT_ENABLED` | Master switch (auto: on when Upstash configured) |
-| `RATE_LIMIT_FAIL_CLOSED` | 503 when Redis missing in production (default `true` in prod) |
-| `RATE_LIMIT_WINDOW_SECONDS` | Window for all route buckets (3600) |
-| `RATE_LIMIT_SESSION_PER_IP` | Session create (10) |
-| `RATE_LIMIT_CHAT_PER_SESSION` / `_PER_IP` | Chat (60 / 120) |
-| `RATE_LIMIT_MESSAGES_PER_SESSION` / `_PER_IP` | History (120 / 240) |
-| `RATE_LIMIT_LIVEKIT_PER_SESSION` / `_PER_IP` | Voice token (20 / 40) |
-| `RATE_LIMIT_BOOKING_PER_SESSION` / `_PER_IP` | Booking pending/cancel (30 / 60) |
-| `RATE_LIMIT_BOOKING_CONFIRM_PER_SESSION` / `_PER_IP` | Booking confirm (20 / 40) |
-| `RATE_LIMIT_ABUSE_STRIKE_WINDOW_SECONDS` | Strike TTL (86400) |
-| `RATE_LIMIT_ABUSE_STRIKES_MODERATE` / `_STRICT` | Tier thresholds (2 / 5) |
-| `RATE_LIMIT_ABUSE_MODERATE_FACTOR` / `_STRICT_FACTOR` | Limit multipliers (0.5 / 0.25) |
+| `RATE_LIMIT_EDGE_PER_IP` | Coarse IP shield (120) |
+| `RATE_LIMIT_WINDOW_SECONDS` | Fixed window (3600) |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Upstash REST (Vercel only) |
 
-**Agent API (phase 2):** BFF forwards client IP as `X-Forwarded-For` on all agent REST calls (`agent-client.ts`) so Fargate rate limits apply per visitor.
+**Agent API (phase 2):** BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-client.ts`) for session-create-per-IP hashing on the agent.
 
 ### Phase 3 — Cloudflare Turnstile
 
@@ -170,7 +161,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **Modules:** `src/app/api/bookings/confirm/route.ts`, `cancel/route.ts`, `pending/route.ts`, `src/lib/agent-client.ts` (confirm/cancel/pending + SSE `ui`), `src/lib/stores/booking-otp-store.ts`, `src/components/chat/booking-otp-card.tsx`
 
-**Routes:** thin proxies forwarding `X-Session-Secret` + client IP; rate limits `Booking` / `BookingConfirm`.
+**Routes:** thin proxies forwarding `X-Session-Secret` + client IP; precise booking RL is on the agent (Postgres action budget).
 
 **UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; rehydrated via `GET /api/bookings/pending` on bootstrap. LiveKit topic `ui_events`.
 
@@ -182,19 +173,19 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Direct message GenUI
 
-**Modules:** `direct-message-card.tsx`, `direct-message-store.ts`, `direct-message-validation.ts`, BFF `/api/direct-messages`, `/api/direct-messages/cancel`, `agent-client` send/cancel, dual-window scopes in `rate-limit-config.ts` / `rate-limit.ts`
+**Modules:** `direct-message-card.tsx`, `direct-message-store.ts`, `direct-message-validation.ts`, BFF `/api/direct-messages`, `/api/direct-messages/cancel`, `agent-client` send/cancel
 
 **Behaviour:**
 
 - Tool `open_direct_message_form` opens an ephemeral form (SSE `ui`/`direct_message` → `data-direct-message`, LiveKit `ui_events`). Not stored in history `parts`; no pending rehydrate.
-- Send: FE+BE validation → dual-window rate limit (3/h and 6/24h, session + IP) → agent Telegram notify + `direct_messages` insert → system-note with name/email/message.
-- Cancel: light `Booking` rate limit → agent system-note only (`Private message cancelled`).
+- Send: FE+BE validation → agent dual-window DM limit (row counts on `direct_messages`) → Telegram notify + insert → system-note with name/email/message.
+- Cancel: agent action budget → system-note only (`Private message cancelled`).
 
 ### Public access cost guard (early reject + LangSmith webhook)
 
 **Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`
 
-**Early reject:** `enforcePublicAccess()` runs as the **first** statement of `POST /api/session`, `POST /api/chat` and `POST /api/livekit/token` — before `enforceRateLimit`, so a paused assistant burns no Upstash commands and no Turnstile verification. Response: **503** `{ "error": "assistant_paused", "message": … }`. Pause state comes from agent `GET /api/v1/config`, cached in-module for **15 s** (failures cached too). Read failures **fail open** — the agent's own turn guard is the hard cap.
+**Early reject:** `enforcePublicAccess()` runs as the **first** statement of `POST /api/session`, `POST /api/chat` and `POST /api/livekit/token` — before Turnstile / agent proxy work. Edge Upstash may still run in `proxy.ts` before the handler; a paused assistant still avoids agent/LLM cost. Response: **503** `{ "error": "assistant_paused", "message": … }`. Pause state comes from agent `GET /api/v1/config`, cached in-module for **15 s** (failures cached too). Read failures **fail open** — the agent's own turn guard is the hard cap.
 
 Booking / cancellation / direct-message routes are intentionally **not** guarded: they make no LLM call, and blocking them would trap a visitor mid-OTP.
 

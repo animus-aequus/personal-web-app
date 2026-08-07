@@ -97,6 +97,8 @@ export const en = {
       "You've reached the voice message limit. You can try again in {{time}}.",
     bodyDirectMessage:
       "You've reached the private message limit. You can try again in {{time}}.",
+    bodyEdge:
+      "Too many requests from your network. You can try again in {{time}}.",
     tryAgainNow: "You can try again now.",
     understand: "I understand",
   },

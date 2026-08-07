@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { sendDirectMessage, RateLimitExceededError } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute, rateLimitResponse } from "@/lib/rate-limit";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -32,15 +32,6 @@ export async function POST(request: Request) {
     const email = body.email?.trim();
     const message = body.message?.trim();
     const phoneNumber = (body.phoneNumber ?? body.phone_number)?.trim();
-
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.DirectMessage,
-      sessionId,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     if (!sessionId || !formId || !name || !email || !message) {
       return NextResponse.json(

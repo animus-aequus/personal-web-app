@@ -1,4 +1,5 @@
 import { parseRateLimitFromResponse } from "@/lib/rate-limit-client";
+import type { RateLimitAction } from "@/lib/rate-limit";
 
 const AGENT_API_BASE_URL =
   process.env.AGENT_API_BASE_URL ?? "http://localhost:8000";
@@ -32,6 +33,17 @@ function agentHeaders(options?: AgentRequestOptions): Record<string, string> {
     headers["X-Session-Secret"] = options.sessionSecret;
   }
   return headers;
+}
+
+/** Throw RateLimitExceededError when the agent returns 429. */
+async function throwIfRateLimited(
+  response: Response,
+  fallbackAction: RateLimitAction = "chat",
+): Promise<void> {
+  const rateLimit = await parseRateLimitFromResponse(response, fallbackAction);
+  if (rateLimit) {
+    throw rateLimit;
+  }
 }
 
 export type CreateSessionResponse = {
@@ -190,6 +202,7 @@ export async function createAgentSession(
   });
 
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Session creation failed (${response.status}): ${detail}`);
   }
@@ -512,6 +525,7 @@ export async function confirmBooking(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Booking confirm failed (${response.status}): ${detail}`);
   }
@@ -531,6 +545,7 @@ export async function cancelBooking(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Booking cancel failed (${response.status}): ${detail}`);
   }
@@ -576,6 +591,7 @@ export async function requestBookingCancellation(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Cancel request failed (${response.status}): ${detail}`);
   }
@@ -597,6 +613,7 @@ export async function confirmCancellation(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Cancellation confirm failed (${response.status}): ${detail}`);
   }
@@ -616,6 +633,7 @@ export async function abortCancellation(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(`Cancellation abort failed (${response.status}): ${detail}`);
   }
@@ -704,6 +722,7 @@ export async function cancelDirectMessage(
     },
   );
   if (!response.ok) {
+    await throwIfRateLimited(response, "chat");
     const detail = await response.text();
     throw new Error(
       `Direct message cancel failed (${response.status}): ${detail}`,

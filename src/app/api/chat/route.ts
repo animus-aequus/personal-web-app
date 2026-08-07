@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { openAgentChatStream, RateLimitExceededError, streamAgentChatFromResponse } from "@/lib/agent-client";
 import { enforcePublicAccess } from "@/lib/public-access";
-import { enforceRateLimit, getClientIp, RateLimitRoute, rateLimitResponse } from "@/lib/rate-limit";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -47,11 +47,6 @@ export async function POST(request: Request) {
     const body = (await request.json()) as ChatRequestBody;
     const sessionId = body.sessionId ?? body.session_id;
     const userText = extractUserText(body.messages);
-
-    const rateLimited = await enforceRateLimit(request, RateLimitRoute.Chat, sessionId);
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });

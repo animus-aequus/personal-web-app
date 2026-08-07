@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { fetchChatHistory } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { getClientIp } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -15,15 +15,6 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const sessionId = searchParams.get("sessionId") ?? searchParams.get("session_id");
-
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.Messages,
-      sessionId ?? undefined,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     if (!sessionId) {
       return NextResponse.json({ error: "sessionId is required" }, { status: 400 });

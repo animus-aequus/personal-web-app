@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { confirmBooking } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { confirmBooking, RateLimitExceededError } from "@/lib/agent-client";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -26,15 +26,6 @@ export async function POST(request: Request) {
     const code = body.code?.trim();
     const sessionId = body.sessionId ?? body.session_id;
 
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.BookingConfirm,
-      sessionId,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
-
     if (!bookingId || !code) {
       return NextResponse.json(
         { error: "bookingId and code are required" },
@@ -56,6 +47,13 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message = error instanceof Error ? error.message : "Confirm failed";
     let status = 500;
     if (message.includes("(409)")) {

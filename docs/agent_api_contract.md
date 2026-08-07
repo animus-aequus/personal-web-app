@@ -42,11 +42,13 @@ When a route is rate-limited, the agent API and BFF return **429** with:
 }
 ```
 
-- `action`: `chat` | `voice` | `direct_message` (set by the route/channel, not inferred from Redis).
-- `retry_at`: UTC ISO timestamp when the sliding window allows another attempt (derived from the same Upstash `limit()` deny — no extra Redis round-trip).
+- `action`: `chat` | `voice` | `direct_message` | `edge` (BFF edge IP shield only; agent routes use the first three).
+- `retry_at`: UTC ISO timestamp when the window allows another attempt (from Postgres window start + window length, or dual-window DM).
 - `Retry-After` header: seconds until retry (compatibility).
 
 The UI shows a localized dialog with countdown for chat, voice, and direct message. Voice publishes `ui_events` `{ "type": "rate_limit", "action": "voice", "retryAt": "…" }` when a turn is denied before TTS or graph — no `chat_sync` rows and no `reply_stream` call.
+
+Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse per-IP Upstash shield in `proxy.ts` and may return the same 429 shape when that edge budget is exhausted.
 
 **Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
 
@@ -164,7 +166,7 @@ Cancel-request errors (**409**): `not_confirmed`, `email_suppressed` (address on
 
 ### Direct messages (private message GenUI)
 
-Protected with `X-Session-Secret`. Send is dual-window rate-limited (`DIRECT_MESSAGE`: 3/h and 6/24h per session and IP). Cancel uses the lighter `BOOKING` bucket. No pending/rehydrate — the form is ephemeral.
+Protected with `X-Session-Secret`. Send is dual-window rate-limited on the agent (`DIRECT_MESSAGE`: hourly + daily counts from `direct_messages`). Cancel uses the action budget. No pending/rehydrate — the form is ephemeral.
 
 | Endpoint | Body | Notes |
 |----------|------|--------|

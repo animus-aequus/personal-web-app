@@ -97,6 +97,8 @@ export const de = {
       "Du hast das Sprachnachrichtenlimit erreicht. Versuche es in {{time}} erneut.",
     bodyDirectMessage:
       "Du hast das Limit für private Nachrichten erreicht. Versuche es in {{time}} erneut.",
+    bodyEdge:
+      "Zu viele Anfragen von deinem Netzwerk. Versuche es in {{time}} erneut.",
     tryAgainNow: "Du kannst es jetzt erneut versuchen.",
     understand: "Verstanden",
   },

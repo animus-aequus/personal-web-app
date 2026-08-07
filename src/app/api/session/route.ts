@@ -1,10 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { createAgentSession, updateAgentSessionLanguage } from "@/lib/agent-client";
+import { createAgentSession, updateAgentSessionLanguage, RateLimitExceededError } from "@/lib/agent-client";
 import { isLocaleCode } from "@/lib/i18n/locales";
 import { enforcePublicAccess } from "@/lib/public-access";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   SESSION_SECRET_COOKIE,
@@ -65,11 +65,6 @@ export async function POST(request: Request) {
     return paused;
   }
 
-  const rateLimited = await enforceRateLimit(request, RateLimitRoute.Session);
-  if (rateLimited) {
-    return rateLimited;
-  }
-
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
@@ -115,6 +110,13 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message = error instanceof Error ? error.message : "Session failed";
     const status = message.includes("(401)") ? 401 : 500;
     return NextResponse.json({ error: message }, { status });

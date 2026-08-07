@@ -1,8 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { abortCancellation } from "@/lib/agent-client";
-import { enforceRateLimit, getClientIp, RateLimitRoute } from "@/lib/rate-limit";
+import { abortCancellation, RateLimitExceededError } from "@/lib/agent-client";
+import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
   missingSessionSecretResponse,
@@ -23,15 +23,6 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Body;
     const cancellationId = body.cancellationId ?? body.cancellation_id;
     const sessionId = body.sessionId ?? body.session_id;
-
-    const rateLimited = await enforceRateLimit(
-      request,
-      RateLimitRoute.Booking,
-      sessionId,
-    );
-    if (rateLimited) {
-      return rateLimited;
-    }
 
     if (!cancellationId) {
       return NextResponse.json(
@@ -54,6 +45,13 @@ export async function POST(request: Request) {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
+    if (error instanceof RateLimitExceededError) {
+      return rateLimitResponse(
+        error.retryAfterSeconds,
+        error.action,
+        error.retryAt,
+      );
+    }
     const message =
       error instanceof Error ? error.message : "Cancellation abort failed";
     let status = 500;
