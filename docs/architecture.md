@@ -75,7 +75,7 @@ and retries: only the latest run may commit state.
 5. Worker (agent API) configures Deepgram STT/TTS from that metadata and publishes `voice_user` / `voice_assistant` on `chat_sync`.
 6. `useVoiceChatSync` appends live voice rows to in-memory history state (`appendLive`).
 7. Voice off → browser publishes `voice_mode_exit` on `voice_control`, then effect cleanup calls `session.end()`.
-8. Changing `language` while voice is on bumps `voiceConnectionId` (new room + agent) so STT/TTS rebuild cleanly. When the selected locale lacks full TTS support (e.g. Polish), voice mode shows an inline language select + amber warning; otherwise language is changed only from the settings sidebar.
+8. Changing `language` while voice is on bumps `voiceConnectionId` (new room + agent) so STT/TTS rebuild cleanly. When the selected locale lacks full TTS support, voice mode shows an inline language select + amber warning; otherwise language is changed only from the settings sidebar.
 
 Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` stays the same.
 

@@ -201,7 +201,7 @@ Token minting is **this repo** (`POST /api/livekit/token`). Audio and STT/TTS ru
 | Room per connect | `web-{session_id}--{connection_id}` |
 | Room metadata | `{"session_id": "<chat session_id>", "voice_language": "<en\|pl\|de\|es\|fr>"}` (`voice_language` mirrors job metadata as a fallback) |
 | Agent dispatch | `RoomAgentDispatch` name must match worker registration (`LIVEKIT_AGENT_NAME` / `NEXT_PUBLIC_LIVEKIT_AGENT_NAME`) |
-| Agent job metadata | `{"voice_language": "<en\|pl\|de\|es\|fr>"}` (default `en`). Drives worker STT language, TTS voice, and spoken reply language. Polish has no Deepgram TTS — worker falls back to English TTS + English replies. |
+| Agent job metadata | `{"voice_language": "<en\|pl\|de\|es\|fr>"}` (default `en`). Drives worker STT language, TTS provider/voice, and spoken reply language. Polish uses Amazon Polly (Ola, neural); other listed languages use Deepgram Aura. |
 | Token request | `participantMetadata` = chat `sessionId` (preferred over parsing room name); optional `agentMetadata` JSON with `voice_language` forwarded into agent job metadata |
 
 Worker publishes chat rows on data topic **`chat_sync`**:
