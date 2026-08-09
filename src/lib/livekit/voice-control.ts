@@ -8,7 +8,7 @@ const MODE_EXIT_SETTLE_MS = 600;
 
 async function publishVoiceControl(
   room: Room,
-  type: "voice_mode_exit" | "stop_speech",
+  type: "voice_mode_exit" | "stop_speech" | "user_turn_length_exceeded",
 ): Promise<void> {
   if (room.state !== ConnectionState.Connected) {
     return;
@@ -29,6 +29,11 @@ export async function publishVoiceModeExit(room: Room): Promise<void> {
 /** Stop agent speech while staying in the voice session (no user message). */
 export async function publishStopSpeech(room: Room): Promise<void> {
   await publishVoiceControl(room, "stop_speech");
+}
+
+/** Commit the in-progress user turn after the UI character limit is reached. */
+export async function publishUserTurnLengthExceeded(room: Room): Promise<void> {
+  await publishVoiceControl(room, "user_turn_length_exceeded");
 }
 
 /** End voice after signalling mode exit so chat_sync can arrive before teardown. */

@@ -240,7 +240,18 @@ function TextChatArea({
     agentMetadata,
   });
 
-  useVoiceChatSync(session, onVoiceMessage);
+  const [voiceTurnCommitSignal, setVoiceTurnCommitSignal] = useState(0);
+  const handleVoiceChatSync = useCallback(
+    (message: Omit<ChatMessage, "timestamp"> & { timestamp?: number }) => {
+      onVoiceMessage(message);
+      if (message.role === "user") {
+        setVoiceTurnCommitSignal((count) => count + 1);
+      }
+    },
+    [onVoiceMessage],
+  );
+
+  useVoiceChatSync(session, handleVoiceChatSync);
   useVoiceUiEvents(session);
 
   useEffect(() => {
@@ -612,6 +623,8 @@ function TextChatArea({
           sessionId={sessionId}
           onVoiceReconnect={onVoiceReconnect}
           userTrack={userTrack}
+          voiceRoom={session.room}
+          voiceTurnCommitSignal={voiceTurnCommitSignal}
           disabled={paused}
           isLoading={isLoading}
           onChromeHeightChange={setChromeHeight}

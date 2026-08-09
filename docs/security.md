@@ -120,7 +120,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Chat message length
 
-**Modules:** `src/lib/chat/chat-message-validation.ts`, `src/lib/chat/chat-message-errors.ts`, `src/lib/chat/chat-user-text.ts`, `src/app/api/chat/route.ts`, `src/components/chat/chat-control-bar.tsx`, `src/lib/livekit/voice-ui-events.ts`
+**Modules:** `src/lib/chat/chat-message-validation.ts`, `src/lib/chat/chat-message-errors.ts`, `src/lib/chat/chat-user-text.ts`, `src/app/api/chat/route.ts`, `src/components/chat/chat-control-bar.tsx`, `src/components/chat/voice-turn-progress.tsx`, `src/lib/livekit/use-voice-turn-char-usage.ts`, `src/lib/livekit/voice-ui-events.ts`
 
 **Limit:** **1000 characters** per text turn (`CHAT_MESSAGE_MAX`), matching agent `USER_MESSAGE_MAX_CHARS`.
 
@@ -129,7 +129,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 - Client sends `{ sessionId, message }` only (not full `useChat` history). Agent conversation state stays on the checkpointer.
 - `POST /api/chat` returns **400** `{ "error": "message_too_long", "maxChars": 1000 }` when trimmed `message` exceeds the character limit, or when `Content-Length` exceeds **10 KiB** (`CHAT_REQUEST_MAX_BODY_BYTES` = 10000) for the single-turn JSON body (before `request.json()`).
 - Chat control bar: live error when trimmed input exceeds 1000 characters; send blocked client-side. Paste soft-capped at **1500** code points (`CHAT_MESSAGE_INPUT_CEILING` = `CHAT_MESSAGE_MAX` + 500) so the error state stays visible without huge payloads.
-- Voice: worker `ui_events` `message_too_long` → Sonner toast (no oversized `voice_user` in history).
+- Voice: live progress meter from interim STT (`voice-turn-progress.tsx`); at 100% mic mute + `voice_control` `user_turn_length_exceeded`; worker truncates and commits with amber truncated-user badge (`interrupted` on `voice_user` / history). REST/telephony oversized input still hard-rejects.
 
 ### Phase 3 — Cloudflare Turnstile
 

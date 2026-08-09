@@ -11,6 +11,7 @@ import { BookingOtpCard } from "@/components/chat/booking-otp-card";
 import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { SmoothStreamingText } from "@/components/chat/smooth-streaming-text";
+import { VoiceTurnTruncatedBadge } from "@/components/chat/voice-turn-progress";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { formatSystemNoteText } from "@/lib/i18n/system-note";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
@@ -292,6 +293,8 @@ export function MessageList({
 
           const isInterruptedAssistant =
             message.role === "assistant" && message.interrupted;
+          const isTruncatedUser =
+            message.role === "user" && message.interrupted;
           const useSmoothReveal =
             message.id === smoothMessageId &&
             message.role === "assistant" &&
@@ -304,16 +307,24 @@ export function MessageList({
               key={message.id}
               className={cn(
                 "text-sm leading-relaxed",
-                message.role === "user"
-                  ? "ml-auto max-w-[85%] rounded-2xl bg-card px-4 py-3 text-foreground"
+                message.role === "user" &&
+                  cn(
+                    "ml-auto max-w-[85%] text-foreground",
+                    !isTruncatedUser && "rounded-2xl bg-card px-4 py-3",
+                  ),
                   // Fixed (not max-) width: this is a flex item in a column
                   // flex container, so an auto margin + auto width would
                   // shrink-to-fit its content instead of taking a stable
                   // width — that's what made GenUI cards vary in size.
-                  : "mr-auto w-[85%] text-foreground",
+                message.role === "assistant" && "mr-auto w-[85%] text-foreground",
               )}
             >
-              {isInterruptedAssistant ? (
+              {isTruncatedUser ? (
+                <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-8 dark:border-amber-500/15">
+                  <MessageContent content={message.content} />
+                  <VoiceTurnTruncatedBadge title={t("chat.lengthTruncated")} />
+                </div>
+              ) : isInterruptedAssistant ? (
                 <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-7 dark:border-amber-500/15">
                   <MessageContent content={message.content} />
                   <span

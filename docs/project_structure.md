@@ -60,6 +60,8 @@ personal-website/                 # this repo
 | `lib/livekit/room.ts` | LiveKit room naming helpers |
 | `lib/livekit/voice-languages.ts` | Voice STT language catalog + TTS-fallback helpers |
 | `lib/livekit/voice-chat-sync.ts` | `chat_sync` data channel → Zustand |
+| `lib/livekit/use-voice-turn-char-usage.ts` | Open-turn STT char meter (accumulates segments until `voice_user`; not history) |
+| `components/chat/voice-turn-progress.tsx` | Voice turn progress bar + truncated-user badge |
 | `lib/stores/chat-store.ts` | Persisted `sessionId` + `voiceLanguage` |
 | `lib/chat/chat-message-validation.ts` | Chat turn limits (`CHAT_MESSAGE_MAX` 1000, input ceiling 1500, body 10 KiB) |
 | `lib/chat/chat-message-errors.ts` | Message-too-long toast + BFF 400 handling |

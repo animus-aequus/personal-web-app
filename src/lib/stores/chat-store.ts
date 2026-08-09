@@ -30,7 +30,7 @@ export type ChatMessage = {
   content: string;
   source: MessageSource;
   timestamp: number;
-  /** Voice assistant row stopped by user barge-in (verified partial only). */
+  /** Assistant barge-in partial or user voice turn cut for length. */
   interrupted?: boolean;
   parts?: ChatMessagePart[];
   /** System-note i18n kind (from agent API). */

@@ -66,7 +66,7 @@ The BFF chat route accepts `{ "sessionId", "message" }` only (last user turn). C
 
 The chat textarea shows a live error state (red border + localized hint) when trimmed input exceeds 1000 characters; send is blocked client-side.
 
-Voice turns that exceed the limit are rejected in the LiveKit worker **before** rate limits, `chat_sync`, TTS, or graph. The worker publishes `ui_events` `{ "type": "message_too_long", "maxChars": 1000 }`; the UI shows a toast. Telephony uses spoken rejection text from the same limit module.
+Voice web turns at the character limit: the UI shows a live progress meter from interim STT; at 100% it mutes the mic and sends `voice_control` `user_turn_length_exceeded`. The worker commits the turn with truncated text, a one-shot length hint to the model, `chat_sync` `voice_user` with `"interrupted": true`, and an amber truncated-user badge in chat. REST text chat and telephony still hard-reject oversized input.
 
 Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse per-IP Upstash shield in `proxy.ts` and may return the same 429 shape when that edge budget is exhausted.
 
@@ -228,6 +228,7 @@ Worker publishes chat rows on data topic **`chat_sync`**:
 
 ```json
 { "type": "voice_user", "turnId": "…", "text": "…" }
+{ "type": "voice_user", "turnId": "…", "text": "…", "interrupted": true }
 { "type": "voice_assistant", "turnId": "…", "text": "…" }
 { "type": "voice_assistant", "turnId": "…", "text": "…", "interrupted": true }
 ```
@@ -242,7 +243,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 { "type": "message_too_long", "maxChars": 1000 }
 ```
 
-`interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.
+`interrupted` on `voice_assistant` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). On `voice_user`, `interrupted: true` marks a length-truncated user turn (amber Mic+Clock badge in UI; `length_truncated` on checkpoint `HumanMessage`). Omitted or `false` otherwise.
 
 Voice replies stream to TTS sentence-by-sentence for low time-to-first-audio. The worker publishes `voice_assistant` once per turn with the full text on normal completion. On barge-in, if LiveKit supplies a verified partial (playback-aligned) transcript, that text is published (with `interrupted: true`), committed to graph state with `additional_kwargs.playback_interrupted`, and annotated for the LLM at invoke time only; otherwise the full generated reply is kept for chat and graph (audio still stops immediately).
 
@@ -253,12 +254,14 @@ On data topic **`voice_control`** the browser may publish:
 ```json
 { "type": "voice_mode_exit" }
 { "type": "stop_speech" }
+{ "type": "user_turn_length_exceeded" }
 ```
 
 | Type | When | Effect |
 |------|------|--------|
 | `voice_mode_exit` | Before leaving voice / disconnect | Commit in-flight assistant (same partial/full rules as barge-in); no `voice_user`; then client ends the session |
 | `stop_speech` | UI stop while agent is thinking/speaking | Same commit rules; stay in the room (no disconnect, no barge-in prompt hint on the next turn) |
+| `user_turn_length_exceeded` | Voice UI meter hits 100% | Client mutes mic; worker `commit_user_turn()`; truncated `voice_user` + graph turn with length hint |
 
 Implemented in `src/lib/livekit/voice-control.ts`.
 

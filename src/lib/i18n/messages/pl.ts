@@ -44,6 +44,7 @@ export const pl = {
     sendMessage: "Wyślij wiadomość",
     enableAudio: "Włącz dźwięk",
     interrupted: "Przerwano przed zakończeniem",
+    lengthTruncated: "Wypowiedź ucięta — osiągnięty limit długości",
     voiceLanguageLabel: "Język głosu",
     aiTermsNotice:
       "Korzystając z czatu, akceptujesz <termsLink>regulamin</termsLink>.",

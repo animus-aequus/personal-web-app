@@ -15,8 +15,10 @@ import Link from "next/link";
 import { Trans, useTranslation } from "react-i18next";
 
 import { AgentWaveVisualizer } from "@/components/agents-ui/agent-wave-visualizer";
+import { VoiceTurnProgress } from "@/components/chat/voice-turn-progress";
 import { UserRadialDots } from "@/components/agents-ui/user-radial-dots";
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-core";
+import type { Room } from "livekit-client";
 import {
   CHAT_CONTROL,
   computeControlBarGeometry,
@@ -72,6 +74,8 @@ type ChatControlBarProps = {
   sessionId?: string;
   onVoiceReconnect?: () => void;
   userTrack?: TrackReferenceOrPlaceholder;
+  voiceRoom?: Room;
+  voiceTurnCommitSignal?: number;
   disabled?: boolean;
   isLoading?: boolean;
   /** Reports the live pixel height reserved by this bar (incl. its bottom
@@ -88,6 +92,8 @@ export function ChatControlBar({
   sessionId,
   onVoiceReconnect,
   userTrack,
+  voiceRoom,
+  voiceTurnCommitSignal = 0,
   disabled,
   isLoading,
   onChromeHeightChange,
@@ -311,6 +317,15 @@ export function ChatControlBar({
             </motion.div>
           ) : null}
         </AnimatePresence>
+
+        {voiceEnabled ? (
+          <VoiceTurnProgress
+            room={voiceRoom}
+            voiceEnabled={voiceEnabled}
+            turnCommitSignal={voiceTurnCommitSignal}
+            barMaxWidth={geometry.wrapperWidth}
+          />
+        ) : null}
 
         <motion.div
           className="relative flex items-center justify-center"

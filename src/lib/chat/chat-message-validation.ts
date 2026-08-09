@@ -1,5 +1,5 @@
 /** Max characters accepted per chat turn (matches agent API `ChatRequest.message`). */
-export const CHAT_MESSAGE_MAX = 1000;
+export const CHAT_MESSAGE_MAX = 50;
 
 /**
  * Hard ceiling for textarea value (paste protection). Users can exceed

@@ -44,6 +44,7 @@ export const fr = {
     sendMessage: "Envoyer le message",
     enableAudio: "Activer l'audio",
     interrupted: "Interrompu avant la fin",
+    lengthTruncated: "Intervention coupée — limite de longueur atteinte",
     voiceLanguageLabel: "Langue vocale",
     aiTermsNotice:
       "En utilisant le chat, vous acceptez les <termsLink>conditions d'utilisation</termsLink>.",

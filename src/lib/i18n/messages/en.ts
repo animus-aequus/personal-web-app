@@ -44,6 +44,7 @@ export const en = {
     sendMessage: "Send message",
     enableAudio: "Enable audio",
     interrupted: "Interrupted before finishing",
+    lengthTruncated: "Utterance cut — maximum length reached",
     voiceLanguageLabel: "Voice language",
     aiTermsNotice:
       "By using the chat, you accept the <termsLink>Terms</termsLink>.",

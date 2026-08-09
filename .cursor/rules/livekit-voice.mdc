@@ -31,10 +31,17 @@ Data topic: `chat_sync`
 
 | Payload type | UI action |
 |--------------|-----------|
-| `voice_user` | `addVoiceMessage({ id: turnId, role: user, … })` |
+| `voice_user` | `addVoiceMessage({ id: turnId, role: user, … })` — optional `interrupted: true` when length-truncated |
 | `voice_assistant` | `addVoiceMessage({ id: turnId-assistant, role: assistant, … })` |
 
-This is the **source of truth** for voice rows in the chat list. `useSessionMessages` / `userTranscript` is live preview only (“Hearing: …”).
+This is the **source of truth** for voice rows in the chat list. Interim `lk.transcription` (via `useTranscriptions` / `use-voice-turn-char-usage.ts`) drives the voice turn progress meter only — not persisted history.
+
+## Voice turn progress (`voice-turn-progress.tsx`)
+
+- Always visible in voice mode above the mic + user radial chrome
+- Live fill from interim STT vs `CHAT_MESSAGE_MAX` (1000); turquoise theme below 70%, amber ≥70%, red ≥90%
+- Meter **accumulates all STT segments** in the open turn (brief silence starts a new LiveKit stream; that must not reset the bar). Reset **only** after `voice_user` `chat_sync` (endpointing commit or hard-cut)
+- At 100%: mute mic + `voice_control` `{ "type": "user_turn_length_exceeded" }` once; hard-cut latch clears only after the meter leaves 100% (never on commit alone — that re-muted and re-committed)
 
 ## Agents UI wrappers
 

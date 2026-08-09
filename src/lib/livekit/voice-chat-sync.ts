@@ -9,7 +9,7 @@ import type { ChatMessage } from "@/lib/stores/chat-store";
 const CHAT_SYNC_TOPIC = "chat_sync";
 
 type VoiceChatSyncPayload =
-  | { type: "voice_user"; turnId: string; text: string }
+  | { type: "voice_user"; turnId: string; text: string; interrupted?: boolean }
   | {
       type: "voice_assistant";
       turnId: string;
@@ -39,6 +39,7 @@ function parseChatSyncPayload(raw: Uint8Array): VoiceChatSyncPayload | null {
         type: "voice_user",
         turnId: data.turnId,
         text: data.text,
+        interrupted: data.interrupted === true,
       };
     }
     return {
@@ -86,6 +87,7 @@ export function useVoiceChatSync(
           role: "user",
           content: message.text.trim(),
           source: "voice",
+          interrupted: message.interrupted,
         });
         return;
       }
