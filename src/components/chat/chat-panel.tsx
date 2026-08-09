@@ -28,6 +28,10 @@ import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
 import { handleRateLimitResponse } from "@/lib/rate-limit-client";
+import {
+  MESSAGE_TOO_LONG_ERROR,
+  throwIfMessageTooLongResponse,
+} from "@/lib/chat/chat-message-errors";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
@@ -286,6 +290,9 @@ function TextChatArea({
             await handleRateLimitResponse(response, "chat");
             throw new Error("rate_limit_exceeded");
           }
+          if (response.status === 400) {
+            await throwIfMessageTooLongResponse(response);
+          }
           return response;
         },
         prepareSendMessagesRequest: ({
@@ -317,7 +324,10 @@ function TextChatArea({
     id: sessionId,
     transport,
     onError: (error) => {
-      if (error.message === "rate_limit_exceeded") {
+      if (
+        error.message === "rate_limit_exceeded" ||
+        error.message === MESSAGE_TOO_LONG_ERROR
+      ) {
         return;
       }
       console.error("Chat turn failed", error);

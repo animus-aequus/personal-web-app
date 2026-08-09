@@ -37,6 +37,7 @@ export const es = {
     assistantThinking: "El asistente está pensando…",
     scrollUpOlder: "Desplázate hacia arriba para ver mensajes anteriores",
     errorGeneric: "Algo salió mal. Inténtalo de nuevo.",
+    messageTooLong: "El mensaje no puede tener más de {{length}} caracteres.",
     stopResponse: "Detener respuesta",
     endVoice: "Finalizar conversación por voz",
     startVoice: "Iniciar conversación por voz",

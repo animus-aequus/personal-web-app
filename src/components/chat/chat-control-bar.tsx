@@ -25,6 +25,11 @@ import {
   textSlotWidthForBar,
   type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
+import {
+  CHAT_MESSAGE_MAX,
+  clampChatInput,
+  isChatMessageTooLong,
+} from "@/lib/chat/chat-message-validation";
 import { changeAppLanguage } from "@/lib/i18n/change-language";
 import {
   LOCALE_CODES,
@@ -106,6 +111,7 @@ export function ChatControlBar({
 
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
+  const isOverLimit = !voiceEnabled && isChatMessageTooLong(value);
   const agentBusy =
     voiceEnabled &&
     (agentPhase === "thinking" || agentPhase === "responding");
@@ -209,12 +215,12 @@ export function ChatControlBar({
   }, [voiceEnabled, barMaxWidth, value, showSendButton, buttonSize, stackedLayout]);
 
   const handleTextChange = useCallback((nextValue: string) => {
-    setValue(nextValue);
+    setValue(clampChatInput(nextValue));
   }, []);
 
   const submit = async () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled || isLoading || voiceEnabled) {
+    if (!trimmed || disabled || isLoading || voiceEnabled || isOverLimit) {
       return;
     }
     setValue("");
@@ -332,7 +338,10 @@ export function ChatControlBar({
 
           <motion.form
             onSubmit={onSubmit}
-            className="relative shrink-0 overflow-hidden"
+            className={cn(
+              "relative shrink-0 overflow-hidden border transition-colors duration-300",
+              isOverLimit ? "border-destructive" : "border-transparent",
+            )}
             initial={false}
             animate={{
               width: geometry.shellWidth,
@@ -422,6 +431,7 @@ export function ChatControlBar({
                     onKeyDown={onKeyDown}
                     placeholder={t("chat.placeholder")}
                     disabled={disabled || isLoading}
+                    aria-invalid={isOverLimit}
                     rows={1}
                     style={{
                       height: textMetrics.height,
@@ -463,11 +473,11 @@ export function ChatControlBar({
                     <motion.button
                       key="send"
                       type="submit"
-                      disabled={disabled || isLoading}
+                      disabled={disabled || isLoading || isOverLimit}
                       aria-label={t("chat.sendMessage")}
                       className={cn(
                         "absolute z-10 flex items-center justify-center rounded-full bg-primary hover:bg-primary/90",
-                        (disabled || isLoading) && "opacity-50",
+                        (disabled || isLoading || isOverLimit) && "opacity-50",
                       )}
                       style={{
                         left: geometry.sendLeft,
@@ -496,6 +506,22 @@ export function ChatControlBar({
             )}
           </motion.form>
         </motion.div>
+
+        <AnimatePresence>
+          {isOverLimit ? (
+            <motion.p
+              key="message-too-long"
+              role="alert"
+              className="mt-2 px-1 text-center text-xs leading-snug text-destructive"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: EASE }}
+            >
+              {t("chat.messageTooLong", { length: CHAT_MESSAGE_MAX })}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
 
         <p className="mt-2 px-1 text-center text-xs leading-snug text-muted-foreground/80">
           <Trans

@@ -4,6 +4,8 @@ import type { UseSessionReturn } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { useEffect } from "react";
 
+import { showChatMessageTooLongToast } from "@/lib/chat/chat-message-errors";
+import { CHAT_MESSAGE_MAX } from "@/lib/chat/chat-message-validation";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
@@ -46,11 +48,17 @@ type RateLimitPayload = {
   retryAt: string;
 };
 
+type MessageTooLongPayload = {
+  type: "message_too_long";
+  maxChars: number;
+};
+
 type UiPayload =
   | BookingOtpPayload
   | MeetingsListPayload
   | DirectMessagePayload
-  | RateLimitPayload;
+  | RateLimitPayload
+  | MessageTooLongPayload;
 
 function parseUiEvent(raw: Uint8Array): UiPayload | null {
   try {
@@ -130,6 +138,14 @@ function parseUiEvent(raw: Uint8Array): UiPayload | null {
         retryAt: data.retryAt,
       };
     }
+    if (data.type === "message_too_long") {
+      const maxChars =
+        typeof data.maxChars === "number" ? data.maxChars : CHAT_MESSAGE_MAX;
+      return {
+        type: "message_too_long",
+        maxChars,
+      };
+    }
     return null;
   } catch {
     return null;
@@ -185,6 +201,10 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
           action: event.action,
           retryAt: event.retryAt,
         });
+        return;
+      }
+      if (event.type === "message_too_long") {
+        showChatMessageTooLongToast(event.maxChars);
         return;
       }
       setActiveList(event.listId, event.meetings);

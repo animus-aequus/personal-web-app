@@ -61,7 +61,7 @@ and retries: only the latest run may commit state.
 
 ### Text chat
 
-1. User sends via `MessageInput` → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId }`.
+1. User sends via `MessageInput` → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId }`. Input is capped at **4000 characters** (live UI error + BFF **400** before proxy; agent enforces the same limit).
 2. Route Handler calls `streamAgentChat()` → agent API `POST /api/v1/chat/stream`.
 3. Token deltas re-emitted as AI SDK SSE (`createUIMessageStream`) for `useChat`.
 4. Messages mapped with `source: "text"`.

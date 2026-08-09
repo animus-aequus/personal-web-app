@@ -37,6 +37,7 @@ export const de = {
     assistantThinking: "Assistent denkt nach…",
     scrollUpOlder: "Nach oben scrollen für ältere Nachrichten",
     errorGeneric: "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
+    messageTooLong: "Die Nachricht darf nicht länger als {{length}} Zeichen sein.",
     stopResponse: "Antwort stoppen",
     endVoice: "Sprachgespräch beenden",
     startVoice: "Sprachgespräch starten",

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { openAgentChatStream, RateLimitExceededError, streamAgentChatFromResponse } from "@/lib/agent-client";
+import { CHAT_MESSAGE_MAX, isChatMessageTooLong, isChatRequestBodyTooLarge } from "@/lib/chat/chat-message-validation";
 import { enforcePublicAccess } from "@/lib/public-access";
 import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
@@ -44,6 +45,13 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (isChatRequestBodyTooLarge(request.headers.get("content-length"))) {
+      return NextResponse.json(
+        { error: "message_too_long", maxChars: CHAT_MESSAGE_MAX },
+        { status: 400 },
+      );
+    }
+
     const body = (await request.json()) as ChatRequestBody;
     const sessionId = body.sessionId ?? body.session_id;
     const userText = extractUserText(body.messages);
@@ -53,6 +61,12 @@ export async function POST(request: Request) {
     }
     if (!userText) {
       return NextResponse.json({ error: "message is required" }, { status: 400 });
+    }
+    if (isChatMessageTooLong(userText)) {
+      return NextResponse.json(
+        { error: "message_too_long", maxChars: CHAT_MESSAGE_MAX },
+        { status: 400 },
+      );
     }
 
     const cookieStore = await cookies();
