@@ -45,7 +45,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel / pending proxy routes | **Done** (E7) |
 | Public access early reject + LangSmith pause webhook | **Done** (see below) |
-| Chat message length (8000 chars; BFF + UI live error) | **Done** |
+| Chat message length (1000 chars; BFF + UI live error) | **Done** |
 
 ---
 
@@ -61,7 +61,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
 | — | Direct message GenUI proxies (agent dual-window RL) | **Done** |
 | — | Public access cost guard (early reject, `/api/public-status`, LangSmith webhook) | **Done** |
-| — | Chat message length (8000 chars; mirrors agent) | **Done** |
+| — | Chat message length (1000 chars; mirrors agent) | **Done** |
 | — | Clerk (optional) | Future |
 
 Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting on **Postgres**) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice + shared text/voice message budget on `web_sessions`) is agent-enforced; BFF Upstash is a coarse per-IP edge shield only and does **not** duplicate session quotas.
@@ -120,14 +120,15 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Chat message length
 
-**Modules:** `src/lib/chat/chat-message-validation.ts`, `src/lib/chat/chat-message-errors.ts`, `src/app/api/chat/route.ts`, `src/components/chat/chat-control-bar.tsx`, `src/lib/livekit/voice-ui-events.ts`
+**Modules:** `src/lib/chat/chat-message-validation.ts`, `src/lib/chat/chat-message-errors.ts`, `src/lib/chat/chat-user-text.ts`, `src/app/api/chat/route.ts`, `src/components/chat/chat-control-bar.tsx`, `src/lib/livekit/voice-ui-events.ts`
 
-**Limit:** **8000 characters** per text turn (`CHAT_MESSAGE_MAX`), matching agent `USER_MESSAGE_MAX_CHARS`.
+**Limit:** **1000 characters** per text turn (`CHAT_MESSAGE_MAX`), matching agent `USER_MESSAGE_MAX_CHARS`.
 
 **Behaviour:**
 
-- `POST /api/chat` returns **400** `{ "error": "message_too_long", "maxChars": 8000 }` before proxying oversized bodies (also when `Content-Length` exceeds 64 KiB, before JSON parse).
-- Chat control bar shows live error state (animated red border + localized hint) when trimmed input exceeds the limit; send is blocked client-side. Paste is soft-capped at 10 000 code points.
+- Client sends `{ sessionId, message }` only (not full `useChat` history). Agent conversation state stays on the checkpointer.
+- `POST /api/chat` returns **400** `{ "error": "message_too_long", "maxChars": 1000 }` when trimmed `message` exceeds the character limit, or when `Content-Length` exceeds **10 KiB** (`CHAT_REQUEST_MAX_BODY_BYTES` = 10000) for the single-turn JSON body (before `request.json()`).
+- Chat control bar: live error when trimmed input exceeds 1000 characters; send blocked client-side. Paste soft-capped at **1500** code points (`CHAT_MESSAGE_INPUT_CEILING` = `CHAT_MESSAGE_MAX` + 500) so the error state stays visible without huge payloads.
 - Voice: worker `ui_events` `message_too_long` → Sonner toast (no oversized `voice_user` in history).
 
 ### Phase 3 — Cloudflare Turnstile

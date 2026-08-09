@@ -27,9 +27,16 @@ Read `docs/architecture.md` (Message merge, Session identity) before non-trivial
 ## Text chat (`useChat`)
 
 ```tsx
-new DefaultChatTransport({ api: "/api/chat", body: { sessionId } })
+new DefaultChatTransport({
+  api: "/api/chat",
+  prepareSendMessagesRequest: ({ messages }) => ({
+    body: { sessionId, message: lastUserTextFromUiMessages(messages) },
+  }),
+})
 ```
 
+- BFF expects `{ sessionId, message }` only — agent checkpointer holds conversation history
+- Limits: **1000** chars per turn (`CHAT_MESSAGE_MAX`); paste soft-cap **1500** code points in control bar (`CHAT_MESSAGE_INPUT_CEILING`)
 - Map AI SDK `UIMessage` → `ChatMessage` with `source: "text"`
 - Loading state from `status === "submitted" | "streaming"`
 

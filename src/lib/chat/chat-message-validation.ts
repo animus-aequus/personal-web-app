@@ -8,7 +8,7 @@ export const CHAT_MESSAGE_MAX = 1000;
 export const CHAT_MESSAGE_INPUT_CEILING = CHAT_MESSAGE_MAX + 500;
 
 /** Max request body size before JSON parse (BFF early reject). */
-export const CHAT_REQUEST_MAX_BODY_BYTES = 4000;
+export const CHAT_REQUEST_MAX_BODY_BYTES = 10000;
 
 /** BFF guard: reject oversized bodies before `request.json()`. */
 export function isChatRequestBodyTooLarge(contentLengthHeader: string | null): boolean {

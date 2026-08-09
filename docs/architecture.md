@@ -61,8 +61,8 @@ and retries: only the latest run may commit state.
 
 ### Text chat
 
-1. User sends via `MessageInput` → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId }`. Input is capped at **4000 characters** (live UI error + BFF **400** before proxy; agent enforces the same limit).
-2. Route Handler calls `streamAgentChat()` → agent API `POST /api/v1/chat/stream`.
+1. User sends via control bar → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId, message }` (last user turn only; agent checkpointer holds history). Limits: **1000 characters** per turn (`CHAT_MESSAGE_MAX`); textarea paste soft-cap **1500** code points (`CHAT_MESSAGE_INPUT_CEILING`); BFF rejects `Content-Length` **> 10 KiB** on the single-turn JSON body before parse. Live UI error + BFF **400** before agent proxy.
+2. Route Handler calls `openAgentChatStream()` → agent API `POST /api/v1/chat/stream`.
 3. Token deltas re-emitted as AI SDK SSE (`createUIMessageStream`) for `useChat`.
 4. Messages mapped with `source: "text"`.
 

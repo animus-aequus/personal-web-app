@@ -16,7 +16,7 @@ Base path: `/api/v1` on the agent API host.
 | `PATCH` | `/sessions/{session_id}` | `{ "language": string }` | `{ "session_id", "language" }` — authoritative normalized locale |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
-| `POST` | `/chat` | `{ "session_id", "message" }` — `message` 1–8000 chars | `{ "session_id", "reply" }` (single JSON; non-streaming) |
+| `POST` | `/chat` | `{ "session_id", "message" }` — `message` 1–1000 chars | `{ "session_id", "reply" }` (single JSON; non-streaming) |
 | `POST` | `/chat/stream` | `{ "session_id", "message" }` — same length limits | `text/event-stream` (deltas + optional UI frames; see below) |
 | `GET` | `/bookings/pending` | query `session_id` | pending OTP widget payload or **204** |
 | `POST` | `/bookings/{booking_id}/confirm` | `{ "code" }` | `{ "booking_id", "status", "google_event_id", "meet_url", "html_link", "ical_uid", "event_name", "slot_start", "duration_minutes", "note"? }` |
@@ -50,15 +50,23 @@ The UI shows a localized dialog with countdown for chat, voice, and direct messa
 
 ### Message length (`400` / voice `ui_events`)
 
-User turns (text and voice transcripts) are capped at **8000 characters** on the agent API (`ChatRequest.message`, `app/agent/input_limits.py`). Oversized text chat bodies return **422** from Pydantic on the agent; the BFF rejects earlier with **400**:
+User turns (text and voice transcripts) are capped at **1000 characters** on the agent API (`ChatRequest.message`, `app/agent/input_limits.py`). Oversized text chat bodies return **422** from Pydantic on the agent; the BFF rejects earlier with **400**:
 
 ```json
-{ "error": "message_too_long", "maxChars": 8000 }
+{ "error": "message_too_long", "maxChars": 1000 }
 ```
 
-The chat textarea shows a live error state (red border + localized hint) when input exceeds the limit; send is blocked client-side.
+The BFF chat route accepts `{ "sessionId", "message" }` only (last user turn). Conversation history is not sent from the browser — the agent checkpointer is source of truth.
 
-Voice turns that exceed the limit are rejected in the LiveKit worker **before** rate limits, `chat_sync`, TTS, or graph. The worker publishes `ui_events` `{ "type": "message_too_long", "maxChars": 8000 }`; the UI shows a toast. Telephony uses spoken rejection text from the same limit module.
+| Constant | Value | Role |
+|----------|-------|------|
+| `CHAT_MESSAGE_MAX` / `USER_MESSAGE_MAX_CHARS` | **1000** | Max accepted user turn (trimmed text) |
+| `CHAT_MESSAGE_INPUT_CEILING` | **1500** | Textarea paste soft-cap (code points) |
+| `CHAT_REQUEST_MAX_BODY_BYTES` | **10000** (10 KiB) | BFF `Content-Length` early reject |
+
+The chat textarea shows a live error state (red border + localized hint) when trimmed input exceeds 1000 characters; send is blocked client-side.
+
+Voice turns that exceed the limit are rejected in the LiveKit worker **before** rate limits, `chat_sync`, TTS, or graph. The worker publishes `ui_events` `{ "type": "message_too_long", "maxChars": 1000 }`; the UI shows a toast. Telephony uses spoken rejection text from the same limit module.
 
 Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse per-IP Upstash shield in `proxy.ts` and may return the same 429 shape when that edge budget is exhausted.
 
@@ -231,7 +239,7 @@ Worker publishes GenUI on data topic **`ui_events`**:
 { "type": "meetings_list", "listId": "…", "meetings": [ { "bookingId": "…", "eventName": "…", "slotStart": "…", "durationMinutes": 30, "meetUrl": "…", "htmlLink": "…" } ] }
 { "type": "direct_message", "formId": "…", "name": "…", "email": "…", "phoneNumber": "…" }
 { "type": "rate_limit", "action": "voice", "retryAt": "2026-08-05T01:23:45.000Z" }
-{ "type": "message_too_long", "maxChars": 8000 }
+{ "type": "message_too_long", "maxChars": 1000 }
 ```
 
 `interrupted` is `true` only when a **verified partial** transcript was committed after barge-in (not when the full reply fallback applies). Omitted or `false` otherwise. The UI shows an amber badge on interrupted assistant rows.

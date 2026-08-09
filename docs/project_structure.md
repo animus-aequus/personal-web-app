@@ -25,7 +25,7 @@ personal-website/                 # this repo
 | `app/(site)/terms/page.tsx` | Terms of use (sidebar + session preserved) |
 | `app/layout.tsx` | Root layout, fonts, global styles |
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
-| `app/api/chat/route.ts` | Proxy text chat; AI SDK SSE adapter (`delta` + `data-otp` + `data-meetings-list`) |
+| `app/api/chat/route.ts` | Proxy text chat (`{ sessionId, message }`); AI SDK SSE adapter (`delta` + GenUI data parts) |
 | `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending / cancel-request |
 | `app/api/direct-messages/route.ts` | Proxy private-message send |
 | `app/api/direct-messages/cancel/route.ts` | Proxy private-message cancel |
@@ -61,6 +61,9 @@ personal-website/                 # this repo
 | `lib/livekit/voice-languages.ts` | Voice STT language catalog + TTS-fallback helpers |
 | `lib/livekit/voice-chat-sync.ts` | `chat_sync` data channel → Zustand |
 | `lib/stores/chat-store.ts` | Persisted `sessionId` + `voiceLanguage` |
+| `lib/chat/chat-message-validation.ts` | Chat turn limits (`CHAT_MESSAGE_MAX` 1000, input ceiling 1500, body 10 KiB) |
+| `lib/chat/chat-message-errors.ts` | Message-too-long toast + BFF 400 handling |
+| `lib/chat/chat-user-text.ts` | Extract last user text from `useChat` messages for transport |
 | `lib/utils.ts` | `cn()` and shared utilities |
 
 ## Where to add changes

@@ -28,6 +28,7 @@ import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
 import { handleRateLimitResponse } from "@/lib/rate-limit-client";
+import { lastUserTextFromUiMessages } from "@/lib/chat/chat-user-text";
 import {
   MESSAGE_TOO_LONG_ERROR,
   throwIfMessageTooLongResponse,
@@ -295,22 +296,15 @@ function TextChatArea({
           }
           return response;
         },
-        prepareSendMessagesRequest: ({
-          body,
-          messages,
-          id,
-          trigger,
-          messageId,
-        }) => ({
-          body: {
-            ...(body ?? {}),
-            sessionId,
-            messages,
-            id,
-            trigger,
-            messageId,
-          },
-        }),
+        prepareSendMessagesRequest: ({ messages }) => {
+          const message = lastUserTextFromUiMessages(messages);
+          return {
+            body: {
+              sessionId,
+              message,
+            },
+          };
+        },
       }),
     [sessionId],
   );
