@@ -66,7 +66,7 @@ The BFF chat route accepts `{ "sessionId", "message" }` only (last user turn). C
 
 The chat textarea shows a live error state (red border + localized hint) when trimmed input exceeds 1000 characters; send is blocked client-side.
 
-Voice web turns at the character limit: the UI shows a live progress meter from interim STT; at 100% it mutes the mic and sends `voice_control` `user_turn_length_exceeded`. The worker commits the turn with truncated text, a one-shot length hint to the model, `chat_sync` `voice_user` with `"interrupted": true`, and an amber truncated-user badge in chat. REST text chat and telephony still hard-reject oversized input.
+Voice web turns use **push-to-talk**: mic starts OFF; the user taps the primary button to speak and taps again (or hits FE timeouts) to commit via `voice_control` `commit_user_turn`. Worker `turn_detection=manual` — no STT auto-endpoint. At the character limit the UI mutes and sends `user_turn_length_exceeded` (truncated turn). FE timeouts: 15 s idle without STT growth → empty warning or auto-commit; 60 s max speaking → auto-commit; 30 s thinking → `stop_speech` + error toast + idle. Voice barge-in from speech is disabled; explicit `stop_speech` in answering (or thinking timeout) only.
 
 Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse per-IP Upstash shield in `proxy.ts` and may return the same 429 shape when that edge budget is exhausted.
 
@@ -255,13 +255,17 @@ On data topic **`voice_control`** the browser may publish:
 { "type": "voice_mode_exit" }
 { "type": "stop_speech" }
 { "type": "user_turn_length_exceeded" }
+{ "type": "commit_user_turn" }
+{ "type": "clear_user_turn" }
 ```
 
 | Type | When | Effect |
 |------|------|--------|
 | `voice_mode_exit` | Before leaving voice / disconnect | Commit in-flight assistant (same partial/full rules as barge-in); no `voice_user`; then client ends the session |
 | `stop_speech` | UI stop while agent is thinking/speaking | Same commit rules; stay in the room (no disconnect, no barge-in prompt hint on the next turn) |
-| `user_turn_length_exceeded` | Voice UI meter hits 100% | Client mutes mic; worker `commit_user_turn()`; truncated `voice_user` + graph turn with length hint |
+| `user_turn_length_exceeded` | Voice UI meter hits 100% | Client mutes mic; worker `commit_user_turn()` with truncation; truncated `voice_user` + graph turn with length hint |
+| `commit_user_turn` | PTT send (button or FE timeout with speech) | Worker `commit_user_turn()`; normal `voice_user` when transcript non-empty |
+| `clear_user_turn` | Empty PTT send or local speaking interrupt | Worker `clear_user_turn()`; drops open STT buffer without a user row |
 
 Implemented in `src/lib/livekit/voice-control.ts`.
 

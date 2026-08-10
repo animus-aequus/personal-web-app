@@ -41,6 +41,17 @@ export const fr = {
     stopResponse: "Arrêter la réponse",
     endVoice: "Terminer la conversation vocale",
     startVoice: "Démarrer la conversation vocale",
+    startListening: "Commencer à parler",
+    sendVoiceTurn: "Envoyer le message vocal",
+    exitToText: "Passer au chat texte",
+    voiceLoading: "Connexion vocale…",
+    agentThinking: "L'assistant réfléchit",
+    voiceEmptyTurn:
+      "Aucune parole détectée — touchez le micro pour réessayer.",
+    voiceSomethingWentWrong:
+      "Un problème est survenu avec la voix. Réessayez ou passez au texte.",
+    voiceThinkingTooLong:
+      "Désolé, l'assistant a mis trop de temps à réfléchir.",
     sendMessage: "Envoyer le message",
     enableAudio: "Activer l'audio",
     interrupted: "Interrompu avant la fin",

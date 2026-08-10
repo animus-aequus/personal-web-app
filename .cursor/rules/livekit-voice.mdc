@@ -20,10 +20,25 @@ Worker-side STT/TTS and barge-in: agent API repo `docs/architecture.md` (LiveKit
 ## Session lifecycle (`chat-panel.tsx`)
 
 - `useSession` lives for the `sessionId` lifetime (not mounted only when voice is on)
-- On voice enable: new `voiceConnectionId` (`crypto.randomUUID()`), then effect runs `start()`
+- On voice enable: new `voiceConnectionId` (`crypto.randomUUID()`), then effect runs `start({ tracks: { microphone: { enabled: false } } })`
 - After `start()`: `await session.room.startAudio()` for browser autoplay unlock
-- On voice disable / cleanup: `endVoiceSession()` → `voice_mode_exit` on `voice_control`, brief settle, then `end()`
+- PTT state in `use-voice-ptt.ts`: idle → speaking (mic ON) → thinking → answering → idle (mic OFF)
+- Exit voice via keyboard button (idle/loading/error) or error primary X — not the mic button
+- On voice disable / cleanup: `endVoiceSession()` → `voice_mode_exit` on `voice_control`, reset PTT state, brief settle, then `end()`
 - **Do not** mount/unmount `useSession` on the voice toggle
+
+## Push-to-talk controls (`chat-control-bar.tsx`)
+
+| UI state | Primary button | Keyboard exit |
+|----------|----------------|---------------|
+| loading | Spinner, disabled | Enabled |
+| idle | Mic, muted bg | Enabled |
+| speaking | Mic, primary — commit turn | Disabled |
+| thinking | Lightbulb, disabled | Disabled |
+| answering | Red square — `stop_speech` | Disabled |
+| error | White X — exit voice | Enabled |
+
+FE timeouts (`voice-ptt-constants.ts`): 15 s idle without STT growth, 60 s max speaking, 30 s thinking → `stop_speech` + toast.
 
 ## Transcript sync (`voice-chat-sync.ts`)
 
@@ -38,10 +53,20 @@ This is the **source of truth** for voice rows in the chat list. Interim `lk.tra
 
 ## Voice turn progress (`voice-turn-progress.tsx`)
 
-- Always visible in voice mode above the mic + user radial chrome
+- Visible only while **speaking** (PTT), above mic + user radial chrome
 - Live fill from interim STT vs `CHAT_MESSAGE_MAX` (1000); turquoise theme below 70%, amber ≥70%, red ≥90%
-- Meter **accumulates all STT segments** in the open turn (brief silence starts a new LiveKit stream; that must not reset the bar). Reset **only** after `voice_user` `chat_sync` (endpointing commit or hard-cut)
-- At 100%: mute mic + `voice_control` `{ "type": "user_turn_length_exceeded" }` once; hard-cut latch clears only after the meter leaves 100% (never on commit alone — that re-muted and re-committed)
+- 60 s countdown left of bar (synced with `VOICE_TURN_MAX_MS`)
+- Meter **accumulates all STT segments** in the open turn. Reset **only** after `voice_user` `chat_sync`
+- At 100%: mute mic + `voice_control` `{ "type": "user_turn_length_exceeded" }` once; UI returns to idle (mic stays OFF)
+
+## `voice_control` (`voice-control.ts`)
+
+| Type | When |
+|------|------|
+| `commit_user_turn` | PTT send with speech |
+| `user_turn_length_exceeded` | Meter at 100% |
+| `stop_speech` | Answering button or thinking timeout |
+| `voice_mode_exit` | Leave voice session |
 
 ## Agents UI wrappers
 
@@ -49,7 +74,7 @@ This is the **source of truth** for voice rows in the chat list. Interim `lk.tra
 |------|------|
 | `agent-session-provider.tsx` | `SessionProvider` + `RoomAudioRenderer` |
 | `start-audio-button.tsx` | LiveKit `StartAudio` fallback |
-| `agent-wave-visualizer.tsx` | Agent wave when voice is active |
+| `agent-wave-visualizer.tsx` | Agent wave when agent is responding |
 
 Render `AgentSessionProvider` only while `voiceEnabled` (children need session context).
 
@@ -64,3 +89,4 @@ Render `AgentSessionProvider` only while `voiceEnabled` (children need session c
 - Duplicate `PersonalAgent` or scheduling logic in the frontend
 - Populate chat history from room transcriptions or partial STT events
 - Skip new `voiceConnectionId` on voice re-enable
+- Rely on STT endpointing to end user turns (worker uses `turn_detection=manual`)

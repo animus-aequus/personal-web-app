@@ -12,7 +12,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { Room } from "livekit-client";
 
 import { publishUserTurnLengthExceeded } from "@/lib/livekit/voice-control";
-import { useVoiceTurnCharUsage } from "@/lib/livekit/use-voice-turn-char-usage";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useRateLimitStore } from "@/lib/stores/rate-limit-store";
 import { cn } from "@/lib/utils";
@@ -20,15 +19,20 @@ import { cn } from "@/lib/utils";
 const EASE = [0.4, 0, 0.2, 1] as const;
 const WAVE_INTERVAL_MS = 1500;
 const RESET_MS = 450;
-const MIC_UNMUTE_FALLBACK_MS = 5000;
 
 type VoiceTurnProgressProps = {
   room: Room | undefined;
   voiceEnabled: boolean;
-  /** Bumped when a `voice_user` row is committed via `chat_sync`. */
-  turnCommitSignal: number;
-  /** Match voice chrome (mic + radial) width. */
+  listening: boolean;
+  ratio: number;
+  isAtLimit: boolean;
+  isSpeaking: boolean;
+  /** Bumped on turn commit or empty discard — drives meter reset animation. */
+  turnBoundarySignal: number;
   barMaxWidth?: number;
+  countdownLabel: string;
+  onHardCut: () => void;
+  onSpeakingInterrupt?: () => void;
 };
 
 function tierForPercent(percent: number): "primary" | "amber" | "destructive" {
@@ -44,25 +48,25 @@ function tierForPercent(percent: number): "primary" | "amber" | "destructive" {
 export function VoiceTurnProgress({
   room,
   voiceEnabled,
-  turnCommitSignal,
+  listening,
+  ratio,
+  isAtLimit,
+  isSpeaking,
+  turnBoundarySignal,
   barMaxWidth,
+  countdownLabel,
+  onHardCut,
+  onSpeakingInterrupt,
 }: VoiceTurnProgressProps) {
-  const { ratio, isAtLimit, isSpeaking } = useVoiceTurnCharUsage(
-    room,
-    turnCommitSignal,
-  );
   const agentPhase = useAgentActivityStore((state) => state.phase);
   const agentBusy = agentPhase === "thinking" || agentPhase === "responding";
   const rateLimitOpen = useRateLimitStore((state) => state.open);
   const rateLimitAction = useRateLimitStore((state) => state.action);
 
   const hardCutArmedRef = useRef(false);
-  const micMutedForLimitRef = useRef(false);
-  const awaitingUnmuteAfterCutRef = useRef(false);
-  const sawAgentBusyAfterCutRef = useRef(false);
   const [waveKey, setWaveKey] = useState(0);
   const [isResetting, setIsResetting] = useState(false);
-  const [seenCommitSignal, setSeenCommitSignal] = useState(turnCommitSignal);
+  const [seenBoundarySignal, setSeenBoundarySignal] = useState(turnBoundarySignal);
 
   const targetRatio = useMotionValue(ratio);
   const springRatio = useSpring(targetRatio, {
@@ -77,35 +81,34 @@ export function VoiceTurnProgress({
     setDisplayPercentText(Math.round(value * 100));
   });
 
-  const releaseMic = useCallback((targetRoom: Room) => {
-    if (!micMutedForLimitRef.current) {
+  const handleHardCut = useCallback(() => {
+    if (!room) {
       return;
     }
-    micMutedForLimitRef.current = false;
-    awaitingUnmuteAfterCutRef.current = false;
-    sawAgentBusyAfterCutRef.current = false;
-    void targetRoom.localParticipant.setMicrophoneEnabled(true).catch((error) => {
-      console.warn("Failed to re-enable mic after voice turn limit", error);
+    void room.localParticipant.setMicrophoneEnabled(false).catch((error) => {
+      console.warn("Failed to mute mic at voice turn limit", error);
     });
-  }, []);
+    void publishUserTurnLengthExceeded(room).catch((error) => {
+      console.warn("user_turn_length_exceeded signal failed", error);
+    });
+    onHardCut();
+  }, [onHardCut, room]);
 
-  // Reset animation flag from props (avoid sync setState inside effects).
   if (!voiceEnabled) {
     if (isResetting) {
       setIsResetting(false);
     }
-    if (seenCommitSignal !== 0) {
-      setSeenCommitSignal(0);
+    if (seenBoundarySignal !== 0) {
+      setSeenBoundarySignal(0);
     }
-  } else if (turnCommitSignal !== 0 && turnCommitSignal !== seenCommitSignal) {
-    setSeenCommitSignal(turnCommitSignal);
+  } else if (
+    turnBoundarySignal !== 0 &&
+    turnBoundarySignal !== seenBoundarySignal
+  ) {
+    setSeenBoundarySignal(turnBoundarySignal);
     setIsResetting(true);
   }
 
-  // Only re-arm hard-cut after the meter has left the limit (post-commit stale).
-  // Clearing the latch on commit alone re-fires mute + commit_user_turn while
-  // isAtLimit is still true for one frame — that deadlocks the mic and can
-  // interrupt the graph mid-turn.
   useEffect(() => {
     if (!isAtLimit) {
       hardCutArmedRef.current = false;
@@ -118,25 +121,21 @@ export function VoiceTurnProgress({
     }
   }, [ratio, targetRatio, isResetting]);
 
-  // First wave remounts when showWave becomes true; interval only restarts later.
   useEffect(() => {
-    if (!voiceEnabled || !isSpeaking || agentBusy) {
+    if (!voiceEnabled || !listening || !isSpeaking || agentBusy) {
       return;
     }
     const timer = setInterval(() => {
       setWaveKey((key) => key + 1);
     }, WAVE_INTERVAL_MS);
     return () => clearInterval(timer);
-  }, [voiceEnabled, isSpeaking, agentBusy]);
+  }, [voiceEnabled, listening, isSpeaking, agentBusy]);
 
   useEffect(() => {
     if (voiceEnabled) {
       return;
     }
     hardCutArmedRef.current = false;
-    micMutedForLimitRef.current = false;
-    awaitingUnmuteAfterCutRef.current = false;
-    sawAgentBusyAfterCutRef.current = false;
     targetRatio.set(0);
   }, [voiceEnabled, targetRatio]);
 
@@ -149,73 +148,33 @@ export function VoiceTurnProgress({
       setIsResetting(false);
     }, RESET_MS);
     return () => clearTimeout(timer);
-  }, [isResetting, turnCommitSignal, targetRatio]);
+  }, [isResetting, turnBoundarySignal, targetRatio]);
 
   useEffect(() => {
-    if (!voiceEnabled || !room || !isAtLimit || hardCutArmedRef.current) {
+    if (!voiceEnabled || !listening || !room || !isAtLimit || hardCutArmedRef.current) {
       return;
     }
     hardCutArmedRef.current = true;
-    micMutedForLimitRef.current = true;
-    awaitingUnmuteAfterCutRef.current = true;
-    sawAgentBusyAfterCutRef.current = false;
-    void room.localParticipant.setMicrophoneEnabled(false).catch((error) => {
-      console.warn("Failed to mute mic at voice turn limit", error);
-    });
-    void publishUserTurnLengthExceeded(room).catch((error) => {
-      console.warn("user_turn_length_exceeded signal failed", error);
-    });
-  }, [voiceEnabled, room, isAtLimit]);
+    handleHardCut();
+  }, [voiceEnabled, listening, room, isAtLimit, handleHardCut]);
 
   useEffect(() => {
-    if (!voiceEnabled || !room || !micMutedForLimitRef.current) {
-      return;
-    }
-    if (!awaitingUnmuteAfterCutRef.current) {
-      return;
-    }
-    if (agentBusy) {
-      sawAgentBusyAfterCutRef.current = true;
-      return;
-    }
-    if (sawAgentBusyAfterCutRef.current) {
-      releaseMic(room);
-    }
-  }, [voiceEnabled, room, agentBusy, releaseMic]);
-
-  // Fallback unmute when the worker never enters thinking/responding.
-  useEffect(() => {
-    if (!voiceEnabled || !room || !micMutedForLimitRef.current) {
-      return;
-    }
-    if (!awaitingUnmuteAfterCutRef.current) {
-      return;
-    }
-    if (agentBusy || sawAgentBusyAfterCutRef.current) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (
-        micMutedForLimitRef.current &&
-        awaitingUnmuteAfterCutRef.current &&
-        !sawAgentBusyAfterCutRef.current
-      ) {
-        releaseMic(room);
-      }
-    }, MIC_UNMUTE_FALLBACK_MS);
-    return () => clearTimeout(timer);
-  }, [turnCommitSignal, voiceEnabled, room, releaseMic, agentBusy]);
-
-  useEffect(() => {
-    if (!voiceEnabled || !room || !micMutedForLimitRef.current) {
+    if (!voiceEnabled || !listening || !room) {
       return;
     }
     if (rateLimitOpen && rateLimitAction === "voice") {
-      releaseMic(room);
+      onSpeakingInterrupt?.();
     }
-  }, [voiceEnabled, room, rateLimitOpen, rateLimitAction, releaseMic]);
+  }, [
+    voiceEnabled,
+    listening,
+    room,
+    rateLimitOpen,
+    rateLimitAction,
+    onSpeakingInterrupt,
+  ]);
 
-  if (!voiceEnabled) {
+  if (!voiceEnabled || !listening) {
     return null;
   }
 
@@ -237,6 +196,9 @@ export function VoiceTurnProgress({
       aria-valuetext={`${displayPercentText}% of voice turn limit`}
       aria-label="Voice turn length"
     >
+      <span className="w-9 shrink-0 text-left text-xs font-medium tabular-nums text-white">
+        {countdownLabel}
+      </span>
       <div
         className={cn(
           "relative h-1.5 min-w-0 flex-1 overflow-hidden rounded-full",

@@ -6,6 +6,8 @@ import { useTranslation } from "react-i18next";
 
 import { LogoIconButton } from "@/components/layout/logo-icon-button";
 import { changeAppLanguage } from "@/lib/i18n/change-language";
+import { voiceLanguageSelectLocked } from "@/lib/livekit/voice-ptt-constants";
+import { useVoiceChromeStore } from "@/lib/stores/voice-chrome-store";
 import {
   LOCALE_CODES,
   LOCALE_LABELS,
@@ -121,10 +123,18 @@ function LanguageSettings({
   const { t } = useTranslation();
   const { isMobile, state } = useSidebar();
   const language = useChatStore((store) => normalizeLocale(store.language));
+  const voiceChromeState = useVoiceChromeStore((store) => store.voiceChromeState);
+  const voiceReconnectPending = useVoiceChromeStore(
+    (store) => store.voiceReconnectPending,
+  );
   const isCollapsedDesktop = !isMobile && state === "collapsed";
+  const languageSelectDisabled = voiceLanguageSelectLocked(
+    voiceChromeState,
+    voiceReconnectPending,
+  );
 
   const handleChange = (value: string | null) => {
-    if (!value) {
+    if (!value || languageSelectDisabled) {
       return;
     }
     void changeAppLanguage(value as LocaleCode, {
@@ -134,7 +144,11 @@ function LanguageSettings({
   };
 
   return (
-    <Select value={language} onValueChange={handleChange}>
+    <Select
+      value={language}
+      onValueChange={handleChange}
+      disabled={languageSelectDisabled}
+    >
       <SidebarContent className="py-4 group-data-[collapsible=icon]:hidden">
         <div className="flex flex-col gap-2 px-2">
           <Label
@@ -143,7 +157,11 @@ function LanguageSettings({
           >
             {t("sidebar.language")}
           </Label>
-          <SelectTrigger id="app-language-select" className="w-full">
+          <SelectTrigger
+            id="app-language-select"
+            className="w-full"
+            disabled={languageSelectDisabled}
+          >
             <SelectValue />
           </SelectTrigger>
         </div>
@@ -157,6 +175,7 @@ function LanguageSettings({
                 <SidebarMenuButton tooltip={t("sidebar.language")} />
               }
               className="size-8 border-0 bg-transparent p-0 shadow-none hover:bg-transparent focus-visible:ring-0 data-[size=default]:h-8 [&>svg:last-child]:hidden"
+              disabled={languageSelectDisabled}
             >
               <Languages />
             </SelectTrigger>

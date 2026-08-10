@@ -1,6 +1,14 @@
 "use client";
 
-import { Mic, Send, Square } from "lucide-react";
+import {
+  Keyboard,
+  Lightbulb,
+  Loader2,
+  Mic,
+  Send,
+  Square,
+  X,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
@@ -39,9 +47,14 @@ import {
   normalizeLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
+import {
+  type VoiceChromeState,
+  voiceLanguageSelectLocked,
+} from "@/lib/livekit/voice-ptt-constants";
 import { hasTtsFallback } from "@/lib/livekit/voice-languages";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useVoiceChromeStore } from "@/lib/stores/voice-chrome-store";
 import { cn } from "@/lib/utils";
 
 const EASE = [0.4, 0, 0.2, 1] as const;
@@ -68,38 +81,105 @@ const ICON_SWAP_TRANSITION = {
 type ChatControlBarProps = {
   onSend: (message: string) => Promise<void> | void;
   onVoiceToggle: () => void;
-  onStopSpeech?: () => void;
+  onExitVoice: () => void;
+  onVoicePrimaryClick: () => void;
   voiceEnabled: boolean;
   voiceChromeReady: boolean;
+  voiceChromeState: VoiceChromeState | null;
+  voiceListening: boolean;
+  turnCountdownLabel: string;
+  onHardCut: () => void;
+  onSpeakingInterrupt?: () => void;
+  voiceTurnRatio?: number;
+  voiceTurnIsAtLimit?: boolean;
+  voiceTurnIsSpeaking?: boolean;
+  voiceTurnBoundarySignal?: number;
   sessionId?: string;
   onVoiceReconnect?: () => void;
   userTrack?: TrackReferenceOrPlaceholder;
   voiceRoom?: Room;
-  voiceTurnCommitSignal?: number;
   disabled?: boolean;
   isLoading?: boolean;
-  /** Reports the live pixel height reserved by this bar (incl. its bottom
-   * offset) so other absolute UI in the chat panel can avoid overlapping it. */
   onChromeHeightChange?: (heightPx: number) => void;
 };
+
+function primaryAriaLabel(
+  state: VoiceChromeState | null,
+  t: ReturnType<typeof useTranslation>["t"],
+): string {
+  switch (state) {
+    case "loading":
+      return t("chat.voiceLoading");
+    case "idle":
+      return t("chat.startListening");
+    case "speaking":
+      return t("chat.sendVoiceTurn");
+    case "thinking":
+      return t("chat.agentThinking");
+    case "answering":
+      return t("chat.stopResponse");
+    case "error":
+      return t("chat.endVoice");
+    default:
+      return t("chat.startVoice");
+  }
+}
+
+function primaryButtonClass(state: VoiceChromeState | null): string {
+  switch (state) {
+    case "loading":
+      return "bg-muted text-muted-foreground";
+    case "idle":
+      return "bg-muted text-foreground hover:bg-muted/80";
+    case "speaking":
+      return "bg-primary text-primary-foreground hover:bg-primary/90";
+    case "thinking":
+      return "bg-muted text-primary";
+    case "answering":
+      return "bg-red-600 text-white hover:bg-red-700";
+    case "error":
+      return "bg-red-600 text-white hover:bg-red-700";
+    default:
+      return "bg-primary text-primary-foreground hover:bg-primary/90";
+  }
+}
+
+function primaryDisabled(state: VoiceChromeState | null, disabled: boolean): boolean {
+  if (disabled) {
+    return true;
+  }
+  return state === "loading" || state === "thinking";
+}
 
 export function ChatControlBar({
   onSend,
   onVoiceToggle,
-  onStopSpeech,
+  onExitVoice,
+  onVoicePrimaryClick,
   voiceEnabled,
   voiceChromeReady,
+  voiceChromeState,
+  voiceListening,
+  turnCountdownLabel,
+  onHardCut,
+  onSpeakingInterrupt,
+  voiceTurnRatio = 0,
+  voiceTurnIsAtLimit = false,
+  voiceTurnIsSpeaking = false,
+  voiceTurnBoundarySignal = 0,
   sessionId,
   onVoiceReconnect,
   userTrack,
   voiceRoom,
-  voiceTurnCommitSignal = 0,
   disabled,
   isLoading,
   onChromeHeightChange,
 }: ChatControlBarProps) {
   const { t } = useTranslation();
   const language = useChatStore((state) => normalizeLocale(state.language));
+  const voiceReconnectPending = useVoiceChromeStore(
+    (state) => state.voiceReconnectPending,
+  );
   const agentPhase = useAgentActivityStore((state) => state.phase);
   const [value, setValue] = useState("");
   const [textMetrics, setTextMetrics] = useState<TextareaMetrics>(() => ({
@@ -118,12 +198,11 @@ export function ChatControlBar({
   const buttonSize = textButtonSize(isDesktop);
   const showSendButton = !voiceEnabled && value.length > 0;
   const isOverLimit = !voiceEnabled && isChatMessageTooLong(value);
-  const agentBusy =
-    voiceEnabled &&
-    (agentPhase === "thinking" || agentPhase === "responding");
   const showTtsFallbackWarning = voiceEnabled && hasTtsFallback(language);
   const showVoiceLanguageSelect = showTtsFallbackWarning;
-  const languageSelectDisabled = disabled || agentBusy;
+  const languageSelectDisabled =
+    disabled ||
+    voiceLanguageSelectLocked(voiceChromeState, voiceReconnectPending);
 
   const stackedLayout =
     !voiceEnabled &&
@@ -138,7 +217,16 @@ export function ChatControlBar({
     !voiceEnabled && stackedLayout,
     showSendButton,
     buttonSize,
+    voiceListening,
   );
+
+  const showAgentWave =
+    voiceEnabled && voiceChromeReady && agentPhase === "responding";
+
+  const keyboardExitEnabled =
+    voiceChromeState === "idle" ||
+    voiceChromeState === "loading" ||
+    voiceChromeState === "error";
 
   useLayoutEffect(() => {
     const mediaQuery = window.matchMedia(
@@ -304,7 +392,7 @@ export function ChatControlBar({
         </AnimatePresence>
 
         <AnimatePresence>
-          {geometry.showRadial ? (
+          {showAgentWave ? (
             <motion.div
               key="agent-wave"
               className="mb-4"
@@ -318,12 +406,19 @@ export function ChatControlBar({
           ) : null}
         </AnimatePresence>
 
-        {voiceEnabled ? (
+        {voiceEnabled && voiceListening ? (
           <VoiceTurnProgress
             room={voiceRoom}
             voiceEnabled={voiceEnabled}
-            turnCommitSignal={voiceTurnCommitSignal}
-            barMaxWidth={geometry.wrapperWidth}
+            listening={voiceListening}
+            ratio={voiceTurnRatio}
+            isAtLimit={voiceTurnIsAtLimit}
+            isSpeaking={voiceTurnIsSpeaking}
+            turnBoundarySignal={voiceTurnBoundarySignal}
+            barMaxWidth={geometry.primaryStageSize}
+            countdownLabel={turnCountdownLabel}
+            onHardCut={onHardCut}
+            onSpeakingInterrupt={onSpeakingInterrupt}
           />
         ) : null}
 
@@ -336,34 +431,160 @@ export function ChatControlBar({
           }}
           transition={MORPH_TRANSITION}
         >
-          <AnimatePresence>
-            {geometry.showRadial ? (
-              <motion.div
-                key="radial-dots"
-                className="pointer-events-none absolute inset-0"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35, ease: EASE }}
+          {/* Keyboard sits beside the primary unit — never inside the radial. */}
+          {voiceEnabled && geometry.showKeyboard ? (
+            <motion.button
+              type="button"
+              onClick={onExitVoice}
+              disabled={disabled || !keyboardExitEnabled}
+              aria-label={t("chat.exitToText")}
+              className={cn(
+                "absolute z-10 flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+                (disabled || !keyboardExitEnabled) && "opacity-50",
+              )}
+              initial={false}
+              animate={{
+                width: geometry.keyboardSize,
+                height: geometry.keyboardSize,
+                left: geometry.keyboardLeft,
+                top: geometry.keyboardTop,
+              }}
+              transition={MORPH_TRANSITION}
+            >
+              <Keyboard className="size-5" />
+            </motion.button>
+          ) : null}
+
+          {/* Primary unit: floating mic + optional user radial (speaking only). */}
+          {voiceEnabled ? (
+            <motion.div
+              className="absolute z-10"
+              initial={false}
+              animate={{
+                width: geometry.primaryStageSize,
+                height: geometry.primaryStageSize,
+                left: geometry.primaryStageLeft,
+                top: geometry.primaryStageTop,
+              }}
+              transition={MORPH_TRANSITION}
+            >
+              <AnimatePresence>
+                {geometry.showRadial ? (
+                  <motion.div
+                    key="radial-dots"
+                    className="pointer-events-none absolute inset-0"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.35, ease: EASE }}
+                  >
+                    <UserRadialDots track={userTrack} />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+
+              <motion.button
+                type="button"
+                onClick={onVoicePrimaryClick}
+                disabled={primaryDisabled(voiceChromeState, Boolean(disabled))}
+                aria-label={primaryAriaLabel(voiceChromeState, t)}
+                className={cn(
+                  "absolute z-10 flex items-center justify-center rounded-full transition-colors duration-300",
+                  primaryButtonClass(voiceChromeState),
+                  primaryDisabled(voiceChromeState, Boolean(disabled)) &&
+                    "opacity-50",
+                  voiceChromeState === "thinking" && "ring-2 ring-primary/40",
+                )}
+                initial={false}
+                animate={{
+                  width: geometry.micSize,
+                  height: geometry.micSize,
+                  left: geometry.micLeft,
+                  top: geometry.micTop,
+                }}
+                transition={MORPH_TRANSITION}
               >
-                <UserRadialDots track={userTrack} />
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
+                {voiceChromeState === "thinking" ? (
+                  <span className="relative flex items-center justify-center">
+                    <span
+                      className="absolute inset-0 animate-ping rounded-full bg-primary/25"
+                      aria-hidden
+                    />
+                    <Lightbulb className="relative size-6" />
+                  </span>
+                ) : (
+                  <AnimatePresence mode="wait" initial={false}>
+                    {voiceChromeState === "loading" ? (
+                      <motion.span
+                        key="loading"
+                        className="flex items-center justify-center"
+                        initial={{ opacity: 0, scale: 0.45 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.45 }}
+                        transition={ICON_SWAP_TRANSITION}
+                      >
+                        <Loader2 className="size-6 animate-spin" />
+                      </motion.span>
+                    ) : voiceChromeState === "answering" ? (
+                      <motion.span
+                        key="stop"
+                        className="flex items-center justify-center"
+                        initial={{ opacity: 0, scale: 0.45 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.45 }}
+                        transition={ICON_SWAP_TRANSITION}
+                      >
+                        <Square className="size-5 fill-white text-white" />
+                      </motion.span>
+                    ) : voiceChromeState === "error" ? (
+                      <motion.span
+                        key="error"
+                        className="flex items-center justify-center"
+                        initial={{ opacity: 0, scale: 0.45 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.45 }}
+                        transition={ICON_SWAP_TRANSITION}
+                      >
+                        <X className="size-6" />
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="mic"
+                        className="flex items-center justify-center"
+                        initial={{ opacity: 0, scale: 0.45 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.45 }}
+                        transition={ICON_SWAP_TRANSITION}
+                      >
+                        <Mic className="size-6" />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                )}
+              </motion.button>
+            </motion.div>
+          ) : null}
 
           <motion.form
             onSubmit={onSubmit}
             className={cn(
-              "relative shrink-0 overflow-hidden border transition-colors duration-300",
-              isOverLimit ? "border-destructive" : "border-transparent",
+              "relative shrink-0 border transition-colors duration-300",
+              voiceEnabled
+                ? "pointer-events-none overflow-visible border-transparent"
+                : cn(
+                    "overflow-hidden",
+                    isOverLimit ? "border-destructive" : "border-transparent",
+                  ),
             )}
             initial={false}
             animate={{
               width: geometry.shellWidth,
               height: geometry.shellHeight,
               borderRadius: geometry.borderRadius,
+              opacity: voiceEnabled ? 0 : 1,
             }}
             transition={MORPH_TRANSITION}
+            aria-hidden={voiceEnabled}
           >
             <motion.div
               className="absolute inset-0 bg-card shadow-lg"
@@ -376,58 +597,7 @@ export function ChatControlBar({
               aria-hidden
             />
 
-            {voiceEnabled ? (
-              <motion.button
-                type="button"
-                onClick={agentBusy ? onStopSpeech : onVoiceToggle}
-                disabled={disabled || (agentBusy && !onStopSpeech)}
-                aria-pressed={voiceEnabled}
-                aria-label={
-                  agentBusy ? t("chat.stopResponse") : t("chat.endVoice")
-                }
-                className={cn(
-                  "absolute z-10 flex items-center justify-center rounded-full transition-colors duration-300",
-                  agentBusy
-                    ? "bg-red-600 text-white hover:bg-red-700"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                  disabled && "opacity-50",
-                )}
-                initial={false}
-                animate={{
-                  width: geometry.micSize,
-                  height: geometry.micSize,
-                  left: geometry.micLeft,
-                  top: geometry.micTop,
-                }}
-                transition={MORPH_TRANSITION}
-              >
-                <AnimatePresence mode="wait" initial={false}>
-                  {agentBusy ? (
-                    <motion.span
-                      key="stop"
-                      className="flex items-center justify-center"
-                      initial={{ opacity: 0, scale: 0.45 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.45 }}
-                      transition={ICON_SWAP_TRANSITION}
-                    >
-                      <Square className="size-5 fill-white text-white" />
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="mic"
-                      className="flex items-center justify-center"
-                      initial={{ opacity: 0, scale: 0.45 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.45 }}
-                      transition={ICON_SWAP_TRANSITION}
-                    >
-                      <Mic className="size-6" />
-                    </motion.span>
-                  )}
-                </AnimatePresence>
-              </motion.button>
-            ) : (
+            {!voiceEnabled ? (
               <>
                 <motion.div
                   className="absolute overflow-hidden"
@@ -518,7 +688,7 @@ export function ChatControlBar({
                   ) : null}
                 </AnimatePresence>
               </>
-            )}
+            ) : null}
           </motion.form>
         </motion.div>
 

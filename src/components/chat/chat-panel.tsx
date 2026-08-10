@@ -5,7 +5,7 @@ import { useSession } from "@livekit/components-react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
@@ -46,10 +46,10 @@ import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { normalizeLocale } from "@/lib/i18n/locales";
 import {
   endVoiceSession,
-  publishStopSpeech,
-  publishVoiceModeExit,
 } from "@/lib/livekit/voice-control";
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
+import { useVoiceTurnCharUsage } from "@/lib/livekit/use-voice-turn-char-usage";
+import { useVoicePtt } from "@/lib/livekit/use-voice-ptt";
 import { useVoiceUiEvents } from "@/lib/livekit/voice-ui-events";
 import {
   useChatStore,
@@ -240,15 +240,49 @@ function TextChatArea({
     agentMetadata,
   });
 
-  const [voiceTurnCommitSignal, setVoiceTurnCommitSignal] = useState(0);
+  const [voiceTurnBoundarySignal, setVoiceTurnBoundarySignal] = useState(0);
+
+  const bumpVoiceTurnBoundary = useCallback(() => {
+    setVoiceTurnBoundarySignal((count) => count + 1);
+  }, []);
+
+  const resetVoiceTurnBoundary = useCallback(() => {
+    setVoiceTurnBoundarySignal(0);
+  }, []);
+
+  const charUsage = useVoiceTurnCharUsage(session.room, voiceTurnBoundarySignal);
+
+  const exitVoiceRef = useRef<() => void>(() => {});
+
+  const ptt = useVoicePtt({
+    voiceEnabled,
+    isConnected: session.isConnected,
+    room: session.room,
+    usedChars: charUsage.usedChars,
+    onBumpTurnBoundary: bumpVoiceTurnBoundary,
+    onResetTurnBoundary: resetVoiceTurnBoundary,
+    onExitVoice: () => exitVoiceRef.current(),
+  });
+
+  const {
+    voiceChromeState,
+    listening,
+    turnCountdownLabel,
+    handlePrimaryClick,
+    resetPttState,
+    endSpeakingAfterHardCut,
+    interruptSpeakingLocally,
+    reportLiveKitStartError,
+  } = ptt;
+
   const handleVoiceChatSync = useCallback(
     (message: Omit<ChatMessage, "timestamp"> & { timestamp?: number }) => {
       onVoiceMessage(message);
       if (message.role === "user") {
-        setVoiceTurnCommitSignal((count) => count + 1);
+        bumpVoiceTurnBoundary();
       }
     },
-    [onVoiceMessage],
+    [onVoiceMessage, bumpVoiceTurnBoundary],
   );
 
   useVoiceChatSync(session, handleVoiceChatSync);
@@ -265,7 +299,7 @@ function TextChatArea({
 
     void (async () => {
       try {
-        await start({ tracks: { microphone: { enabled: true } } });
+        await start({ tracks: { microphone: { enabled: false } } });
         if (cancelled) {
           return;
         }
@@ -280,7 +314,7 @@ function TextChatArea({
         }
         console.error("LiveKit session failed to start", error);
         void refreshPublicPauseState();
-        onVoiceDisconnect();
+        reportLiveKitStartError();
       }
     })();
 
@@ -506,23 +540,19 @@ function TextChatArea({
       Boolean(bookingOtpActive) ||
       Boolean(directMessageActive));
 
-  const handleVoiceToggle = useCallback(() => {
-    if (voiceEnabled) {
-      setVoiceRevealReady(false);
-      void publishVoiceModeExit(session.room).catch((error) => {
-        console.warn("Voice mode exit signal failed", error);
-      });
-      setTimeout(() => onVoiceToggle(), CHAT_FADE_MS);
-      return;
-    }
-    onVoiceToggle();
-  }, [voiceEnabled, onVoiceToggle, session.room]);
+  const handleExitVoice = useCallback(() => {
+    setVoiceRevealReady(false);
+    resetPttState();
+    setTimeout(() => onVoiceToggle(), CHAT_FADE_MS);
+  }, [onVoiceToggle, resetPttState]);
 
-  const handleStopSpeech = useCallback(() => {
-    void publishStopSpeech(session.room).catch((error) => {
-      console.warn("Stop speech signal failed", error);
-    });
-  }, [session.room]);
+  useEffect(() => {
+    exitVoiceRef.current = handleExitVoice;
+  }, [handleExitVoice]);
+
+  const handleHardCut = useCallback(() => {
+    endSpeakingAfterHardCut();
+  }, [endSpeakingAfterHardCut]);
 
   return (
     <AgentSessionProvider session={session}>
@@ -616,15 +646,24 @@ function TextChatArea({
 
         <ChatControlBar
           onSend={handleSend}
-          onVoiceToggle={handleVoiceToggle}
-          onStopSpeech={handleStopSpeech}
+          onVoiceToggle={onVoiceToggle}
+          onExitVoice={handleExitVoice}
+          onVoicePrimaryClick={handlePrimaryClick}
           voiceEnabled={voiceEnabled}
           voiceChromeReady={voiceChromeReady}
+          voiceChromeState={voiceChromeState}
+          voiceListening={listening}
+          turnCountdownLabel={turnCountdownLabel}
+          onHardCut={handleHardCut}
+          onSpeakingInterrupt={interruptSpeakingLocally}
+          voiceTurnRatio={charUsage.ratio}
+          voiceTurnIsAtLimit={charUsage.isAtLimit}
+          voiceTurnIsSpeaking={charUsage.isSpeaking}
+          voiceTurnBoundarySignal={voiceTurnBoundarySignal}
           sessionId={sessionId}
           onVoiceReconnect={onVoiceReconnect}
           userTrack={userTrack}
           voiceRoom={session.room}
-          voiceTurnCommitSignal={voiceTurnCommitSignal}
           disabled={paused}
           isLoading={isLoading}
           onChromeHeightChange={setChromeHeight}

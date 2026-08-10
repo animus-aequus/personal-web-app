@@ -9,6 +9,8 @@ export const CHAT_CONTROL = {
   MIC_VOICE: 56,
   MIC_TEXT: 40,
   MIC_TEXT_DESKTOP: 32,
+  VOICE_SIDE_BUTTON: 40,
+  VOICE_BUTTON_GAP: 16,
   DESKTOP_MIN_PX: 768,
   TEXT_LINE_PX: 24,
   TEXT_VERTICAL_PADDING_PX: 8,
@@ -34,13 +36,21 @@ export function textContentBlockHeight(
 
 export type ControlBarGeometry = {
   showRadial: boolean;
+  showKeyboard: boolean;
   micSize: number;
+  keyboardSize: number;
+  /** Mic + radial unit only (excludes keyboard). */
+  primaryStageSize: number;
+  primaryStageLeft: number;
+  primaryStageTop: number;
   shellWidth: number;
   shellHeight: number;
   wrapperWidth: number;
   wrapperHeight: number;
   micTop: number;
   micLeft: number;
+  keyboardTop: number;
+  keyboardLeft: number;
   sendSize: number;
   sendTop: number;
   sendLeft: number;
@@ -61,6 +71,8 @@ function inlineControlPositions(
   ControlBarGeometry,
   | "micTop"
   | "micLeft"
+  | "keyboardTop"
+  | "keyboardLeft"
   | "sendTop"
   | "sendLeft"
   | "textSlotLeft"
@@ -81,6 +93,8 @@ function inlineControlPositions(
     sendTop: BAR_PADDING_Y + (contentBlockHeight - buttonSize) / 2,
     micLeft,
     micTop: BAR_PADDING_Y + (contentBlockHeight - buttonSize) / 2,
+    keyboardLeft: 0,
+    keyboardTop: 0,
     textSlotLeft: BAR_PADDING_X,
     textSlotWidth: Math.max(0, micLeft - BAR_PADDING_X - BAR_TEXT_BUTTON_GAP),
     textSlotTop: BAR_PADDING_Y + (contentBlockHeight - textHeight) / 2,
@@ -97,6 +111,8 @@ function stackedControlPositions(
   ControlBarGeometry,
   | "micTop"
   | "micLeft"
+  | "keyboardTop"
+  | "keyboardLeft"
   | "sendTop"
   | "sendLeft"
   | "textSlotLeft"
@@ -116,6 +132,8 @@ function stackedControlPositions(
     sendTop: controlsTop,
     micLeft,
     micTop: controlsTop,
+    keyboardLeft: 0,
+    keyboardTop: 0,
     textSlotLeft: BAR_PADDING_X,
     textSlotWidth: Math.max(0, shellWidth - BAR_PADDING_X * 2),
     textSlotTop: BAR_PADDING_Y,
@@ -130,39 +148,58 @@ export function computeControlBarGeometry(
   stackedLayout: boolean = false,
   showSendButton: boolean = false,
   buttonSize: number = CHAT_CONTROL.MIC_TEXT,
+  voiceListening: boolean = false,
 ): ControlBarGeometry {
-  const { BAR_PADDING_Y, BAR_TEXT_BUTTON_GAP, MIC_VOICE, RADIAL_CLUSTER } =
-    CHAT_CONTROL;
+  const {
+    BAR_PADDING_Y,
+    MIC_VOICE,
+    RADIAL_CLUSTER,
+    VOICE_SIDE_BUTTON,
+    VOICE_BUTTON_GAP,
+  } = CHAT_CONTROL;
 
-  const showRadial = voiceEnabled && voiceChromeReady;
+  const showRadial = voiceEnabled && voiceChromeReady && voiceListening;
+  const showKeyboard = voiceEnabled;
   const micSize = voiceEnabled ? MIC_VOICE : buttonSize;
+  const keyboardSize = VOICE_SIDE_BUTTON;
   const sendSize = buttonSize;
 
+  // Primary stage = mic alone, or mic + radial ring. Keyboard is never inside it.
+  const primaryStageSize = showRadial ? RADIAL_CLUSTER : MIC_VOICE;
+
+  // Text-mode chrome only.
   const shellWidth = voiceEnabled ? MIC_VOICE : barMaxWidth;
   const shellHeight = voiceEnabled
     ? MIC_VOICE
     : stackedLayout
       ? BAR_PADDING_Y * 2 +
-        BAR_TEXT_BUTTON_GAP +
+        CHAT_CONTROL.BAR_TEXT_BUTTON_GAP +
         buttonSize +
         textHeight
       : textContentBlockHeight(textHeight, buttonSize) + BAR_PADDING_Y * 2;
 
   const wrapperWidth = voiceEnabled
-    ? showRadial
-      ? RADIAL_CLUSTER
-      : MIC_VOICE
+    ? primaryStageSize + 2 * (VOICE_SIDE_BUTTON + VOICE_BUTTON_GAP)
     : shellWidth;
   const wrapperHeight = voiceEnabled
-    ? showRadial
-      ? RADIAL_CLUSTER
-      : MIC_VOICE
+    ? Math.max(VOICE_SIDE_BUTTON, primaryStageSize)
     : shellHeight;
+
+  // Primary (mic + radial) is X-centered; keyboard is a side control to the left
+  // and does not shift the visual center (matching gutter on the right).
+  const sideGutter = VOICE_SIDE_BUTTON + VOICE_BUTTON_GAP;
+  const primaryStageLeft = voiceEnabled ? sideGutter : 0;
+  const primaryStageTop = voiceEnabled
+    ? (wrapperHeight - primaryStageSize) / 2
+    : 0;
 
   const layoutPositions = voiceEnabled
     ? {
-        micLeft: (shellWidth - micSize) / 2,
-        micTop: (shellHeight - micSize) / 2,
+        keyboardLeft: 0,
+        keyboardTop: (wrapperHeight - VOICE_SIDE_BUTTON) / 2,
+        // Stage-local: mic dead-centered inside radial/mic unit.
+        micLeft: (primaryStageSize - MIC_VOICE) / 2,
+        micTop: (primaryStageSize - MIC_VOICE) / 2,
         sendLeft: 0,
         sendTop: 0,
         textSlotLeft: CHAT_CONTROL.BAR_PADDING_X,
@@ -190,14 +227,19 @@ export function computeControlBarGeometry(
 
   return {
     showRadial,
+    showKeyboard,
     micSize,
+    keyboardSize,
+    primaryStageSize,
+    primaryStageLeft,
+    primaryStageTop,
     shellWidth,
     shellHeight,
     wrapperWidth,
     wrapperHeight,
     sendSize,
     ...layoutPositions,
-    shellBackgroundOpacity: showRadial ? 0 : 1,
+    shellBackgroundOpacity: voiceEnabled ? 0 : showRadial ? 0 : 1,
     borderRadius,
   };
 }

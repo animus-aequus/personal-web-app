@@ -41,6 +41,16 @@ export const de = {
     stopResponse: "Antwort stoppen",
     endVoice: "Sprachgespräch beenden",
     startVoice: "Sprachgespräch starten",
+    startListening: "Sprechen beginnen",
+    sendVoiceTurn: "Sprachnachricht senden",
+    exitToText: "Zum Textchat wechseln",
+    voiceLoading: "Sprachverbindung wird aufgebaut…",
+    agentThinking: "Assistent denkt nach",
+    voiceEmptyTurn:
+      "Keine Sprache erkannt — tippe auf das Mikrofon, um es erneut zu versuchen.",
+    voiceSomethingWentWrong:
+      "Bei der Sprachfunktion ist etwas schiefgelaufen. Versuche es erneut oder wechsle zum Text.",
+    voiceThinkingTooLong: "Entschuldigung, der Assistent hat zu lange nachgedacht.",
     sendMessage: "Nachricht senden",
     enableAudio: "Audio aktivieren",
     interrupted: "Vor Fertigstellung unterbrochen",
