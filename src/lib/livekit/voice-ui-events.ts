@@ -7,8 +7,10 @@ import { useEffect } from "react";
 import { showChatMessageTooLongToast } from "@/lib/chat/chat-message-errors";
 import { CHAT_MESSAGE_MAX } from "@/lib/chat/chat-message-validation";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
+import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
+import { applyAssistantPaused } from "@/lib/stores/public-pause-store";
 import { useRateLimitStore } from "@/lib/stores/rate-limit-store";
 
 const UI_EVENTS_TOPIC = "ui_events";
@@ -53,12 +55,17 @@ type MessageTooLongPayload = {
   maxChars: number;
 };
 
+type AssistantPausedPayload = {
+  type: "assistant_paused";
+};
+
 type UiPayload =
   | BookingOtpPayload
   | MeetingsListPayload
   | DirectMessagePayload
   | RateLimitPayload
-  | MessageTooLongPayload;
+  | MessageTooLongPayload
+  | AssistantPausedPayload;
 
 function parseUiEvent(raw: Uint8Array): UiPayload | null {
   try {
@@ -146,6 +153,9 @@ function parseUiEvent(raw: Uint8Array): UiPayload | null {
         maxChars,
       };
     }
+    if (data.type === "assistant_paused") {
+      return { type: "assistant_paused" };
+    }
     return null;
   } catch {
     return null;
@@ -201,6 +211,11 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
           action: event.action,
           retryAt: event.retryAt,
         });
+        return;
+      }
+      if (event.type === "assistant_paused") {
+        const sessionType = useChatStore.getState().sessionType ?? "public";
+        void applyAssistantPaused(sessionType);
         return;
       }
       if (event.type === "message_too_long") {

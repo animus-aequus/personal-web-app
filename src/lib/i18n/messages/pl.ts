@@ -98,7 +98,12 @@ export const pl = {
   pause: {
     title: "Asystent wstrzymany",
     defaultMessage:
-      "Ze względu na duże zainteresowanie publiczny dostęp do asystenta jest tymczasowo wstrzymany.",
+      "Ze względu na duże zainteresowanie dostęp do asystenta jest tymczasowo wstrzymany.",
+  },
+  invite: {
+    invalidTitle: "Nieprawidłowe zaproszenie",
+    invalidBody:
+      "Ten link zaproszenia jest nieprawidłowy, wygasł albo został już wyczerpany. Możesz kontynuować jako zwykły gość.",
   },
   rateLimit: {
     title: "Osiągnięto limit",

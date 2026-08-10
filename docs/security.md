@@ -198,25 +198,17 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Public access cost guard (early reject + LangSmith webhook)
 
-**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`
+**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`, invite UI in `use-chat-session.ts` / `invalid-invite-modal.tsx`
 
-**Early reject:** `enforcePublicAccess()` runs as the **first** statement of `POST /api/session`, `POST /api/chat` and `POST /api/livekit/token` — before Turnstile / agent proxy work. Edge Upstash may still run in `proxy.ts` before the handler; a paused assistant still avoids agent/LLM cost. Response: **503** `{ "error": "assistant_paused", "message": … }`. Pause state comes from agent `GET /api/v1/config`, cached in-module for **15 s** (failures cached too). Read failures **fail open** — the agent's own turn guard is the hard cap.
+**Pause buckets:** agent `GET /api/v1/config` returns `paused_by_type.public` and `paused_by_type.invited`. BFF `GET /api/public-status` mirrors both. Bootstrap gates on **invited** when `?invite=` is present or the persisted `sessionType` is `invited`; otherwise **public**. Hard enforcement of turn caps remains on the agent (`try_consume_turn(session_type)`). Invited sessions may **fall back** to the public turn budget when invited is exhausted but public still has capacity; `paused_by_type.invited` is effective only when **both** buckets are paused. `POST /api/session`, chat, and LiveKit token no longer apply a type-agnostic early reject — the agent resolves type on create/resume/turn.
 
-Booking / cancellation / direct-message routes are intentionally **not** guarded: they make no LLM call, and blocking them would trap a visitor mid-OTP.
+**UI:** when the relevant bucket is paused the session phase becomes `paused`. Mid-session pauses (text **503** `assistant_paused`, voice `ui_events` `assistant_paused`) call `applyAssistantPaused(sessionType)` and show the same localized pause modal (`pause.defaultMessage`). Overlay + `OK`; chrome stays disabled after acknowledging.
 
-**UI:** bootstrap calls `GET /api/public-status` after store rehydrate and before Turnstile / `POST /api/session`; when paused the session phase becomes `paused` and nothing is created. Mid-session pauses are detected from `useChat` `onError` and a failed LiveKit `start()` via `refreshPublicPauseState()`. Both paths show the same centered warning card (overlay + `OK`), and the control bar (input, send, voice toggle) stays disabled after acknowledging.
+**Invites:** `?invite=` is read on bootstrap, sent as `invite_token` on `POST /api/session`, then stripped from the URL. **403** `invite_invalid` opens a dialog; OK resumes a prior session if one existed, otherwise creates a public session.
 
-**LangSmith webhook:** `POST /api/webhooks/langsmith` verifies `X-Webhook-Secret` against `LANGSMITH_WEBHOOK_SECRET` with `timingSafeEqual` (missing env → **503**, mismatch → **401** without detail). After auth, every delivery calls agent `POST /api/v1/admin/pause` with `X-Admin-Secret` (only wire Cost alerts to this URL). Maps `triggered_metric_value` → `cost_usd` and `triggered_threshold` → `threshold_usd` when LangSmith includes them; empty or minimal test bodies still pause. Invalidates the status cache on success. Agent failure → **500** so LangSmith retries.
+**LangSmith webhook:** still pauses the agent **public** bucket only (`POST /api/v1/admin/pause`). Invalidates the status cache on success.
 
 **Env:** `LANGSMITH_WEBHOOK_SECRET`, `ADMIN_PAUSE_SECRET` (both server-only; the second must match the agent).
-
-**LangSmith setup (manual, outside the repo):**
-
-1. Settings → Models: confirm a pricing entry exists for `eu.anthropic.claude-haiku-4-5-20251001-v1:0`, otherwise alert `Cost` stays at zero.
-2. Tracing project → Alerts → two **Cost** alerts on the same webhook: `sum ≥ $3` over **15 min** (spike) and `sum ≥ $8` over **60 min** (slower burn).
-3. Webhook URL `https://<canonical-domain>/api/webhooks/langsmith` (use the final host — e.g. `www` if apex redirects with **308**), header `{"X-Webhook-Secret": "<LANGSMITH_WEBHOOK_SECRET>"}`. Default body is fine; LangSmith merges alert fields when present.
-4. `Send Test Notification` → expect a Telegram alert (Path: LangSmith) and `paused = true` in Postgres; then resume manually (SQL runbook in the agent repo `docs/security.md`).
-5. Ensure Vercel Deployment Protection does not cover `/api/webhooks/*` in production.
 
 Resume, manual pause and limit changes are SQL-only — see the runbook in the agent API [`security.md`](../../personal-voice-agent/docs/security.md).
 

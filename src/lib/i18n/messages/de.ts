@@ -99,7 +99,12 @@ export const de = {
   pause: {
     title: "Assistent pausiert",
     defaultMessage:
-      "Aufgrund des großen Interesses ist der öffentliche Zugang zum Assistenten vorübergehend pausiert.",
+      "Aufgrund des großen Interesses ist der Zugang zum Assistenten vorübergehend pausiert.",
+  },
+  invite: {
+    invalidTitle: "Ungültige Einladung",
+    invalidBody:
+      "Dieser Einladungslink ist ungültig, abgelaufen oder bereits aufgebraucht. Du kannst als regulärer Besucher fortfahren.",
   },
   rateLimit: {
     title: "Limit erreicht",

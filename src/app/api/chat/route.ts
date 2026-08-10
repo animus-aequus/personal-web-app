@@ -2,13 +2,19 @@ import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { openAgentChatStream, RateLimitExceededError, streamAgentChatFromResponse } from "@/lib/agent-client";
+import {
+  AssistantPausedError,
+  openAgentChatStream,
+  RateLimitExceededError,
+  streamAgentChatFromResponse,
+} from "@/lib/agent-client";
 import {
   CHAT_MESSAGE_MAX,
   isChatMessageTooLong,
   isChatRequestBodyTooLarge,
 } from "@/lib/chat/chat-message-validation";
-import { enforcePublicAccess } from "@/lib/public-access";
+import { PAUSED_ERROR_CODE } from "@/lib/public-access-config";
+import { invalidatePublicStatusCache } from "@/lib/public-access";
 import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -26,11 +32,8 @@ type ChatRequestBody = {
 };
 
 export async function POST(request: Request) {
-  const paused = await enforcePublicAccess();
-  if (paused) {
-    return paused;
-  }
-
+  // Pause is enforced on the agent using web_sessions.session_type — do not
+  // apply a type-agnostic public-only early reject here.
   try {
     if (isChatRequestBodyTooLarge(request.headers.get("content-length"))) {
       return NextResponse.json(
@@ -77,6 +80,13 @@ export async function POST(request: Request) {
           error.retryAfterSeconds,
           error.action,
           error.retryAt,
+        );
+      }
+      if (error instanceof AssistantPausedError) {
+        invalidatePublicStatusCache();
+        return NextResponse.json(
+          { error: PAUSED_ERROR_CODE, message: error.pauseMessage },
+          { status: 503, headers: { "Cache-Control": "no-store" } },
         );
       }
       throw error;

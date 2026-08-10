@@ -8,6 +8,7 @@ import {
   resolveBrowserLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
+import type { SessionType } from "@/lib/public-access-config";
 
 export type MessageSource = "text" | "voice";
 
@@ -42,6 +43,8 @@ export type ChatMessage = {
 type ChatStore = {
   sessionId: string | null;
   setSessionId: (sessionId: string | null) => void;
+  sessionType: SessionType | null;
+  setSessionType: (sessionType: SessionType | null) => void;
   /**
    * UI/session locale (persisted). ``null`` until rehydrate/bootstrap resolves
    * early path (localStorage → navigator → en). After create/resume, always
@@ -52,19 +55,16 @@ type ChatStore = {
 };
 
 /**
- * Persists `sessionId` and `language`. Hydration is deferred (`skipHydration`)
- * and driven explicitly by `useChatSession` so there is a single, deterministic
- * point where the persisted id is read — no SSR mismatch, no module-load race.
- *
- * Initial `language` is ``null`` (not ``en``): Zustand persist skips ``merge``
- * when storage is empty, so a DEFAULT_LOCALE initializer would permanently
- * win over ``navigator`` on first visit.
+ * Persists `sessionId`, `sessionType`, and `language`. Hydration is deferred
+ * (`skipHydration`) and driven explicitly by `useChatSession`.
  */
 export const useChatStore = create<ChatStore>()(
   persist(
     (set) => ({
       sessionId: null,
       setSessionId: (sessionId) => set({ sessionId }),
+      sessionType: null,
+      setSessionType: (sessionType) => set({ sessionType }),
       language: null,
       setLanguage: (language) => set({ language: normalizeLocale(language) }),
     }),
@@ -72,15 +72,21 @@ export const useChatStore = create<ChatStore>()(
       name: "personal-agent-chat",
       partialize: (state) => ({
         sessionId: state.sessionId,
+        ...(state.sessionType != null ? { sessionType: state.sessionType } : {}),
         ...(state.language != null ? { language: state.language } : {}),
       }),
       merge: (persisted, current) => {
         const partial = (persisted ?? {}) as Partial<ChatStore>;
         const hasStoredLanguage =
           typeof partial.language === "string" && partial.language.length > 0;
+        const sessionType =
+          partial.sessionType === "invited" || partial.sessionType === "public"
+            ? partial.sessionType
+            : null;
         return {
           ...current,
           ...partial,
+          sessionType,
           language: hasStoredLanguage
             ? normalizeLocale(partial.language)
             : resolveBrowserLocale(),

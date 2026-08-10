@@ -10,9 +10,9 @@ Base path: `/api/v1` on the agent API host.
 
 | Method | Path | Body | Response |
 |--------|------|------|----------|
-| `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused", "pause_message" }` |
-| `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` |
-| `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null }` | `{ "session_id", "thread_id", "language", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `language` is `en\|pl\|de\|es\|fr` |
+| `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused_by_type": { "public": { "paused", "pause_message" }, "invited": { "paused", "pause_message" } } }` |
+| `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` — pauses **public** only |
+| `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null, "invite_token"?: string \| null }` | `{ "session_id", "thread_id", "language", "session_type", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `session_type` is `public\|invited` |
 | `PATCH` | `/sessions/{session_id}` | `{ "language": string }` | `{ "session_id", "language" }` — authoritative normalized locale |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
@@ -74,17 +74,18 @@ Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse pe
 
 ### `GET /config` and `POST /admin/pause` (public access guard)
 
-`/config` is unauthenticated and carries no counters. While `paused` is true, `features.text_chat` and `features.voice_chat` are `false` and `pause_message` holds visitor-facing copy; otherwise `pause_message` is `null`. This app reads it through `getPublicStatus()` (15 s cache) for early rejects and `GET /api/public-status`.
+`/config` is unauthenticated and carries no counters. Pause state lives only in `paused_by_type` (`public` and `invited`). While public is paused, `features.text_chat` and `features.voice_chat` are `false`. This app reads config through `getPublicStatus()` (15 s cache) for `GET /api/public-status` and bootstrap gating by session type / invite intent.
 
-`/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret` (`ADMIN_PAUSE_SECRET`, identical on both sides). `source` is `"langsmith"` or `"manual"`. It is idempotent: `changed` is `false` when the assistant was already paused (no duplicate Telegram alert). **503** when the agent has no admin secret configured, **401** on mismatch. Called from `pauseAssistant()` in the LangSmith webhook route.
+`/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret`. It pauses the **public** bucket only (invited keeps its own turn limits). `source` is `"langsmith"` or `"manual"`. Idempotent: `changed` is `false` when already paused. Called from `pauseAssistant()` in the LangSmith webhook route.
 
-While paused, every LLM turn is refused by the agent itself, so LiveKit voice (which bypasses this BFF) is covered too.
+LLM turns are refused per `web_sessions.session_type` on the agent, so LiveKit voice is covered too. Mid-turn denials on `/chat` and `/chat/stream` return **503** `{ "error": "assistant_paused", "message" }` (before SSE starts). Voice publishes `ui_events` `{ "type": "assistant_paused" }`. The BFF forwards **503**; the UI shows the localized pause modal (not the English `message` as chat text).
 
 ### `POST /sessions`
 
-- **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language`.
-- **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; returns stored `language` + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language from the response.
-- Without binding: legacy stateless id normalization (pre-E4); response `language` is normalized from the request hint or `en`.
+- **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language` and `session_type` (`public` by default).
+- **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; returns stored `language`, `session_type`, + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language / `sessionType` from the response.
+- **Magic link** (`invite_token` from `?invite=`): validates hash against `invitations`; **403** `{ "error": "invite_invalid" }` when unknown/expired/exhausted. Same invitation + already-authenticated session with matching `invitation_id` → resume without redeem. Otherwise atomic redeem + fresh `invited` session. Response includes `session_type: "invited"`.
+- Without binding: legacy stateless id normalization (pre-E4); response `language` is normalized from the request hint or `en`; invites require binding/Postgres.
 
 ### `PATCH /sessions/{session_id}`
 

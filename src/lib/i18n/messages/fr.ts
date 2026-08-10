@@ -100,7 +100,12 @@ export const fr = {
   pause: {
     title: "Assistant en pause",
     defaultMessage:
-      "En raison d'un fort intérêt, l'accès public à l'assistant est temporairement suspendu.",
+      "En raison d'un fort intérêt, l'accès à l'assistant est temporairement suspendu.",
+  },
+  invite: {
+    invalidTitle: "Invitation invalide",
+    invalidBody:
+      "Ce lien d'invitation est invalide, expiré ou déjà épuisé. Vous pouvez continuer en tant que visiteur classique.",
   },
   rateLimit: {
     title: "Limite atteinte",

@@ -33,12 +33,14 @@ import {
   MESSAGE_TOO_LONG_ERROR,
   throwIfMessageTooLongResponse,
 } from "@/lib/chat/chat-message-errors";
+import { bucketForType, PAUSED_ERROR_CODE } from "@/lib/public-access-config";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import {
+  applyAssistantPaused,
   refreshPublicPauseState,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
@@ -336,6 +338,24 @@ function TextChatArea({
             await handleRateLimitResponse(response, "chat");
             throw new Error("rate_limit_exceeded");
           }
+          if (response.status === 503) {
+            try {
+              const body = (await response.clone().json()) as { error?: string };
+              if (body.error === PAUSED_ERROR_CODE) {
+                const sessionType =
+                  useChatStore.getState().sessionType ?? "public";
+                void applyAssistantPaused(sessionType);
+                throw new Error(PAUSED_ERROR_CODE);
+              }
+            } catch (error) {
+              if (
+                error instanceof Error &&
+                error.message === PAUSED_ERROR_CODE
+              ) {
+                throw error;
+              }
+            }
+          }
           if (response.status === 400) {
             await throwIfMessageTooLongResponse(response);
           }
@@ -354,10 +374,11 @@ function TextChatArea({
     [sessionId],
   );
 
-  const paused = usePublicPauseStore((s) => s.paused);
-  const pauseMessage = usePublicPauseStore((s) => s.message);
+  const pauseStatus = usePublicPauseStore((s) => s.status);
+  const activeType = usePublicPauseStore((s) => s.activeType);
   const pauseDismissed = usePublicPauseStore((s) => s.dismissed);
   const dismissPause = usePublicPauseStore((s) => s.dismiss);
+  const paused = bucketForType(pauseStatus, activeType).paused;
 
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
@@ -365,12 +386,14 @@ function TextChatArea({
     onError: (error) => {
       if (
         error.message === "rate_limit_exceeded" ||
-        error.message === MESSAGE_TOO_LONG_ERROR
+        error.message === MESSAGE_TOO_LONG_ERROR ||
+        error.message === PAUSED_ERROR_CODE
       ) {
         return;
       }
       console.error("Chat turn failed", error);
-      void refreshPublicPauseState();
+      const sessionType = useChatStore.getState().sessionType ?? "public";
+      void refreshPublicPauseState(sessionType);
     },
   });
 
@@ -670,7 +693,7 @@ function TextChatArea({
         />
 
         {paused && !pauseDismissed ? (
-          <PublicPauseModal message={pauseMessage} onAcknowledge={dismissPause} />
+          <PublicPauseModal onAcknowledge={dismissPause} />
         ) : null}
 
         <RateLimitModal />
@@ -684,18 +707,17 @@ function TextChatArea({
 /** Bootstrap stopped before Turnstile and session creation — nothing to chat with. */
 export function PausedChatPanel() {
   const { t } = useTranslation();
-  const message = usePublicPauseStore((s) => s.message);
   const dismissed = usePublicPauseStore((s) => s.dismissed);
   const dismiss = usePublicPauseStore((s) => s.dismiss);
 
   if (!dismissed) {
-    return <PublicPauseModal message={message} onAcknowledge={dismiss} />;
+    return <PublicPauseModal onAcknowledge={dismiss} />;
   }
 
   return (
     <div className="flex h-dvh w-full items-center justify-center px-6 text-center">
       <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-        {message?.trim() || t("pause.defaultMessage")}
+        {t("pause.defaultMessage")}
       </p>
     </div>
   );

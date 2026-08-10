@@ -1,9 +1,15 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { createAgentSession, updateAgentSessionLanguage, RateLimitExceededError } from "@/lib/agent-client";
+import {
+  createAgentSession,
+  updateAgentSessionLanguage,
+  InviteInvalidError,
+  AssistantPausedError,
+  RateLimitExceededError,
+} from "@/lib/agent-client";
 import { isLocaleCode } from "@/lib/i18n/locales";
-import { enforcePublicAccess } from "@/lib/public-access";
+import { INVITE_INVALID_ERROR_CODE } from "@/lib/public-access-config";
 import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
   isSessionBindingEnabled,
@@ -16,11 +22,7 @@ import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 export const revalidate = 0;
 
 export async function PATCH(request: Request) {
-  const paused = await enforcePublicAccess();
-  if (paused) {
-    return paused;
-  }
-
+  // Pause is enforced on the agent after session type is known; PATCH is cheap.
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
@@ -60,15 +62,13 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const paused = await enforcePublicAccess();
-  if (paused) {
-    return paused;
-  }
-
+  // Do not gate on a type-agnostic pause here — agent decides after invite /
+  // resume resolves session_type (public vs invited).
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
       language?: string | null;
+      invite_token?: string | null;
       [TURNSTILE_TOKEN_FIELD]?: string;
     };
 
@@ -87,6 +87,7 @@ export async function POST(request: Request) {
       clientIp: getClientIp(request),
       sessionSecret: existingSecret,
       language: body.language ?? null,
+      inviteToken: body.invite_token ?? null,
     });
 
     const response = NextResponse.json(
@@ -94,6 +95,7 @@ export async function POST(request: Request) {
         session_id: data.session_id,
         thread_id: data.thread_id,
         language: data.language ?? "en",
+        session_type: data.session_type,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -110,11 +112,23 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (error instanceof InviteInvalidError) {
+      return NextResponse.json(
+        { error: INVITE_INVALID_ERROR_CODE },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     if (error instanceof RateLimitExceededError) {
       return rateLimitResponse(
         error.retryAfterSeconds,
         error.action,
         error.retryAt,
+      );
+    }
+    if (error instanceof AssistantPausedError) {
+      return NextResponse.json(
+        { error: "assistant_paused", message: error.pauseMessage },
+        { status: 503, headers: { "Cache-Control": "no-store" } },
       );
     }
     const message = error instanceof Error ? error.message : "Session failed";

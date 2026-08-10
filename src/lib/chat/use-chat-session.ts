@@ -9,10 +9,16 @@ import {
   resolveBrowserLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
+import {
+  INVITE_INVALID_ERROR_CODE,
+  bucketForType,
+  type SessionType,
+} from "@/lib/public-access-config";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
+import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import {
   fetchPublicStatus,
@@ -23,7 +29,7 @@ import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast"
 
 /**
  * Coarse lifecycle for the chat surface:
- * - `paused`    — public access is paused; nothing is created (zero cost).
+ * - `paused`    — relevant access bucket is paused; nothing is created (zero cost).
  * - `verifying` — Turnstile gate (human check) before session create/resume.
  * - `loading`   — session create/resume and/or initial history fetch.
  * - `ready`     — session established and initial history settled.
@@ -45,6 +51,7 @@ type UseChatSessionResult = {
   isReverification: boolean;
   error: string | null;
   retry: () => void;
+  acknowledgeInvalidInvite: () => void;
   historyStatus: HistoryStatus;
   rows: ReturnType<typeof useChatHistory>["rows"];
   hasMore: boolean;
@@ -52,11 +59,104 @@ type UseChatSessionResult = {
   appendLive: ReturnType<typeof useChatHistory>["appendLive"];
 };
 
+/** Survives Strict Mode remount / bootstrap restart after URL strip. */
+const PENDING_INVITE_STORAGE_KEY = "pending_invite_token";
+
+function readInviteTokenFromUrl(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const raw = new URLSearchParams(window.location.search).get("invite");
+  const trimmed = raw?.trim();
+  return trimmed || null;
+}
+
+function stripInviteFromUrl(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("invite")) {
+    return;
+  }
+  url.searchParams.delete("invite");
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState(window.history.state, "", next);
+}
+
+function readHeldInviteToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const held = sessionStorage.getItem(PENDING_INVITE_STORAGE_KEY)?.trim();
+    return held || null;
+  } catch {
+    return null;
+  }
+}
+
+function holdInviteToken(token: string): void {
+  try {
+    sessionStorage.setItem(PENDING_INVITE_STORAGE_KEY, token);
+  } catch {
+    // Private mode / quota — URL strip still applies; token stays in memory.
+  }
+}
+
+function clearHeldInviteToken(): void {
+  try {
+    sessionStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Take invite from URL (preferred) or sessionStorage hold.
+ * Strips ``?invite=`` immediately to reduce Referer leakage.
+ */
+function takeInviteToken(): string | null {
+  const fromUrl = readInviteTokenFromUrl();
+  if (fromUrl) {
+    holdInviteToken(fromUrl);
+    stripInviteFromUrl();
+    return fromUrl;
+  }
+  return readHeldInviteToken();
+}
+
+function resolvePauseGateType(
+  inviteToken: string | null,
+  persistedType: SessionType | null,
+  persistedId: string | null,
+): SessionType {
+  if (inviteToken) {
+    return "invited";
+  }
+  if (persistedType === "invited" && persistedId) {
+    return "invited";
+  }
+  return "public";
+}
+
+class InviteInvalidClientError extends Error {
+  constructor() {
+    super(INVITE_INVALID_ERROR_CODE);
+    this.name = "InviteInvalidClientError";
+  }
+}
+
 async function ensureServerSession(
   persistedId: string | null,
   turnstileToken: string,
   language: LocaleCode,
-): Promise<{ sessionId: string; language: LocaleCode }> {
+  inviteToken: string | null,
+): Promise<{
+  sessionId: string;
+  language: LocaleCode;
+  sessionType: SessionType;
+}> {
   const body: Record<string, string> = {
     language,
   };
@@ -65,6 +165,9 @@ async function ensureServerSession(
   }
   if (turnstileToken) {
     body[TURNSTILE_TOKEN_FIELD] = turnstileToken;
+  }
+  if (inviteToken) {
+    body.invite_token = inviteToken;
   }
 
   const response = await fetch("/api/session", {
@@ -75,17 +178,36 @@ async function ensureServerSession(
 
   if (!response.ok) {
     await notifyTurnstileFailureIfNeeded(response);
-    throw new Error(await response.text());
+    const text = await response.text();
+    if (response.status === 403) {
+      try {
+        const parsed = JSON.parse(text) as { error?: string };
+        if (parsed.error === INVITE_INVALID_ERROR_CODE) {
+          throw new InviteInvalidClientError();
+        }
+      } catch (error) {
+        if (error instanceof InviteInvalidClientError) {
+          throw error;
+        }
+      }
+      if (text.includes(INVITE_INVALID_ERROR_CODE)) {
+        throw new InviteInvalidClientError();
+      }
+    }
+    throw new Error(text);
   }
 
   const data = (await response.json()) as {
     session_id: string;
     language?: string;
+    session_type: SessionType;
   };
+  const sessionType: SessionType =
+    data.session_type === "invited" ? "invited" : "public";
   return {
     sessionId: data.session_id,
-    // Server is authoritative once a session exists (DB wins over early path).
     language: normalizeLocale(data.language, language),
+    sessionType,
   };
 }
 
@@ -161,6 +283,38 @@ async function rehydratePendingCancellations(sessionId: string): Promise<void> {
   }
 }
 
+async function finishReadySession(
+  deps: Pick<
+    BootstrapDeps,
+    "isCurrent" | "loadInitial" | "setSessionId"
+  >,
+  session: {
+    sessionId: string;
+    language: LocaleCode;
+    sessionType: SessionType;
+  },
+): Promise<void> {
+  const { isCurrent, loadInitial, setSessionId } = deps;
+  if (!isCurrent()) {
+    return;
+  }
+
+  useChatStore.getState().setSessionId(session.sessionId);
+  useChatStore.getState().setSessionType(session.sessionType);
+  useChatStore.getState().setLanguage(session.language);
+  usePublicPauseStore.getState().setActiveType(session.sessionType);
+  setSessionId(session.sessionId);
+
+  await Promise.all([
+    loadInitial(session.sessionId),
+    rehydratePendingBooking(session.sessionId),
+    rehydratePendingCancellations(session.sessionId),
+  ]);
+  if (!isCurrent()) {
+    return;
+  }
+}
+
 type BootstrapDeps = {
   isCurrent: () => boolean;
   turnstileEnabled: boolean;
@@ -208,22 +362,29 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     useMeetingsListStore.getState().clear();
     useDirectMessageStore.getState().clear();
 
+    const inviteToken = takeInviteToken();
+    const storeState = useChatStore.getState();
+    const persistedId = storeState.sessionId;
+    const persistedType = storeState.sessionType;
+    const pauseGateType = resolvePauseGateType(
+      inviteToken,
+      persistedType,
+      persistedId,
+    );
+
     // Before Turnstile and session creation: a paused assistant must not cost
     // a Turnstile verification, an Upstash command or a session row.
     const publicStatus = await fetchPublicStatus();
     if (!isCurrent()) {
       return;
     }
-    usePublicPauseStore.getState().setStatus(publicStatus);
-    if (publicStatus.paused) {
+    usePublicPauseStore.getState().setStatus(publicStatus, pauseGateType);
+    if (bucketForType(publicStatus, pauseGateType).paused) {
       setBootstrapStage("paused");
       return;
     }
 
-    const storeState = useChatStore.getState();
-    const persistedId = storeState.sessionId;
     // Early path: persisted language from rehydrate/merge, else navigator.
-    // Store starts as null when storage is empty (persist skips merge then).
     const earlyLanguage = storeState.language ?? resolveBrowserLocale();
     if (storeState.language == null) {
       useChatStore.getState().setLanguage(earlyLanguage);
@@ -238,40 +399,37 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
 
     const turnstileToken = await acquireToken();
     if (!isCurrent()) {
-      // Stale run (e.g. Strict Mode remount) — do not create a second session.
       resetAfterUse();
       return;
     }
 
     setBootstrapStage("loading");
 
-    let activeSessionId: string;
-    let sessionLanguage: LocaleCode;
     try {
       const session = await ensureServerSession(
         persistedId,
         turnstileToken,
         earlyLanguage,
+        inviteToken,
       );
-      activeSessionId = session.sessionId;
-      sessionLanguage = session.language;
+      clearHeldInviteToken();
+      await finishReadySession(
+        { isCurrent, loadInitial, setSessionId },
+        session,
+      );
+    } catch (error) {
+      if (error instanceof InviteInvalidClientError) {
+        clearHeldInviteToken();
+        useInvalidInviteStore.getState().show(Boolean(persistedId));
+        // Keep prior session id in the Zustand store; React sessionId stays null
+        // until the user acknowledges the dialog (resume or fresh public).
+        setBootstrapStage("loading");
+        return;
+      }
+      throw error;
     } finally {
       resetAfterUse();
     }
-
-    if (!isCurrent()) {
-      return;
-    }
-
-    useChatStore.getState().setSessionId(activeSessionId);
-    useChatStore.getState().setLanguage(sessionLanguage);
-    setSessionId(activeSessionId);
-
-    await Promise.all([
-      loadInitial(activeSessionId),
-      rehydratePendingBooking(activeSessionId),
-      rehydratePendingCancellations(activeSessionId),
-    ]);
   } catch (error) {
     if (!isCurrent()) {
       return;
@@ -303,8 +461,6 @@ export function useChatSession(): UseChatSessionResult {
     useState<BootstrapStage>("loading");
   const [isReverification, setIsReverification] = useState(false);
 
-  // Guards against overlapping bootstraps (React Strict Mode double-invoke,
-  // retries): only the latest run may commit state.
   const runIdRef = useRef(0);
   const hadReadySessionRef = useRef(false);
 
@@ -337,6 +493,94 @@ export function useChatSession(): UseChatSessionResult {
       runIdRef.current += 1;
     };
   }, [startBootstrap]);
+
+  const acknowledgeInvalidInvite = useCallback(() => {
+    const { hadPriorSession, dismiss, recovering, setRecovering } =
+      useInvalidInviteStore.getState();
+    if (recovering) {
+      return;
+    }
+    setRecovering(true);
+    dismiss();
+
+    void (async () => {
+      const runId = ++runIdRef.current;
+      const isCurrent = () => runId === runIdRef.current;
+      try {
+        setBootstrapError(null);
+        setBootstrapStage("loading");
+
+        await useChatStore.persist.rehydrate();
+        if (!isCurrent()) {
+          return;
+        }
+
+        const storeState = useChatStore.getState();
+        const earlyLanguage = storeState.language ?? resolveBrowserLocale();
+        const resumeId = hadPriorSession ? storeState.sessionId : null;
+
+        if (turnstileEnabled) {
+          setBootstrapStage("verifying");
+        }
+        const turnstileToken = await acquireToken();
+        if (!isCurrent()) {
+          resetAfterUse();
+          return;
+        }
+        setBootstrapStage("loading");
+
+        try {
+          let session;
+          try {
+            session = await ensureServerSession(
+              resumeId,
+              turnstileToken,
+              earlyLanguage,
+              null,
+            );
+          } catch (error) {
+            const staleSession =
+              resumeId &&
+              error instanceof Error &&
+              error.message.includes("(401)");
+            if (!staleSession) {
+              throw error;
+            }
+            // Turnstile tokens are single-use — mint a fresh one for create.
+            resetAfterUse();
+            const freshToken = await acquireToken();
+            if (!isCurrent()) {
+              resetAfterUse();
+              return;
+            }
+            session = await ensureServerSession(
+              null,
+              freshToken,
+              earlyLanguage,
+              null,
+            );
+          }
+          await finishReadySession(
+            { isCurrent, loadInitial, setSessionId },
+            session,
+          );
+        } finally {
+          resetAfterUse();
+        }
+      } catch (error) {
+        if (!isCurrent()) {
+          return;
+        }
+        console.error("Invalid-invite recovery failed:", error);
+        setBootstrapError(
+          error instanceof Error ? error.message : "Failed to start chat",
+        );
+      } finally {
+        // Always clear — a superseded run must not leave OK permanently disabled.
+        useInvalidInviteStore.getState().setRecovering(false);
+      }
+    })();
+  }, [acquireToken, loadInitial, resetAfterUse, turnstileEnabled]);
 
   const phase: ChatSessionPhase =
     bootstrapStage === "paused"
@@ -372,6 +616,7 @@ export function useChatSession(): UseChatSessionResult {
     retry: () => {
       void startBootstrap();
     },
+    acknowledgeInvalidInvite,
     historyStatus,
     rows,
     hasMore,

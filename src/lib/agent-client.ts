@@ -51,6 +51,7 @@ export type CreateSessionResponse = {
   thread_id: string;
   /** Authoritative session locale from the agent (en|pl|de|es|fr). */
   language?: string | null;
+  session_type: "public" | "invited";
   session_secret?: string | null;
   session_expires_at?: string | null;
 };
@@ -60,11 +61,58 @@ export type UpdateSessionLanguageResponse = {
   language: string;
 };
 
-export type AgentClientConfig = {
-  features: Record<string, boolean>;
-  paused?: boolean;
+export type AgentPauseBucket = {
+  paused: boolean;
   pause_message?: string | null;
 };
+
+export type AgentClientConfig = {
+  features: Record<string, boolean>;
+  paused_by_type: {
+    public: AgentPauseBucket;
+    invited: AgentPauseBucket;
+  };
+};
+
+export class InviteInvalidError extends Error {
+  readonly code = "invite_invalid";
+
+  constructor(message = "Invalid invitation") {
+    super(message);
+    this.name = "InviteInvalidError";
+  }
+}
+
+export class AssistantPausedError extends Error {
+  readonly pauseMessage: string;
+
+  constructor(pauseMessage: string) {
+    super(pauseMessage);
+    this.name = "AssistantPausedError";
+    this.pauseMessage = pauseMessage;
+  }
+}
+
+function parseAgentErrorDetail(
+  text: string,
+): { error?: string; message?: string } | null {
+  try {
+    const parsed = JSON.parse(text) as {
+      detail?: { error?: string; message?: string } | string;
+      error?: string;
+      message?: string;
+    };
+    if (parsed.detail && typeof parsed.detail === "object") {
+      return {
+        error: parsed.detail.error,
+        message: parsed.detail.message,
+      };
+    }
+    return { error: parsed.error, message: parsed.message };
+  } catch {
+    return null;
+  }
+}
 
 export async function fetchAgentConfig(): Promise<AgentClientConfig> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/config`, {
@@ -189,7 +237,10 @@ export async function fetchChatHistory(
 
 export async function createAgentSession(
   sessionId: string | undefined,
-  options?: AgentRequestOptions & { language?: string | null },
+  options?: AgentRequestOptions & {
+    language?: string | null;
+    inviteToken?: string | null;
+  },
 ): Promise<CreateSessionResponse> {
   const response = await fetch(`${AGENT_API_BASE_URL}/api/v1/sessions`, {
     method: "POST",
@@ -197,6 +248,7 @@ export async function createAgentSession(
     body: JSON.stringify({
       session_id: sessionId ?? null,
       language: options?.language ?? null,
+      invite_token: options?.inviteToken?.trim() || null,
     }),
     cache: "no-store",
   });
@@ -204,6 +256,15 @@ export async function createAgentSession(
   if (!response.ok) {
     await throwIfRateLimited(response, "chat");
     const detail = await response.text();
+    if (response.status === 403 && detail.includes("invite_invalid")) {
+      throw new InviteInvalidError();
+    }
+    const agentError = parseAgentErrorDetail(detail);
+    if (response.status === 503 && agentError?.error === "assistant_paused") {
+      throw new AssistantPausedError(
+        agentError.message ?? "Assistant is temporarily unavailable",
+      );
+    }
     throw new Error(`Session creation failed (${response.status}): ${detail}`);
   }
 
@@ -384,6 +445,12 @@ export async function openAgentChatStream(
 
   if (!response.ok || !response.body) {
     const detail = await response.text().catch(() => "");
+    const agentError = parseAgentErrorDetail(detail);
+    if (response.status === 503 && agentError?.error === "assistant_paused") {
+      throw new AssistantPausedError(
+        agentError.message ?? "Assistant is temporarily unavailable",
+      );
+    }
     throw new Error(`Chat stream failed (${response.status}): ${detail}`);
   }
 

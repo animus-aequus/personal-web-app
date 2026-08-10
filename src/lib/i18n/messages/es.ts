@@ -99,7 +99,12 @@ export const es = {
   pause: {
     title: "Asistente en pausa",
     defaultMessage:
-      "Debido al gran interés, el acceso público al asistente está temporalmente en pausa.",
+      "Debido al gran interés, el acceso al asistente está temporalmente en pausa.",
+  },
+  invite: {
+    invalidTitle: "Invitación no válida",
+    invalidBody:
+      "Este enlace de invitación no es válido, ha caducado o ya se ha agotado. Puedes continuar como visitante habitual.",
   },
   rateLimit: {
     title: "Límite alcanzado",

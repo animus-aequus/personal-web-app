@@ -97,7 +97,12 @@ export const en = {
   pause: {
     title: "Assistant paused",
     defaultMessage:
-      "Due to high interest, public access to the assistant is temporarily paused.",
+      "Due to high interest, access to the assistant is temporarily paused.",
+  },
+  invite: {
+    invalidTitle: "Invalid invitation",
+    invalidBody:
+      "This invitation link is invalid, expired, or has already been used up. You can continue as a regular visitor.",
   },
   rateLimit: {
     title: "Limit reached",
