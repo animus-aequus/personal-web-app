@@ -23,6 +23,11 @@ type UseSmoothTextRevealResult = {
   phase: SmoothRevealPhase;
   /** Absolute indices of tokens that should play the enter animation. */
   animatingFromIndex: number;
+  /**
+   * True while the stream is open and the reveal queue has caught up —
+   * waiting on the next token (tool pause, model stall, etc.).
+   */
+  isAwaitingStream: boolean;
 };
 
 const CROSSFADE_MS = 280;
@@ -98,6 +103,7 @@ export function useSmoothTextReveal({
   const [revealedTokens, setRevealedTokens] = useState<string[]>([]);
   const [phase, setPhase] = useState<SmoothRevealPhase>("revealing");
   const [animatingFromIndex, setAnimatingFromIndex] = useState(0);
+  const [isAwaitingStream, setIsAwaitingStream] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(messageId);
 
   const queueRef = useRef<string[]>([]);
@@ -116,6 +122,7 @@ export function useSmoothTextReveal({
     setRevealedTokens([]);
     setAnimatingFromIndex(0);
     setPhase("revealing");
+    setIsAwaitingStream(false);
   }
 
   const clearTimer = () => {
@@ -158,6 +165,15 @@ export function useSmoothTextReveal({
       setPhase(next);
     };
 
+    const refreshAwaiting = () => {
+      const awaiting =
+        phaseRef.current === "revealing" &&
+        isStreamingRef.current &&
+        queueRef.current.length === 0 &&
+        revealedCountRef.current > 0;
+      setIsAwaitingStream(awaiting);
+    };
+
     syncQueueFromTarget({
       targetText: targetTextRef.current,
       isStreaming: isStreamingRef.current,
@@ -182,6 +198,7 @@ export function useSmoothTextReveal({
       if (phaseRef.current !== "revealing") {
         return;
       }
+      setIsAwaitingStream(false);
       setPhaseBoth("crossfading");
       clearCrossfadeTimer();
       const fadeMs = reducedMotionRef.current ? 0 : CROSSFADE_MS;
@@ -215,6 +232,7 @@ export function useSmoothTextReveal({
       const queue = queueRef.current;
 
       if (queue.length > 0) {
+        setIsAwaitingStream(false);
         const { intervalMs, batchSize } = reducedMotionRef.current
           ? { intervalMs: 0, batchSize: queue.length }
           : pacingForQueue(queue.length, flushing);
@@ -231,6 +249,7 @@ export function useSmoothTextReveal({
         return;
       }
 
+      refreshAwaiting();
       schedule(flushing ? 16 : 45);
     };
 
@@ -262,6 +281,7 @@ export function useSmoothTextReveal({
     revealedText: joinTokens(revealedTokens),
     phase,
     animatingFromIndex,
+    isAwaitingStream,
   };
 }
 
