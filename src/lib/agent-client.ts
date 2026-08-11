@@ -133,7 +133,7 @@ export async function fetchAgentConfig(): Promise<AgentClientConfig> {
 }
 
 export type PauseAssistantRequest = {
-  source: "langsmith" | "manual";
+  source: "manual";
   costUsd?: number;
   thresholdUsd?: number;
   alertName?: string;
@@ -145,7 +145,7 @@ export type PauseAssistantResponse = {
   changed: boolean;
 };
 
-/** Flip the agent's public access pause flag (LangSmith cost alert / operator). */
+/** Flip the agent's public access pause flag (manual operator kill-switch). */
 export async function pauseAssistant(
   body: PauseAssistantRequest,
 ): Promise<PauseAssistantResponse> {
@@ -169,6 +169,50 @@ export async function pauseAssistant(
   if (!response.ok) {
     const detail = await response.text().catch(() => "");
     throw new Error(`Assistant pause failed (${response.status}): ${detail}`);
+  }
+
+  return response.json();
+}
+
+export type LangSmithAlertRequest = {
+  costUsd?: number;
+  thresholdUsd?: number;
+  alertName?: string;
+  projectName?: string;
+};
+
+export type LangSmithAlertResponse = {
+  notified: boolean;
+};
+
+/** Forward a LangSmith cost alert to the agent (Telegram notify only — no pause). */
+export async function notifyLangSmithAlert(
+  body: LangSmithAlertRequest,
+): Promise<LangSmithAlertResponse> {
+  if (!ADMIN_PAUSE_SECRET) {
+    throw new Error("ADMIN_PAUSE_SECRET is not configured");
+  }
+
+  const response = await fetch(
+    `${AGENT_API_BASE_URL}/api/v1/admin/langsmith-alert`,
+    {
+      method: "POST",
+      headers: { ...agentHeaders(), "X-Admin-Secret": ADMIN_PAUSE_SECRET },
+      body: JSON.stringify({
+        cost_usd: body.costUsd ?? null,
+        threshold_usd: body.thresholdUsd ?? null,
+        alert_name: body.alertName ?? null,
+        project_name: body.projectName ?? null,
+      }),
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(
+      `LangSmith alert notify failed (${response.status}): ${detail}`,
+    );
   }
 
   return response.json();

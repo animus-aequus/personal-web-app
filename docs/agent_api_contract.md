@@ -11,7 +11,8 @@ Base path: `/api/v1` on the agent API host.
 | Method | Path | Body | Response |
 |--------|------|------|----------|
 | `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused_by_type": { "public": { "paused", "pause_message" }, "invited": { "paused", "pause_message" } } }` |
-| `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` — pauses **public** only |
+| `POST` | `/admin/pause` | `{ "source": "manual", "cost_usd"?, … }` | `{ "paused": true, "changed" }` — pauses **public** only |
+| `POST` | `/admin/langsmith-alert` | `{ "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "notified": true }` — Telegram only, no pause |
 | `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null, "timezone"?: string \| null, "invite_token"?: string \| null }` | `{ "session_id", "thread_id", "language", "timezone", "session_type", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `session_type` is `public\|invited` |
 | `PATCH` | `/sessions/{session_id}` | `{ "language"?: string, "timezone"?: string }` — at least one required | `{ "session_id", "language", "timezone" }` — authoritative normalized values |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
@@ -72,11 +73,13 @@ Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse pe
 
 **Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
 
-### `GET /config` and `POST /admin/pause` (public access guard)
+### `GET /config`, `POST /admin/pause`, and `POST /admin/langsmith-alert` (public access guard)
 
 `/config` is unauthenticated and carries no counters. Pause state lives only in `paused_by_type` (`public` and `invited`). While public is paused, `features.text_chat` and `features.voice_chat` are `false`. This app reads config through `getPublicStatus()` (15 s cache) for `GET /api/public-status` and bootstrap gating by session type / invite intent.
 
-`/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret`. It pauses the **public** bucket only (invited keeps its own turn limits). `source` is `"langsmith"` or `"manual"`. Idempotent: `changed` is `false` when already paused. Called from `pauseAssistant()` in the LangSmith webhook route.
+`/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret`. It pauses the **public** bucket only (invited keeps its own turn limits). `source` is `"manual"`. Idempotent: `changed` is `false` when already paused.
+
+`/admin/langsmith-alert` uses the same admin auth. Called from `notifyLangSmithAlert()` in the LangSmith webhook route — sends a Telegram notification only and does **not** pause access.
 
 LLM turns are refused per `web_sessions.session_type` on the agent, so LiveKit voice is covered too. Mid-turn denials on `/chat` and `/chat/stream` return **503** `{ "error": "assistant_paused", "message" }` (before SSE starts). Voice publishes `ui_events` `{ "type": "assistant_paused" }`. The BFF forwards **503**; the UI shows the localized pause modal (not the English `message` as chat text).
 

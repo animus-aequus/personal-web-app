@@ -2,8 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 
 import { NextResponse } from "next/server";
 
-import { pauseAssistant } from "@/lib/agent-client";
-import { invalidatePublicStatusCache } from "@/lib/public-access";
+import { notifyLangSmithAlert } from "@/lib/agent-client";
 
 export const revalidate = 0;
 
@@ -35,10 +34,10 @@ function toAmount(value: number | string | undefined): number | undefined {
 }
 
 /**
- * LangSmith cost-alert webhook → pause the assistant. Only Cost alerts should
- * point here. The agent API stays behind Cloudflare Access; LangSmith hits
- * this BFF proxy instead. LangSmith may send an empty body on test delivery;
- * cost/threshold fields are optional when absent.
+ * LangSmith cost-alert webhook → Telegram notify only (does not pause access).
+ * Only Cost alerts should point here. The agent API stays behind Cloudflare
+ * Access; LangSmith hits this BFF proxy instead. LangSmith may send an empty
+ * body on test delivery; cost/threshold fields are optional when absent.
  */
 export async function POST(request: Request) {
   const expected = process.env.LANGSMITH_WEBHOOK_SECRET?.trim();
@@ -57,18 +56,16 @@ export async function POST(request: Request) {
     .catch(() => ({}))) as LangSmithAlertPayload;
 
   try {
-    const result = await pauseAssistant({
-      source: "langsmith",
+    const result = await notifyLangSmithAlert({
       costUsd: toAmount(payload.triggered_metric_value),
       thresholdUsd: toAmount(payload.triggered_threshold),
       alertName: payload.alert_rule_name?.trim() || undefined,
       projectName: payload.project_name?.trim() || undefined,
     });
-    invalidatePublicStatusCache();
     return NextResponse.json(result);
   } catch (error) {
-    console.error("[langsmith-webhook] pause failed", error);
+    console.error("[langsmith-webhook] notify failed", error);
     // 5xx so LangSmith retries the delivery.
-    return NextResponse.json({ error: "pause_failed" }, { status: 500 });
+    return NextResponse.json({ error: "notify_failed" }, { status: 500 });
   }
 }

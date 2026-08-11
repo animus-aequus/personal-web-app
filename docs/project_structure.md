@@ -32,7 +32,7 @@ personal-website/                 # this repo
 | `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending (E8) |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `app/api/public-status/route.ts` | Public access pause state for the UI |
-| `app/api/webhooks/langsmith/route.ts` | LangSmith cost alert → pause the assistant |
+| `app/api/webhooks/langsmith/route.ts` | LangSmith cost alert → Telegram notify (no pause) |
 | `components/layout/site-shell.tsx` | Persistent Turnstile + session + AppShell across chat/terms |
 | `components/layout/app-shell.tsx` | Sidebar settings chrome |
 | `components/chat/chat-panel.tsx` | Chat surface (`TextChatArea`, voice, merge); mounted by SiteShell |

@@ -44,7 +44,7 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 | Turnstile | Implemented (`POST /api/session` only; chat/voice rely on session + RL) |
 | Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
 | Booking confirm / cancel / pending proxy routes | **Done** (E7) |
-| Public access early reject + LangSmith pause webhook | **Done** (see below) |
+| Public access early reject + LangSmith alert webhook | **Done** (see below) |
 | Chat message length (1000 chars; BFF + UI live error) | **Done** |
 
 ---
@@ -198,7 +198,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ### Public access cost guard (early reject + LangSmith webhook)
 
-**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`, invite UI in `use-chat-session.ts` / `invalid-invite-modal.tsx`
+**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `notifyLangSmithAlert()` / `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`, invite UI in `use-chat-session.ts` / `invalid-invite-modal.tsx`
 
 **Pause buckets:** agent `GET /api/v1/config` returns `paused_by_type.public` and `paused_by_type.invited`. BFF `GET /api/public-status` mirrors both. Bootstrap gates on **invited** when `?invite=` is present or the persisted `sessionType` is `invited`; otherwise **public**. Hard enforcement of turn caps remains on the agent (`try_consume_turn(session_type)`). Invited sessions may **fall back** to the public turn budget when invited is exhausted but public still has capacity; `paused_by_type.invited` is effective only when **both** buckets are paused. `POST /api/session`, chat, and LiveKit token no longer apply a type-agnostic early reject — the agent resolves type on create/resume/turn.
 
@@ -206,7 +206,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **Invites:** `?invite=` is read on bootstrap, sent as `invite_token` on `POST /api/session`, then stripped from the URL. **403** `invite_invalid` opens a dialog; OK resumes a prior session if one existed, otherwise creates a public session.
 
-**LangSmith webhook:** still pauses the agent **public** bucket only (`POST /api/v1/admin/pause`). Invalidates the status cache on success.
+**LangSmith webhook:** notifies via Telegram only (`POST /api/v1/admin/langsmith-alert`). Does **not** pause the assistant.
 
 **Env:** `LANGSMITH_WEBHOOK_SECRET`, `ADMIN_PAUSE_SECRET` (both server-only; the second must match the agent).
 
