@@ -9,6 +9,8 @@ import {
   resolveBrowserLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
+import { syncSessionTimezone } from "@/lib/i18n/sync-session-timezone";
+import { resolveBrowserTimezone } from "@/lib/i18n/timezone";
 import {
   INVITE_INVALID_ERROR_CODE,
   bucketForType,
@@ -151,14 +153,17 @@ async function ensureServerSession(
   persistedId: string | null,
   turnstileToken: string,
   language: LocaleCode,
+  timezone: string,
   inviteToken: string | null,
 ): Promise<{
   sessionId: string;
   language: LocaleCode;
+  timezone: string;
   sessionType: SessionType;
 }> {
   const body: Record<string, string> = {
     language,
+    timezone,
   };
   if (persistedId) {
     body.session_id = persistedId;
@@ -200,6 +205,7 @@ async function ensureServerSession(
   const data = (await response.json()) as {
     session_id: string;
     language?: string;
+    timezone?: string;
     session_type: SessionType;
   };
   const sessionType: SessionType =
@@ -207,6 +213,7 @@ async function ensureServerSession(
   return {
     sessionId: data.session_id,
     language: normalizeLocale(data.language, language),
+    timezone: data.timezone?.trim() || timezone,
     sessionType,
   };
 }
@@ -291,6 +298,7 @@ async function finishReadySession(
   session: {
     sessionId: string;
     language: LocaleCode;
+    timezone: string;
     sessionType: SessionType;
   },
 ): Promise<void> {
@@ -302,6 +310,7 @@ async function finishReadySession(
   useChatStore.getState().setSessionId(session.sessionId);
   useChatStore.getState().setSessionType(session.sessionType);
   useChatStore.getState().setLanguage(session.language);
+  useChatStore.getState().setTimezone(session.timezone);
   usePublicPauseStore.getState().setActiveType(session.sessionType);
   setSessionId(session.sessionId);
 
@@ -386,6 +395,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
 
     // Early path: persisted language from rehydrate/merge, else navigator.
     const earlyLanguage = storeState.language ?? resolveBrowserLocale();
+    const browserTimezone = resolveBrowserTimezone();
     if (storeState.language == null) {
       useChatStore.getState().setLanguage(earlyLanguage);
     }
@@ -410,6 +420,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
         persistedId,
         turnstileToken,
         earlyLanguage,
+        browserTimezone,
         inviteToken,
       );
       clearHeldInviteToken();
@@ -517,6 +528,7 @@ export function useChatSession(): UseChatSessionResult {
 
         const storeState = useChatStore.getState();
         const earlyLanguage = storeState.language ?? resolveBrowserLocale();
+        const browserTimezone = resolveBrowserTimezone();
         const resumeId = hadPriorSession ? storeState.sessionId : null;
 
         if (turnstileEnabled) {
@@ -536,6 +548,7 @@ export function useChatSession(): UseChatSessionResult {
               resumeId,
               turnstileToken,
               earlyLanguage,
+              browserTimezone,
               null,
             );
           } catch (error) {
@@ -557,6 +570,7 @@ export function useChatSession(): UseChatSessionResult {
               null,
               freshToken,
               earlyLanguage,
+              browserTimezone,
               null,
             );
           }
@@ -607,6 +621,34 @@ export function useChatSession(): UseChatSessionResult {
       console.error("Chat history load failed:", historyError);
     }
   }, [historyError, historyStatus]);
+
+  useEffect(() => {
+    if (phase !== "ready" || !sessionId) {
+      return;
+    }
+
+    const maybeSyncTimezone = () => {
+      const browserTz = resolveBrowserTimezone();
+      const storedTz = useChatStore.getState().timezone;
+      if (storedTz === browserTz) {
+        return;
+      }
+      void syncSessionTimezone(sessionId, browserTz);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        maybeSyncTimezone();
+      }
+    };
+
+    window.addEventListener("focus", maybeSyncTimezone);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", maybeSyncTimezone);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [phase, sessionId]);
 
   return {
     sessionId,

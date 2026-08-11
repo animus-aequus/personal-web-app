@@ -52,6 +52,9 @@ type ChatStore = {
    */
   language: LocaleCode | null;
   setLanguage: (language: LocaleCode) => void;
+  /** Visitor IANA timezone (from server; not persisted locally). */
+  timezone: string | null;
+  setTimezone: (timezone: string) => void;
 };
 
 /**
@@ -67,6 +70,8 @@ export const useChatStore = create<ChatStore>()(
       setSessionType: (sessionType) => set({ sessionType }),
       language: null,
       setLanguage: (language) => set({ language: normalizeLocale(language) }),
+      timezone: null,
+      setTimezone: (timezone) => set({ timezone }),
     }),
     {
       name: "personal-agent-chat",

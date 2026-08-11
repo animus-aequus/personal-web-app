@@ -3,12 +3,13 @@ import { NextResponse } from "next/server";
 
 import {
   createAgentSession,
-  updateAgentSessionLanguage,
+  updateAgentSession,
   InviteInvalidError,
   AssistantPausedError,
   RateLimitExceededError,
 } from "@/lib/agent-client";
 import { isLocaleCode } from "@/lib/i18n/locales";
+import { DEFAULT_TIMEZONE } from "@/lib/i18n/timezone";
 import { INVITE_INVALID_ERROR_CODE } from "@/lib/public-access-config";
 import { getClientIp, rateLimitResponse } from "@/lib/rate-limit";
 import {
@@ -21,12 +22,17 @@ import { enforceTurnstile } from "@/lib/turnstile/verify-turnstile";
 
 export const revalidate = 0;
 
+function normalizeTimezoneInput(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 export async function PATCH(request: Request) {
-  // Pause is enforced on the agent after session type is known; PATCH is cheap.
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
       language?: string | null;
+      timezone?: string | null;
     };
 
     const sessionId = body.session_id?.trim();
@@ -35,22 +41,37 @@ export async function PATCH(request: Request) {
     }
 
     const language = body.language?.trim();
-    if (!language || !isLocaleCode(language)) {
-      return NextResponse.json({ error: "invalid language" }, { status: 400 });
+    const timezone = normalizeTimezoneInput(body.timezone);
+    const hasLanguage = Boolean(language && isLocaleCode(language));
+    const hasTimezone = Boolean(timezone);
+
+    if (!hasLanguage && !hasTimezone) {
+      return NextResponse.json(
+        { error: "language or timezone required" },
+        { status: 400 },
+      );
     }
 
     const cookieStore = await cookies();
     const existingSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
 
-    const data = await updateAgentSessionLanguage(sessionId, language, {
-      clientIp: getClientIp(request),
-      sessionSecret: existingSecret,
-    });
+    const data = await updateAgentSession(
+      sessionId,
+      {
+        ...(hasLanguage ? { language } : {}),
+        ...(hasTimezone && timezone ? { timezone } : {}),
+      },
+      {
+        clientIp: getClientIp(request),
+        sessionSecret: existingSecret,
+      },
+    );
 
     return NextResponse.json(
       {
         session_id: data.session_id,
-        language: data.language ?? language,
+        language: data.language ?? language ?? "en",
+        timezone: data.timezone ?? timezone ?? DEFAULT_TIMEZONE,
       },
       { headers: { "Cache-Control": "no-store" } },
     );
@@ -62,12 +83,11 @@ export async function PATCH(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // Do not gate on a type-agnostic pause here — agent decides after invite /
-  // resume resolves session_type (public vs invited).
   try {
     const body = (await request.json().catch(() => ({}))) as {
       session_id?: string | null;
       language?: string | null;
+      timezone?: string | null;
       invite_token?: string | null;
       [TURNSTILE_TOKEN_FIELD]?: string;
     };
@@ -87,6 +107,7 @@ export async function POST(request: Request) {
       clientIp: getClientIp(request),
       sessionSecret: existingSecret,
       language: body.language ?? null,
+      timezone: normalizeTimezoneInput(body.timezone),
       inviteToken: body.invite_token ?? null,
     });
 
@@ -95,6 +116,7 @@ export async function POST(request: Request) {
         session_id: data.session_id,
         thread_id: data.thread_id,
         language: data.language ?? "en",
+        timezone: data.timezone ?? DEFAULT_TIMEZONE,
         session_type: data.session_type,
       },
       { headers: { "Cache-Control": "no-store" } },

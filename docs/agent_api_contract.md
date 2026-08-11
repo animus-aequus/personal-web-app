@@ -12,8 +12,8 @@ Base path: `/api/v1` on the agent API host.
 |--------|------|------|----------|
 | `GET` | `/config` | — | `{ "features": { "text_chat", "voice_chat" }, "paused_by_type": { "public": { "paused", "pause_message" }, "invited": { "paused", "pause_message" } } }` |
 | `POST` | `/admin/pause` | `{ "source", "cost_usd"?, "threshold_usd"?, "alert_name"?, "project_name"? }` | `{ "paused": true, "changed" }` — pauses **public** only |
-| `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null, "invite_token"?: string \| null }` | `{ "session_id", "thread_id", "language", "session_type", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `session_type` is `public\|invited` |
-| `PATCH` | `/sessions/{session_id}` | `{ "language": string }` | `{ "session_id", "language" }` — authoritative normalized locale |
+| `POST` | `/sessions` | `{ "session_id": string \| null, "language"?: string \| null, "timezone"?: string \| null, "invite_token"?: string \| null }` | `{ "session_id", "thread_id", "language", "timezone", "session_type", "session_secret"?, "session_expires_at"? }` — secret fields BFF-only; `session_type` is `public\|invited` |
+| `PATCH` | `/sessions/{session_id}` | `{ "language"?: string, "timezone"?: string }` — at least one required | `{ "session_id", "language", "timezone" }` — authoritative normalized values |
 | `POST` | `/sessions/verify` | `{ "session_id" }` | **204** or **401** |
 | `GET` | `/sessions/{session_id}/messages` | — (query: `limit`, `before`) | paginated history page (see below) |
 | `POST` | `/chat` | `{ "session_id", "message" }` — `message` 1–1000 chars | `{ "session_id", "reply" }` (single JSON; non-streaming) |
@@ -82,17 +82,17 @@ LLM turns are refused per `web_sessions.session_type` on the agent, so LiveKit v
 
 ### `POST /sessions`
 
-- **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language` and `session_type` (`public` by default).
-- **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; returns stored `language`, `session_type`, + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language / `sessionType` from the response.
+- **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) and `timezone` (IANA, else `Europe/Warsaw`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language`, `timezone`, and `session_type` (`public` by default).
+- **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; body `timezone` is **updated** when provided (normalized, no-op if unchanged). Returns stored `language`, authoritative `timezone`, `session_type`, + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language / `sessionType` / timezone from the response.
 - **Magic link** (`invite_token` from `?invite=`): validates hash against `invitations`; **403** `{ "error": "invite_invalid" }` when unknown/expired/exhausted. Same invitation + already-authenticated session with matching `invitation_id` → resume without redeem. Otherwise atomic redeem + fresh `invited` session. Response includes `session_type: "invited"`.
 - Without binding: legacy stateless id normalization (pre-E4); response `language` is normalized from the request hint or `en`; invites require binding/Postgres.
 
 ### `PATCH /sessions/{session_id}`
 
-- Body: `{ "language": "en"|"pl"|"de"|"es"|"fr" }` (unsupported values normalize to `en`).
-- When binding enabled: requires `X-Session-Secret` for the session; updates `web_sessions.language` and returns authoritative `language`.
-- Without binding: returns normalized body `language` without persisting (legacy mode).
-- BFF: `PATCH /api/session` with `{ session_id, language }`; forwards cookie secret.
+- Body: `{ "language"?: "en"|"pl"|"de"|"es"|"fr", "timezone"?: string }` — at least one field required. Unsupported language values normalize to `en`; invalid timezone values normalize to `Europe/Warsaw`.
+- When binding enabled: requires `X-Session-Secret` for the session; updates `web_sessions` and returns authoritative `language` + `timezone`.
+- Without binding: returns normalized body values without persisting (legacy mode).
+- BFF: `PATCH /api/session` with `{ session_id, language?, timezone? }`; forwards cookie secret. Browser sends `timezone` on create/resume and PATCH-on-change when `Intl` zone differs after focus/travel.
 
 ### `/sessions/{session_id}/messages` history pagination
 

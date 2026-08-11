@@ -51,14 +51,17 @@ export type CreateSessionResponse = {
   thread_id: string;
   /** Authoritative session locale from the agent (en|pl|de|es|fr). */
   language?: string | null;
+  /** Authoritative visitor IANA timezone from the agent. */
+  timezone?: string | null;
   session_type: "public" | "invited";
   session_secret?: string | null;
   session_expires_at?: string | null;
 };
 
-export type UpdateSessionLanguageResponse = {
+export type UpdateSessionResponse = {
   session_id: string;
   language: string;
+  timezone: string;
 };
 
 export type AgentPauseBucket = {
@@ -239,6 +242,7 @@ export async function createAgentSession(
   sessionId: string | undefined,
   options?: AgentRequestOptions & {
     language?: string | null;
+    timezone?: string | null;
     inviteToken?: string | null;
   },
 ): Promise<CreateSessionResponse> {
@@ -248,6 +252,7 @@ export async function createAgentSession(
     body: JSON.stringify({
       session_id: sessionId ?? null,
       language: options?.language ?? null,
+      timezone: options?.timezone ?? null,
       invite_token: options?.inviteToken?.trim() || null,
     }),
     cache: "no-store",
@@ -271,24 +276,24 @@ export async function createAgentSession(
   return response.json();
 }
 
-export async function updateAgentSessionLanguage(
+export async function updateAgentSession(
   sessionId: string,
-  language: string,
+  body: { language?: string; timezone?: string },
   options?: AgentRequestOptions,
-): Promise<UpdateSessionLanguageResponse> {
+): Promise<UpdateSessionResponse> {
   const response = await fetch(
     `${AGENT_API_BASE_URL}/api/v1/sessions/${encodeURIComponent(sessionId)}`,
     {
       method: "PATCH",
       headers: agentHeaders(options),
-      body: JSON.stringify({ language }),
+      body: JSON.stringify(body),
       cache: "no-store",
     },
   );
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`Session language update failed (${response.status}): ${detail}`);
+    throw new Error(`Session update failed (${response.status}): ${detail}`);
   }
 
   return response.json();
