@@ -17,7 +17,6 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { GreetingRadialAura } from "@/components/visualizer/greeting-radial-aura";
 import {
   degradePerformanceTier,
-  type DeviceFormFactor,
   type PerformanceTier,
 } from "@/lib/device-profile";
 import { useDeviceProfileStore } from "@/lib/stores/device-profile-store";
@@ -30,9 +29,8 @@ const TURQUOISE_RGB = AURA_PALETTE[2].rgb;
 
 /**
  * 3D water blob behind the empty-state greeting.
- * Mounts only when the device profile (or runtime override) is `high`.
- * Otherwise `GreetingRadialAura` is used — never a reduced-quality 3D LOD.
- * On `high`, a sustained low-FPS trend steps the tier down and swaps to the aura.
+ * Desktop + tier `high` only. Mobile always uses `GreetingRadialAura`.
+ * On desktop `high`, a sustained low-FPS trend steps the tier down and swaps to the aura.
  */
 
 type BlobRenderQuality = {
@@ -43,14 +41,13 @@ type BlobRenderQuality = {
   antialias: boolean;
 };
 
-/** Full-quality 3D blob settings — only used when effective tier is `high`. */
-function blobQualityFor(formFactor: DeviceFormFactor): BlobRenderQuality {
-  // Phones still cap mesh density / AA (thermal / shared GPU) even on high.
+/** Full-quality 3D blob settings — desktop + tier `high` only. */
+function blobQualityFor(): BlobRenderQuality {
   return {
-    detail: formFactor === "mobile" ? 4 : 5,
+    detail: 5,
     shaderQuality: 2,
-    dpr: formFactor === "mobile" ? [1, 1.15] : [1, 1.25],
-    antialias: formFactor === "desktop",
+    dpr: [1, 1.25],
+    antialias: true,
   };
 }
 
@@ -610,8 +607,9 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
   const [glEpoch, setGlEpoch] = useState(0);
 
   const effectiveTier = performanceOverride ?? storeTier;
-  // Blob only at full high quality. Medium/low (common on phones) → radial aura.
-  const useRadialAura = effectiveTier !== "high";
+  // Mobile always → radial aura. Desktop blob only at tier `high`.
+  const useRadialAura =
+    formFactor === "mobile" || effectiveTier !== "high";
 
   // Intentional: tier only steps down within a session (high → medium → low).
   // First step off `high` swaps to the radial aura; further steps stay on it.
@@ -643,7 +641,7 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
     );
   }
 
-  const quality = blobQualityFor(formFactor);
+  const quality = blobQualityFor();
   const running = active && pageVisible && !reduceMotion;
 
   return (
