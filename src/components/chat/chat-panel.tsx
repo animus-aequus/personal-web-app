@@ -64,6 +64,10 @@ import {
   type ChatMessage,
   type ChatMessagePart,
 } from "@/lib/stores/chat-store";
+import {
+  isKeyboardViewportActive,
+  useVisualViewportFrame,
+} from "@/hooks/use-visual-viewport-frame";
 import { cn } from "@/lib/utils";
 const LIVEKIT_AGENT_NAME =
   process.env.NEXT_PUBLIC_LIVEKIT_AGENT_NAME ?? "personal-voice-agent";
@@ -604,6 +608,9 @@ function TextChatArea({
     endSpeakingAfterHardCut();
   }, [endSpeakingAfterHardCut]);
 
+  const viewportFrame = useVisualViewportFrame();
+  const keyboardLayoutActive = isKeyboardViewportActive(viewportFrame);
+
   return (
     <AgentSessionProvider session={session}>
       <VoiceAuraBridge active={voiceEnabled} />
@@ -614,7 +621,23 @@ function TextChatArea({
       />
       <div
         data-chat-panel
-        className="relative flex h-dvh min-h-0 flex-col"
+        className={cn(
+          "relative flex min-h-0 flex-col",
+          !keyboardLayoutActive && "h-dvh",
+        )}
+        style={
+          keyboardLayoutActive && viewportFrame
+            ? {
+                position: "fixed",
+                top: viewportFrame.offsetTop,
+                left: 0,
+                right: 0,
+                width: "100%",
+                height: viewportFrame.height,
+                maxHeight: viewportFrame.height,
+              }
+            : undefined
+        }
       >
         <AgentBetaBadge />
         <ChatGreeting visible={showGreeting} />

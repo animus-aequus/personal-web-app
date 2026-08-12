@@ -185,6 +185,15 @@ Client-only capability snapshot for UI LOD (not layout breakpoints).
 
 `initDeviceProfile()` runs once when the client store module is first evaluated (`typeof window` guard; side-effect import from `SiteShell`). Store is ephemeral (not persisted).
 
+## Mobile keyboard / in-app browsers
+
+On mobile (`<768px`), the chat panel (`[data-chat-panel]` in `chat-panel.tsx`) tracks `window.visualViewport` via `useVisualViewportFrame`. Keyboard inset is `max(innerHeight, documentElement.clientHeight) - vv.height - vv.offsetTop` (covers overlay WebViews and iOS cases where `innerHeight` tracks the visual viewport). When the inset exceeds 50px (`isKeyboardViewportActive`), the panel pins to the visual viewport with `position: fixed` and `height: visualViewport.height` so the control bar stays above the keyboard. Below the threshold, the panel keeps `h-dvh` — avoids double-shrinking on Android WebViews that already honor `interactive-widget=resizes-content`.
+
+- In-app browsers (Messenger, Instagram, Facebook) often keep `100dvh` at full screen while overlaying the keyboard; the fixed VV layout applies only while the keyboard is open.
+- Desktop (`≥768px`): unchanged `h-dvh` panel; sidebar push layout is unaffected.
+- While the keyboard is open, document scroll is locked and `scrollTo(0, 0)` runs once on open (not on every VV event).
+- Control bar bottom padding uses `max(1.5rem, env(safe-area-inset-bottom))` with `viewport-fit=cover` for the home indicator.
+
 ## Authentication and secrets
 
 | Secret | Where | Notes |
