@@ -30,9 +30,9 @@ const TURQUOISE_RGB = AURA_PALETTE[2].rgb;
 
 /**
  * 3D water blob behind the empty-state greeting.
- * Quality follows device profile (form + tier) and can step down when a
- * sustained low-FPS trend is detected. Frame sampling reuses R3F `delta`
- * (a few arithmetic ops — negligible vs. the shader).
+ * Mounts only when the device profile (or runtime override) is `high`.
+ * Otherwise `GreetingRadialAura` is used — never a reduced-quality 3D LOD.
+ * On `high`, a sustained low-FPS trend steps the tier down and swaps to the aura.
  */
 
 type BlobRenderQuality = {
@@ -43,20 +43,9 @@ type BlobRenderQuality = {
   antialias: boolean;
 };
 
-/** 3D blob LOD for medium/high only — `low` uses `GreetingRadialAura` instead. */
-function blobQualityFor(
-  formFactor: DeviceFormFactor,
-  tier: Exclude<PerformanceTier, "low">,
-): BlobRenderQuality {
-  if (tier === "medium") {
-    return {
-      detail: 4,
-      shaderQuality: 1,
-      dpr: [1, 1.15],
-      antialias: formFactor === "desktop",
-    };
-  }
-  // high — phones still cap mesh density (thermal / shared GPU).
+/** Full-quality 3D blob settings — only used when effective tier is `high`. */
+function blobQualityFor(formFactor: DeviceFormFactor): BlobRenderQuality {
+  // Phones still cap mesh density / AA (thermal / shared GPU) even on high.
   return {
     detail: formFactor === "mobile" ? 4 : 5,
     shaderQuality: 2,
@@ -621,11 +610,11 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
   const [glEpoch, setGlEpoch] = useState(0);
 
   const effectiveTier = performanceOverride ?? storeTier;
-  // Profile or runtime `low` → radial aura (never the cheap 3D LOD — looks bad
-  // on mobile GPUs). Medium/high keep the water blob.
-  const useRadialAura = effectiveTier === "low";
+  // Blob only at full high quality. Medium/low (common on phones) → radial aura.
+  const useRadialAura = effectiveTier !== "high";
 
   // Intentional: tier only steps down within a session (high → medium → low).
+  // First step off `high` swaps to the radial aura; further steps stay on it.
   // We do not auto-recover upward — a later spike after thermal recovery would
   // bounce quality; a refresh re-reads the store profile instead.
   const handleSustainedSlowdown = useCallback(() => {
@@ -654,7 +643,7 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
     );
   }
 
-  const quality = blobQualityFor(formFactor, effectiveTier);
+  const quality = blobQualityFor(formFactor);
   const running = active && pageVisible && !reduceMotion;
 
   return (
