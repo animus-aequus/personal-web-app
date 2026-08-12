@@ -13,3 +13,16 @@ export function showVoiceSomethingWentWrongToast(): void {
 export function showVoiceThinkingTooLongToast(): void {
   toast.error(i18n.t("chat.voiceThinkingTooLong"));
 }
+
+const VOICE_MICROPHONE_PERMISSION_TOAST_ID = "voice-microphone-permission";
+
+export function showVoiceMicrophonePermissionToast(): void {
+  toast.warning(i18n.t("chat.voiceMicrophonePermission"), {
+    id: VOICE_MICROPHONE_PERMISSION_TOAST_ID,
+    duration: Infinity,
+  });
+}
+
+export function dismissVoiceMicrophonePermissionToast(): void {
+  toast.dismiss(VOICE_MICROPHONE_PERMISSION_TOAST_ID);
+}

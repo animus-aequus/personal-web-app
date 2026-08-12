@@ -49,6 +49,8 @@ export const en = {
     voiceEmptyTurn: "No speech detected — tap the mic to try again.",
     voiceSomethingWentWrong: "Something went wrong with voice. Try again or switch to text.",
     voiceThinkingTooLong: "Sorry, the Assistant was thinking for too long.",
+    voiceMicrophonePermission:
+      "Enable the microphone for this site in your browser or system settings to use voice mode.",
     sendMessage: "Send message",
     enableAudio: "Enable audio",
     interrupted: "Interrupted before finishing",

@@ -51,6 +51,8 @@ export const es = {
     voiceSomethingWentWrong:
       "Algo salió mal con la voz. Inténtalo de nuevo o cambia al texto.",
     voiceThinkingTooLong: "Lo siento, el asistente estuvo pensando demasiado tiempo.",
+    voiceMicrophonePermission:
+      "Activa el micrófono para este sitio en los ajustes del navegador o del sistema para usar el modo de voz.",
     sendMessage: "Enviar mensaje",
     enableAudio: "Activar audio",
     interrupted: "Interrumpido antes de terminar",

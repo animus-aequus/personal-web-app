@@ -80,7 +80,7 @@ const ICON_SWAP_TRANSITION = {
 
 type ChatControlBarProps = {
   onSend: (message: string) => Promise<void> | void;
-  onVoiceToggle: () => void;
+  onVoiceToggle: () => void | Promise<void>;
   onExitVoice: () => void;
   onVoicePrimaryClick: () => void;
   voiceEnabled: boolean;

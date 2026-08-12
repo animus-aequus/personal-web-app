@@ -52,6 +52,8 @@ export const fr = {
       "Un problème est survenu avec la voix. Réessayez ou passez au texte.",
     voiceThinkingTooLong:
       "Désolé, l'assistant a mis trop de temps à réfléchir.",
+    voiceMicrophonePermission:
+      "Activez le microphone pour ce site dans les paramètres du navigateur ou du système pour utiliser le mode vocal.",
     sendMessage: "Envoyer le message",
     enableAudio: "Activer l'audio",
     interrupted: "Interrompu avant la fin",

@@ -50,6 +50,8 @@ export const pl = {
     voiceSomethingWentWrong:
       "Coś poszło nie tak z głosem. Spróbuj ponownie lub przełącz na tekst.",
     voiceThinkingTooLong: "Przepraszam, asystent myślał zbyt długo.",
+    voiceMicrophonePermission:
+      "Włącz mikrofon dla tej strony w ustawieniach przeglądarki lub systemu, aby użyć trybu głosowego.",
     sendMessage: "Wyślij wiadomość",
     enableAudio: "Włącz dźwięk",
     interrupted: "Przerwano przed zakończeniem",

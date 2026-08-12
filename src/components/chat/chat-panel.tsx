@@ -44,6 +44,7 @@ import {
   refreshPublicPauseState,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
+import { ensureMicrophonePermission } from "@/lib/livekit/microphone-permission";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { normalizeLocale } from "@/lib/i18n/locales";
 import {
@@ -52,6 +53,10 @@ import {
 import { useVoiceChatSync } from "@/lib/livekit/voice-chat-sync";
 import { useVoiceTurnCharUsage } from "@/lib/livekit/use-voice-turn-char-usage";
 import { useVoicePtt } from "@/lib/livekit/use-voice-ptt";
+import {
+  dismissVoiceMicrophonePermissionToast,
+  showVoiceMicrophonePermissionToast,
+} from "@/lib/livekit/voice-ptt-toasts";
 import { useVoiceUiEvents } from "@/lib/livekit/voice-ui-events";
 import {
   useChatStore,
@@ -174,7 +179,7 @@ type TextChatAreaProps = {
   voiceEnabled: boolean;
   onVoiceReconnect: () => void;
   onVoiceDisconnect: () => void;
-  onVoiceToggle: () => void;
+  onVoiceToggle: () => void | Promise<void>;
 };
 
 /**
@@ -796,20 +801,44 @@ export function ReadyChatSurface({
   const [voiceConnectionId, setVoiceConnectionId] = useState<string | null>(
     null,
   );
+  const voiceEnableInFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (voiceEnabled) {
+      voiceEnableInFlightRef.current = false;
+    }
+  }, [voiceEnabled]);
 
   const handleVoiceDisconnect = useCallback(() => {
     setVoiceEnabled(false);
   }, []);
 
-  const handleVoiceToggle = useCallback(() => {
-    setVoiceEnabled((enabled) => {
-      if (enabled) {
-        return false;
+  const handleVoiceToggle = useCallback(async () => {
+    if (voiceEnabled) {
+      setVoiceEnabled(false);
+      return;
+    }
+    if (voiceEnableInFlightRef.current) {
+      return;
+    }
+    voiceEnableInFlightRef.current = true;
+    let enabled = false;
+    try {
+      const allowed = await ensureMicrophonePermission();
+      if (!allowed) {
+        showVoiceMicrophonePermissionToast();
+        return;
       }
+      dismissVoiceMicrophonePermissionToast();
       setVoiceConnectionId(crypto.randomUUID());
-      return true;
-    });
-  }, []);
+      setVoiceEnabled(true);
+      enabled = true;
+    } finally {
+      if (!enabled) {
+        voiceEnableInFlightRef.current = false;
+      }
+    }
+  }, [voiceEnabled]);
 
   const handleVoiceReconnect = useCallback(() => {
     if (voiceEnabled) {

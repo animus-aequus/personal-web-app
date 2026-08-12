@@ -68,7 +68,7 @@ and retries: only the latest run may commit state.
 
 ### Web voice (LiveKit)
 
-1. User toggles voice on → new `voiceConnectionId` (`crypto.randomUUID()`).
+1. User toggles voice on → mic permission preflight (`ensureMicrophonePermission`); deny → persistent warning toast, no LiveKit connect. On grant → new `voiceConnectionId` (`crypto.randomUUID()`).
 2. `useSession` uses `livekitVoiceRoomName(sessionId, connectionId)`, `participantMetadata: sessionId`, and `agentMetadata: {"voice_language": …}` from the same Zustand `language` as the UI.
 3. Effect on `voiceEnabled`: `await start({ tracks: { microphone: { enabled: false } } })` then `await session.room.startAudio()`. Mic ON only while the user is in the **speaking** PTT state.
 4. Token from `POST /api/livekit/token` (minted here; see `agent_api_contract.md`) — forwards `voice_language` into `RoomAgentDispatch.metadata`.

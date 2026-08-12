@@ -51,6 +51,8 @@ export const de = {
     voiceSomethingWentWrong:
       "Bei der Sprachfunktion ist etwas schiefgelaufen. Versuche es erneut oder wechsle zum Text.",
     voiceThinkingTooLong: "Entschuldigung, der Assistent hat zu lange nachgedacht.",
+    voiceMicrophonePermission:
+      "Aktiviere das Mikrofon für diese Seite in den Browser- oder Systemeinstellungen, um den Sprachmodus zu nutzen.",
     sendMessage: "Nachricht senden",
     enableAudio: "Audio aktivieren",
     interrupted: "Vor Fertigstellung unterbrochen",
