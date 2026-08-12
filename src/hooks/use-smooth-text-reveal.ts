@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { joinTokens, pullCompletedTokens } from "@/lib/chat/tokenize-text";
 
-export type SmoothRevealPhase = "revealing" | "crossfading" | "done";
+export type SmoothRevealPhase = "revealing" | "done";
 
 type UseSmoothTextRevealOptions = {
   /** Growing source text from the stream. */
@@ -29,8 +29,6 @@ type UseSmoothTextRevealResult = {
    */
   isAwaitingStream: boolean;
 };
-
-const CROSSFADE_MS = 280;
 
 function pacingForQueue(
   queueLength: number,
@@ -64,6 +62,9 @@ function pacingForQueue(
 /**
  * Idempotent sync: derive completed tokens from the full target and enqueue
  * only tokens not already revealed or queued.
+ *
+ * Incomplete markdown delimiters are handled by soft-close at render time —
+ * this tokenizer stays word+whitespace based.
  */
 function syncQueueFromTarget(args: {
   targetText: string;
@@ -114,7 +115,6 @@ export function useSmoothTextReveal({
   const isStreamingRef = useRef(isStreaming);
   const reducedMotionRef = useRef(reducedMotion);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Adjust state during render when the message identity changes (React-recommended).
   if (messageId !== activeMessageId) {
@@ -132,13 +132,6 @@ export function useSmoothTextReveal({
     }
   };
 
-  const clearCrossfadeTimer = () => {
-    if (crossfadeTimerRef.current !== null) {
-      clearTimeout(crossfadeTimerRef.current);
-      crossfadeTimerRef.current = null;
-    }
-  };
-
   // Keep timer-loop inputs fresh without writing refs during render.
   useEffect(() => {
     targetTextRef.current = targetText;
@@ -149,7 +142,6 @@ export function useSmoothTextReveal({
   // Reset mutable reveal buffers and run the adaptive reveal loop for this message.
   useEffect(() => {
     clearTimer();
-    clearCrossfadeTimer();
     queueRef.current = [];
     remainderRef.current = "";
     revealedCountRef.current = 0;
@@ -194,18 +186,12 @@ export function useSmoothTextReveal({
       timerRef.current = setTimeout(tick, delayMs);
     };
 
-    const beginCrossfade = () => {
+    const finishReveal = () => {
       if (phaseRef.current !== "revealing") {
         return;
       }
       setIsAwaitingStream(false);
-      setPhaseBoth("crossfading");
-      clearCrossfadeTimer();
-      const fadeMs = reducedMotionRef.current ? 0 : CROSSFADE_MS;
-      crossfadeTimerRef.current = setTimeout(() => {
-        setPhaseBoth("done");
-        crossfadeTimerRef.current = null;
-      }, fadeMs);
+      setPhaseBoth("done");
     };
 
     const tick = () => {
@@ -245,7 +231,7 @@ export function useSmoothTextReveal({
       }
 
       if (flushing && remainderRef.current.length === 0) {
-        beginCrossfade();
+        finishReveal();
         return;
       }
 
@@ -257,7 +243,6 @@ export function useSmoothTextReveal({
 
     return () => {
       clearTimer();
-      clearCrossfadeTimer();
     };
   }, [messageId]);
 
@@ -284,5 +269,3 @@ export function useSmoothTextReveal({
     isAwaitingStream,
   };
 }
-
-export const SMOOTH_REVEAL_CROSSFADE_MS = CROSSFADE_MS;

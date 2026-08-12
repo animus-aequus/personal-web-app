@@ -117,12 +117,17 @@ function stableTextTimestamp(sessionId: string, messageId: string): number {
 
 function uiMessageToChatMessage(
   message: UIMessage,
+  options?: { trimEnd?: boolean },
 ): Omit<ChatMessage, "timestamp"> | null {
-  const text = message.parts
+  const trimEnd = options?.trimEnd !== false;
+  let text = message.parts
     .filter((part) => part.type === "text")
     .map((part) => part.text)
     .join("\n")
-    .trim();
+    .replace(/^\s+/, "");
+  if (trimEnd) {
+    text = text.replace(/\s+$/, "");
+  }
 
   const parts: ChatMessagePart[] = [];
   for (const part of message.parts) {
@@ -502,10 +507,26 @@ function TextChatArea({
     [sendMessage],
   );
 
+  const [smoothRevealMessageId, setSmoothRevealMessageId] = useState<
+    string | null
+  >(null);
+
   const mergedMessages = useMemo(() => {
+    const liveAssistantId =
+      status === "streaming"
+        ? [...messages].reverse().find((message) => message.role === "assistant")
+            ?.id
+        : undefined;
+
     const textMessages = messages
       .map((message) => {
-        const base = uiMessageToChatMessage(message);
+        const base = uiMessageToChatMessage(message, {
+          // Keep trailing whitespace while the live assistant reply is still
+          // streaming or paced reveal is finishing so token boundaries stay stable.
+          trimEnd:
+            message.id !== liveAssistantId &&
+            message.id !== smoothRevealMessageId,
+        });
         if (!base) {
           return null;
         }
@@ -517,7 +538,7 @@ function TextChatArea({
       .filter((message): message is ChatMessage => message !== null);
 
     return mergeMessagesById(historyRows, textMessages);
-  }, [historyRows, messages, sessionId]);
+  }, [historyRows, messages, sessionId, status, smoothRevealMessageId]);
 
   const isLoading = status === "submitted" || status === "streaming";
 
@@ -614,6 +635,7 @@ function TextChatArea({
             sessionId={sessionId}
             showOtpInline={!voiceEnabled}
             onNote={onVoiceMessage}
+            onSmoothRevealMessageIdChange={setSmoothRevealMessageId}
             bottomInsetPx={chromeHeight + CHAT_MESSAGE_CHROME_GAP_PX}
           />
         </motion.div>

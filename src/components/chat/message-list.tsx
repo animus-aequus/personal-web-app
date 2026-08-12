@@ -35,6 +35,8 @@ type MessageListProps = {
   onNote?: (
     message: Omit<ChatMessage, "timestamp"> & { timestamp?: number },
   ) => void;
+  /** Notifies parent while paced reveal is latched (for content trim timing). */
+  onSmoothRevealMessageIdChange?: (messageId: string | null) => void;
 };
 
 /** Auto-follow stays active while the viewport is within this distance of the bottom. */
@@ -62,6 +64,7 @@ export function MessageList({
   showOtpInline = false,
   bottomInsetPx,
   onNote,
+  onSmoothRevealMessageIdChange,
 }: MessageListProps) {
   const { t } = useTranslation();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -88,8 +91,8 @@ export function MessageList({
   const awaitingFirstToken =
     isLoading && (!lastMessage || lastMessage.role === "user");
 
-  // Latch the streaming assistant id during render so reveal stays mounted
-  // after `isLoading` flips false until plain → markdown settles.
+  // Latch the streaming assistant id during render so paced reveal stays
+  // mounted after `isLoading` flips false until live markdown settles.
   const liveSmoothId =
     isLoading &&
     lastMessage?.role === "assistant" &&
@@ -104,6 +107,10 @@ export function MessageList({
   const clearSmoothMessage = useCallback((messageId: string) => {
     setSmoothMessageId((current) => (current === messageId ? null : current));
   }, []);
+
+  useEffect(() => {
+    onSmoothRevealMessageIdChange?.(smoothMessageId);
+  }, [smoothMessageId, onSmoothRevealMessageIdChange]);
 
   const triggerLoadOlder = useCallback(() => {
     if (!onLoadOlder || !hasMoreHistory || isLoadingOlder) {

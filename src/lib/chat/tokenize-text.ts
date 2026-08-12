@@ -1,6 +1,7 @@
 /**
  * Append-only tokenization for smooth streaming reveal.
  * Tokens are "word + trailing whitespace" (or a pure whitespace run when flushed).
+ * Incomplete markdown delimiters are soft-closed at render time — not here.
  */
 
 export type TokenPullResult = {

@@ -86,7 +86,7 @@ Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` sta
 - **Voice (live):** `chat_sync` → `appendLive` with `source: "voice"`.
 - **Display:** merged and sorted by `sent_at` / timestamp in `TextChatArea`.
 
-**Message rendering (`message-content.tsx`):** all chat rows (history, live text, and live voice) are rendered as Markdown via `react-markdown` — bold, italic, lists, `https://` links, and inline code. The `source` field (`"text"` | `"voice"`) is kept for merge/provenance only, not display mode. History from the agent API does not yet expose channel/source per row, so reloaded history rows are all mapped to `source: "text"`.
+**Message rendering (`message-content.tsx`):** all chat rows (history, live text, and live voice) are rendered as Markdown via `react-markdown` — bold, italic, lists, `https://` links, and inline code. Live text assistant replies use paced word reveal with **live markdown** on the already-revealed prefix (`softCloseMarkdown` closes incomplete emphasis/code fences mid-stream; settled rows render the final string without soft-close). The `source` field (`"text"` | `"voice"`) is kept for merge/provenance only, not display mode. History from the agent API does not yet expose channel/source per row, so reloaded history rows are all mapped to `source: "text"`.
 
 Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` — **not** the chat transcript list.
 
