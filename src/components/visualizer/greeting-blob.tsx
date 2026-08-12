@@ -43,18 +43,11 @@ type BlobRenderQuality = {
   antialias: boolean;
 };
 
+/** 3D blob LOD for medium/high only — `low` uses `GreetingRadialAura` instead. */
 function blobQualityFor(
   formFactor: DeviceFormFactor,
-  tier: PerformanceTier,
+  tier: Exclude<PerformanceTier, "low">,
 ): BlobRenderQuality {
-  if (tier === "low") {
-    return {
-      detail: 3,
-      shaderQuality: 0,
-      dpr: [1, 1],
-      antialias: false,
-    };
-  }
   if (tier === "medium") {
     return {
       detail: 4,
@@ -627,13 +620,10 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
   /** Bumped on webglcontextlost so Canvas remounts a fresh context. */
   const [glEpoch, setGlEpoch] = useState(0);
 
-  // Profile `low` uses the cheap radial aura instead of the 3D blob.
-  // Runtime downgrade to `low` keeps the 3D blob mounted (avoid a sudden vanish).
-  const allowWebGlBlob = storeTier !== "low";
-
   const effectiveTier = performanceOverride ?? storeTier;
-  const quality = blobQualityFor(formFactor, effectiveTier);
-  const running = active && pageVisible && !reduceMotion && allowWebGlBlob;
+  // Profile or runtime `low` → radial aura (never the cheap 3D LOD — looks bad
+  // on mobile GPUs). Medium/high keep the water blob.
+  const useRadialAura = effectiveTier === "low";
 
   // Intentional: tier only steps down within a session (high → medium → low).
   // We do not auto-recover upward — a later spike after thermal recovery would
@@ -656,13 +646,16 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
     return <StaticGreetingBlobFallback />;
   }
 
-  if (!allowWebGlBlob) {
+  if (useRadialAura) {
     return (
       <GreetingBlobEntrance tier="radial" form={formFactor}>
         <GreetingRadialAura active={active} />
       </GreetingBlobEntrance>
     );
   }
+
+  const quality = blobQualityFor(formFactor, effectiveTier);
+  const running = active && pageVisible && !reduceMotion;
 
   return (
     <GreetingBlobEntrance tier={effectiveTier} form={formFactor}>
