@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
+import { AgentBetaBadge } from "@/components/chat/agent-beta-badge";
 import { StartAudioButton } from "@/components/agents-ui/start-audio-button";
 import { BookingCancelOtpStack } from "@/components/chat/booking-cancel-otp-card";
 import { BookingOtpCard } from "@/components/chat/booking-otp-card";
@@ -615,6 +616,7 @@ function TextChatArea({
         data-chat-panel
         className="relative flex h-dvh min-h-0 flex-col"
       >
+        <AgentBetaBadge />
         <ChatGreeting visible={showGreeting} />
 
         <motion.div
