@@ -1,8 +1,8 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { CHAT_CONTROL } from "@/lib/chat/control-bar-geometry";
 
-/** Apply VV layout only when the soft keyboard visibly overlaps the layout viewport. */
+/** Treat the IME as open when inset exceeds this (overflow lock / scroll reset). */
 export const KEYBOARD_INSET_THRESHOLD_PX = 50;
 
 export type VisualViewportFrame = {
@@ -15,6 +15,35 @@ export function isKeyboardViewportActive(
   frame: VisualViewportFrame | null,
 ): frame is VisualViewportFrame {
   return frame !== null && frame.keyboardInset > KEYBOARD_INSET_THRESHOLD_PX;
+}
+
+/** Facebook / Messenger / Instagram in-app browsers (and similar IABs). */
+const IN_APP_BROWSER_UA =
+  /FBAN|FBAV|FB_IAB|FBIOS|FBSS|Instagram|MessengerLite|Orca-Android|Line\//i;
+
+export function isEmbeddedInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return IN_APP_BROWSER_UA.test(navigator.userAgent);
+}
+
+function subscribeInAppBrowser() {
+  return () => {};
+}
+
+type VirtualKeyboardLike = {
+  overlaysContent: boolean;
+  boundingRect: DOMRect;
+  addEventListener(type: "geometrychange", listener: () => void): void;
+  removeEventListener(type: "geometrychange", listener: () => void): void;
+};
+
+function getVirtualKeyboard(): VirtualKeyboardLike | null {
+  const keyboard = (
+    navigator as Navigator & { virtualKeyboard?: VirtualKeyboardLike }
+  ).virtualKeyboard;
+  return keyboard ?? null;
 }
 
 function framesEqual(a: VisualViewportFrame, b: VisualViewportFrame): boolean {
@@ -31,29 +60,39 @@ function readVisualViewportFrame(): VisualViewportFrame | null {
     return null;
   }
 
-  const height = viewport.height;
   const offsetTop = viewport.offsetTop;
-  // iOS/WKWebView may shrink `innerHeight` with the visual viewport while
-  // `documentElement.clientHeight` stays at the layout size. Overlay
-  // WebViews (Messenger) keep both large. Take the max so the keyboard
-  // is detected in either case.
   const layoutHeight = Math.max(
     window.innerHeight,
     document.documentElement.clientHeight,
   );
-  const keyboardInset = Math.max(0, layoutHeight - height - offsetTop);
+  const vkHeight = Math.max(
+    0,
+    getVirtualKeyboard()?.boundingRect.height ?? 0,
+  );
+  // Android 15+ / Messenger WebView often overlay the IME without shrinking
+  // visualViewport. Fall back to Virtual Keyboard API height in that case.
+  const vvOverlap = Math.max(
+    0,
+    layoutHeight - viewport.height - offsetTop,
+  );
+  const keyboardInset = Math.max(vvOverlap, vkHeight);
+  const height = Math.max(0, layoutHeight - keyboardInset);
 
   return { height, offsetTop, keyboardInset };
 }
 
 /**
- * Tracks `visualViewport` on mobile so chat chrome can shrink above the
- * soft keyboard in in-app browsers (Messenger, Instagram, etc.) where
- * `100dvh` does not follow the visible viewport.
+ * Tracks the visible viewport on mobile so chat chrome stays above the
+ * soft keyboard in in-app browsers (Messenger, Instagram, etc.).
  */
 export function useVisualViewportFrame(): VisualViewportFrame | null {
   const [frame, setFrame] = useState<VisualViewportFrame | null>(null);
   const [mobile, setMobile] = useState(false);
+  const inAppBrowser = useSyncExternalStore(
+    subscribeInAppBrowser,
+    isEmbeddedInAppBrowser,
+    () => false,
+  );
   const wasKeyboardOpenRef = useRef(false);
   const rafIdRef = useRef<number | null>(null);
 
@@ -68,7 +107,7 @@ export function useVisualViewportFrame(): VisualViewportFrame | null {
   }, []);
 
   useLayoutEffect(() => {
-    if (!mobile) {
+    if (!mobile || !inAppBrowser) {
       wasKeyboardOpenRef.current = false;
       return;
     }
@@ -76,6 +115,11 @@ export function useVisualViewportFrame(): VisualViewportFrame | null {
     const viewport = window.visualViewport;
     if (!viewport) {
       return;
+    }
+
+    const virtualKeyboard = getVirtualKeyboard();
+    if (virtualKeyboard) {
+      virtualKeyboard.overlaysContent = true;
     }
 
     const commit = () => {
@@ -111,6 +155,9 @@ export function useVisualViewportFrame(): VisualViewportFrame | null {
     viewport.addEventListener("scroll", scheduleSync);
     window.addEventListener("orientationchange", scheduleSync);
     window.addEventListener("resize", scheduleSync);
+    window.addEventListener("focusin", scheduleSync);
+    window.addEventListener("focusout", scheduleSync);
+    virtualKeyboard?.addEventListener("geometrychange", scheduleSync);
 
     return () => {
       if (rafIdRef.current !== null) {
@@ -121,12 +168,15 @@ export function useVisualViewportFrame(): VisualViewportFrame | null {
       viewport.removeEventListener("scroll", scheduleSync);
       window.removeEventListener("orientationchange", scheduleSync);
       window.removeEventListener("resize", scheduleSync);
+      window.removeEventListener("focusin", scheduleSync);
+      window.removeEventListener("focusout", scheduleSync);
+      virtualKeyboard?.removeEventListener("geometrychange", scheduleSync);
       wasKeyboardOpenRef.current = false;
     };
-  }, [mobile]);
+  }, [mobile, inAppBrowser]);
 
   useLayoutEffect(() => {
-    if (!mobile || !isKeyboardViewportActive(frame)) {
+    if (!mobile || !inAppBrowser || !isKeyboardViewportActive(frame)) {
       return;
     }
 
@@ -140,7 +190,7 @@ export function useVisualViewportFrame(): VisualViewportFrame | null {
       html.style.overflow = prevHtmlOverflow;
       document.body.style.overflow = prevBodyOverflow;
     };
-  }, [mobile, frame]);
+  }, [mobile, inAppBrowser, frame]);
 
-  return mobile ? frame : null;
+  return mobile && inAppBrowser ? frame : null;
 }

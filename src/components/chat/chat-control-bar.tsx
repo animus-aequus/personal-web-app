@@ -355,7 +355,7 @@ export function ChatControlBar({
   };
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-4 pb-6">
       <div
         ref={anchorRef}
         className="pointer-events-auto mx-auto flex w-full max-w-2xl flex-col items-center"

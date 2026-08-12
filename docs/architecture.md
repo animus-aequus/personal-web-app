@@ -187,12 +187,12 @@ Client-only capability snapshot for UI LOD (not layout breakpoints).
 
 ## Mobile keyboard / in-app browsers
 
-On mobile (`<768px`), the chat panel (`[data-chat-panel]` in `chat-panel.tsx`) tracks `window.visualViewport` via `useVisualViewportFrame`. Keyboard inset is `max(innerHeight, documentElement.clientHeight) - vv.height - vv.offsetTop` (covers overlay WebViews and iOS cases where `innerHeight` tracks the visual viewport). When the inset exceeds 50px (`isKeyboardViewportActive`), the panel pins to the visual viewport with `position: fixed` and `height: visualViewport.height` so the control bar stays above the keyboard. Below the threshold, the panel keeps `h-dvh` — avoids double-shrinking on Android WebViews that already honor `interactive-widget=resizes-content`.
+On mobile in **in-app browsers** (Facebook / Messenger / Instagram UA), the chat panel (`[data-chat-panel]` in `chat-panel.tsx`) pins to the visible frame from `useVisualViewportFrame` (`position: fixed` + `height`). Keyboard inset is the max of visualViewport overlap and `navigator.virtualKeyboard.boundingRect.height` (with `overlaysContent = true` only in that UA). Android 15+ Messenger WebView often overlays the IME without shrinking `100dvh`.
 
-- In-app browsers (Messenger, Instagram, Facebook) often keep `100dvh` at full screen while overlaying the keyboard; the fixed VV layout applies only while the keyboard is open.
+**Normal mobile browsers** (Chrome, Samsung Internet, Safari) do not use this path: the panel stays `h-dvh` and the OS/browser keyboard resize is left unchanged. Viewport meta is not set to `interactive-widget` / `overlays-content`.
+
 - Desktop (`≥768px`): unchanged `h-dvh` panel; sidebar push layout is unaffected.
-- While the keyboard is open, document scroll is locked and `scrollTo(0, 0)` runs once on open (not on every VV event).
-- Control bar bottom padding uses `max(1.5rem, env(safe-area-inset-bottom))` with `viewport-fit=cover` for the home indicator.
+- In IAB, while the keyboard is open (`inset > 50px`), document scroll is locked and `scrollTo(0, 0)` runs once on open.
 
 ## Authentication and secrets
 
