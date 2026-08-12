@@ -271,13 +271,15 @@ export function ChatControlBar({
     const wasLoading = wasLoadingRef.current;
     wasLoadingRef.current = Boolean(isLoading);
 
-    if (voiceEnabled || disabled) {
+    // Desktop only: restore caret after the agent finishes so the next
+    // message can be typed immediately. Mobile must not auto-focus (keyboard).
+    if (!isDesktop || voiceEnabled || disabled) {
       return;
     }
     if (wasLoading && !isLoading) {
       textareaRef.current?.focus();
     }
-  }, [disabled, isLoading, voiceEnabled]);
+  }, [disabled, isDesktop, isLoading, voiceEnabled]);
 
   useLayoutEffect(() => {
     if (voiceEnabled) {
@@ -318,6 +320,13 @@ export function ChatControlBar({
       return;
     }
     setValue("");
+    // Mobile: dismiss the keyboard after send. Desktop: keep caret in place
+    // (send button click can steal focus; Enter already leaves it on textarea).
+    if (isDesktop) {
+      textareaRef.current?.focus();
+    } else {
+      textareaRef.current?.blur();
+    }
     await onSend(trimmed);
   };
 
@@ -615,7 +624,8 @@ export function ChatControlBar({
                     onChange={(event) => handleTextChange(event.target.value)}
                     onKeyDown={onKeyDown}
                     placeholder={t("chat.placeholder")}
-                    disabled={disabled || isLoading}
+                    disabled={disabled}
+                    aria-busy={isLoading || undefined}
                     aria-invalid={isOverLimit}
                     rows={1}
                     style={{
