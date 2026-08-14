@@ -29,7 +29,7 @@ personal-website/                 # this repo
 | `app/api/bookings/*/route.ts` | Proxy booking confirm / cancel / pending / cancel-request |
 | `app/api/direct-messages/route.ts` | Proxy private-message send |
 | `app/api/direct-messages/cancel/route.ts` | Proxy private-message cancel |
-| `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending (E8) |
+| `app/api/cancellations/*/route.ts` | Proxy cancel OTP confirm / abort / pending |
 | `app/api/livekit/token/route.ts` | Mint LiveKit JWT + agent dispatch |
 | `app/api/public-status/route.ts` | Public access pause state for the UI |
 | `app/api/webhooks/langsmith/route.ts` | LangSmith cost alert → Telegram notify (no pause) |
@@ -49,7 +49,7 @@ personal-website/                 # this repo
 | `lib/stores/agent-activity-store.ts` | Ephemeral aura `phase` + transient `audioLevel` |
 | `components/ui/*` | shadcn/ui primitives |
 | `lib/agent-client.ts` | Server-side agent API client |
-| `lib/session-cookie.ts` | httpOnly session secret cookie helpers (E4) |
+| `lib/session-cookie.ts` | httpOnly session secret cookie helpers |
 | `lib/rate-limit-config.ts` | Edge Upstash IP shield parameters |
 | `lib/rate-limit.ts` | Coarse per-IP limiter + `getClientIp` / 429 helpers |
 | `proxy.ts` | Next.js Proxy: edge rate limit for `/api/*` (excl. public-status, webhooks) |
@@ -109,8 +109,6 @@ useVoiceChatSync ◄── chat_sync ◄─────────────�
 - **Framework:** Next.js 16 App Router, React 19, TypeScript
 - **Local dev:** `npm run dev` on `:3000`; set `AGENT_API_BASE_URL` to a running compatible agent API
 - **Lint:** `npm run lint`
-- **Tests:** none yet — do not add test scaffolding unless requested
-
 ## Conventions
 
 - Minimal diffs; match existing style; no drive-by refactors
@@ -121,7 +119,7 @@ useVoiceChatSync ◄── chat_sync ◄─────────────�
 ## Related docs
 
 - System design and ADRs: [`architecture.md`](architecture.md)
-- Security rollout: [`security.md`](security.md)
+- Security controls: [`security.md`](security.md)
 - Opt-in agent working notes: [`tmp/`](tmp/) (only when `docs/tmp/.active` exists)
 - Outbound agent API contract: [`agent_api_contract.md`](agent_api_contract.md)
 - Human onboarding: [`README.md`](README.md)

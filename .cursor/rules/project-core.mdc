@@ -13,7 +13,7 @@ Next.js chat UI and BFF. Scheduling, LLM, and voice STT/TTS belong in a **separa
 |-------------|------------|
 | Any non-trivial change | `docs/project_structure.md` |
 | UI/BFF flows, session, voice+text merge | `docs/architecture.md` |
-| Security rollout / Turnstile / rate limits / session cookie | `docs/security.md` |
+| Security controls / Turnstile / rate limits / session cookie | `docs/security.md` |
 | Route Handlers or `agent-client.ts` | `docs/agent_api_contract.md` + rule `next-api-routes` |
 | LiveKit / voice UI | rule `livekit-voice` |
 | Chat components / Zustand store | rule `chat-ui` |

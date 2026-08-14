@@ -71,7 +71,7 @@ Voice web turns use **push-to-talk**: mic starts OFF; the user taps the primary 
 
 Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse per-IP Upstash shield in `proxy.ts` and may return the same 429 shape when that edge budget is exhausted.
 
-**Session binding (E4):** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
+**Session binding:** protected routes require header `X-Session-Secret` matching the Postgres row for `session_id` when `SESSION_BINDING_ENABLED` is on. BFF reads httpOnly cookie and forwards the header. Errors: **401** `{ "error": "session_auth_required" \| "session_auth_failed" \| "session_expired" }`.
 
 ### `GET /config`, `POST /admin/pause`, and `POST /admin/langsmith-alert` (public access guard)
 
@@ -88,7 +88,7 @@ LLM turns are refused per `web_sessions.session_type` on the agent, so LiveKit v
 - **Fresh start** (no `X-Session-Secret`): server generates new `session_id`, persists normalized body `language` (`en|pl|de|es|fr`, else `en`) and `timezone` (IANA, else `Europe/Warsaw`) on the same INSERT, returns `session_secret` + `session_expires_at` for BFF Set-Cookie, plus authoritative `language`, `timezone`, and `session_type` (`public` by default).
 - **Resume** (cookie secret + matching `session_id`): same id; body `language` is **ignored**; body `timezone` is **updated** when provided (normalized, no-op if unchanged). Returns stored `language`, authoritative `timezone`, `session_type`, + `session_expires_at` (throttled touch may extend expiry). Client must overwrite local early-path language / `sessionType` / timezone from the response.
 - **Magic link** (`invite_token` from `?invite=`): validates hash against `invitations`; **403** `{ "error": "invite_invalid" }` when unknown/expired/exhausted. Same invitation + already-authenticated session with matching `invitation_id` → resume without redeem. Otherwise atomic redeem + fresh `invited` session. Response includes `session_type: "invited"`.
-- Without binding: legacy stateless id normalization (pre-E4); response `language` is normalized from the request hint or `en`; invites require binding/Postgres.
+- Without binding: stateless id normalization; response `language` is normalized from the request hint or `en`; invites require binding/Postgres.
 
 ### `PATCH /sessions/{session_id}`
 
@@ -172,7 +172,7 @@ data: {"type":"error","message":"…"}
 
 Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list, direct message) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → `data-otp`, `ui`/`meetings_list` → `data-meetings-list`, and `ui`/`direct_message` → `data-direct-message`; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
 
-### Booking confirm / cancel / pending (E6/E7) + cancel CONFIRMED (E8)
+### Booking confirm / cancel / pending + cancel confirmed meetings
 
 Protected with `X-Session-Secret` (same session that owns the booking). Rate-limited (`BOOKING` / `BOOKING_CONFIRM`).
 

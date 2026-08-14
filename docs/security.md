@@ -1,6 +1,6 @@
 # Security (BFF + UI)
 
-Living documentation for security controls in **personal-website** (Next.js Route Handlers, chat UI, LiveKit token minting). Updated incrementally as rollout phases land.
+Security controls in **personal-website** (Next.js Route Handlers, chat UI, LiveKit token minting).
 
 **Agent API / booking / calendar:** [`../personal-voice-agent/docs/security.md`](../../personal-voice-agent/docs/security.md) (when both repos are in workspace).
 
@@ -14,11 +14,11 @@ Living documentation for security controls in **personal-website** (Next.js Rout
 
 | In scope | Out of scope |
 |----------|--------------|
-| Rate limits on `/api/*` Route Handlers | LangGraph, calendar tools, DynamoDB booking store |
+| Rate limits on `/api/*` Route Handlers | LangGraph, calendar tools, booking persistence |
 | Turnstile (browser widget + server verify) | Twilio webhook validation |
-| httpOnly session secret cookie (phase 4) | Google Calendar API |
+| httpOnly session secret cookie | Google Calendar API |
 | Proxy to agent API with `X-API-Key` | LLM prompt rules |
-| Cancel confirmation page (phase 8) | |
+| Booking / cancel / direct-message proxies | |
 
 Never add scheduling or calendar logic here — proxy and gate only. See [`agent_api_contract.md`](agent_api_contract.md).
 
@@ -29,49 +29,32 @@ Never add scheduling or calendar logic here — proxy and gate only. See [`agent
 1. **Secrets stay on the server:** `WEB_API_KEY`, Cloudflare Access service token, LiveKit keys, Turnstile secret — Route Handlers only.
 2. **BFF is the public edge:** rate limits and bot checks apply before proxying to the agent API.
 3. **Match agent API rules:** limits and session binding should align with backend enforcement (defence in depth).
-4. **`sessionId` in localStorage is not auth** — phase 4 adds a server-bound session secret.
+4. **`sessionId` in localStorage is not auth** — ownership is the httpOnly session secret cookie.
 
 ---
 
-## Current baseline (pre-rollout)
+## Controls at a glance
 
-| Control | Status |
+| Control | Notes |
 |---------|--------|
-| `WEB_API_KEY` proxied to agent API (server-only) | Implemented |
-| Cloudflare Access service token (`CF-Access-Client-*`) on agent calls | Implemented (env optional; required when Access protects `api.*`) |
-| LiveKit JWT minting (server-only secrets) | Implemented |
-| Rate limiting on Route Handlers | Implemented (Upstash edge IP shield; see below) |
-| Turnstile | Implemented (`POST /api/session` only; chat/voice rely on session + RL) |
-| Session secret cookie | **Done** (when `SESSION_BINDING_ENABLED=true`) |
-| Booking confirm / cancel / pending proxy routes | **Done** (E7) |
-| Public access early reject + LangSmith alert webhook | **Done** (see below) |
-| Chat message length (1000 chars; BFF + UI live error) | **Done** |
+| `WEB_API_KEY` proxied to agent API (server-only) | Optional; required when the agent expects it |
+| Cloudflare Access service token (`CF-Access-Client-*`) | Env optional; required when Access protects `api.*` |
+| LiveKit JWT minting (server-only secrets) | Token route only |
+| Rate limiting on Route Handlers | Upstash edge IP shield |
+| Turnstile | `POST /api/session` only; chat/voice rely on session + RL |
+| Session secret cookie | When `SESSION_BINDING_ENABLED=true` |
+| Booking confirm / cancel / pending proxies | Thin BFF; quotas on the agent |
+| Public access early reject + LangSmith alert webhook | Pause UI + Telegram notify |
+| Chat message length | 1000 chars; BFF + UI live error |
+
+Precise session quotas (messages, actions, DMs, graph recursion) live on the agent in Postgres. BFF Upstash is a coarse per-IP edge shield and does **not** duplicate those counters.
 
 ---
 
-## Rollout index (phases touching this repo)
+## Route Handler requirements
 
-| Phase | Topic | Status |
-|-------|-------|--------|
-| 0 | Doc scaffold | **Done** |
-| 1 | Coarse edge rate limiting (per-IP Upstash via `proxy.ts`) | **Done** |
-| 3 | Turnstile on session create (chat/voice use session binding + rate limits) | **Done** |
-| 4 | httpOnly session secret cookie; forward `X-Session-Secret` | **Done** |
-| 7 | `/api/bookings/confirm`, `/cancel`, `/pending` proxies | **Done** |
-| 8 | Meetings list GenUI + cancel OTP (CONFIRMED) | **Done** |
-| — | Direct message GenUI proxies (agent dual-window RL) | **Done** |
-| — | Public access cost guard (early reject, `/api/public-status`, LangSmith webhook) | **Done** |
-| — | Chat message length (1000 chars; mirrors agent) | **Done** |
-| — | Clerk (optional) | Future |
-
-Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`security.md`](../../personal-voice-agent/docs/security.md). Phase 2 (agent API rate limiting on **Postgres**) is **Done**. E6/E7/E8/E9/E10/E11/E12 are **Done** on the agent API. **E9** (lean booking quotas) and **E12** (graph `recursion_limit`) are backend-only. **E10** (LiveKit voice + shared text/voice message budget on `web_sessions`) is agent-enforced; BFF Upstash is a coarse per-IP edge shield only and does **not** duplicate session quotas.
-
----
-
-## Route Handler requirements (target)
-
-| Route | Edge IP RL (E1) | Turnstile (E3) | Session secret (E4) | Precise RL (agent) |
-|-------|-----------------|----------------|---------------------|--------------------|
+| Route | Edge IP RL | Turnstile | Session secret | Precise RL (agent) |
+|-------|------------|-----------|----------------|--------------------|
 | `POST /api/session` | yes (via proxy) | yes | sets cookie | session create per IP |
 | `POST /api/chat` | yes | — | required | shared message budget |
 | `GET /api/session/messages` | yes | — | required | — (auth + edge only) |
@@ -92,7 +75,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 ## Implemented controls
 
-### Phase 1 — BFF rate limiting
+### BFF rate limiting
 
 **Modules:** `src/proxy.ts`, `src/lib/rate-limit-config.ts`, `src/lib/rate-limit.ts`
 
@@ -116,7 +99,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 | `RATE_LIMIT_WINDOW_SECONDS` | Fixed window (3600) |
 | `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Upstash REST (Vercel only) |
 
-**Agent API (phase 2):** BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-client.ts`) for session-create-per-IP hashing on the agent.
+BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-client.ts`) for session-create-per-IP hashing on the agent.
 
 ### Chat message length
 
@@ -131,11 +114,11 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 - Chat control bar: live error when trimmed input exceeds 1000 characters; send blocked client-side. Paste soft-capped at **1500** code points (`CHAT_MESSAGE_INPUT_CEILING` = `CHAT_MESSAGE_MAX` + 500) so the error state stays visible without huge payloads.
 - Voice: live progress meter from interim STT (`voice-turn-progress.tsx`); at 100% mic mute + `voice_control` `user_turn_length_exceeded`; worker truncates and commits with amber truncated-user badge (`interrupted` on `voice_user` / history). REST/telephony oversized input still hard-rejects.
 
-### Phase 3 — Cloudflare Turnstile
+### Cloudflare Turnstile
 
 **Modules:** `src/lib/turnstile/turnstile-config.ts`, `src/lib/turnstile/verify-turnstile.ts`, `src/components/turnstile/turnstile-provider.tsx`, `src/components/turnstile/session-verification-gate.tsx`
 
-**Routes verified:** `POST /api/session` only. Chat and LiveKit token rely on session secret (E4) + BFF/agent rate limits — not per-request Turnstile (avoids repeated visible challenges, especially in privacy browsers).
+**Routes verified:** `POST /api/session` only. Chat and LiveKit token rely on session secret + BFF/agent rate limits — not per-request Turnstile (avoids repeated visible challenges, especially in privacy browsers).
 
 **Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). Shown on an **in-page verification gate** (`phase: "verifying"`) before chat chrome mounts — not as an overlay above the control bar. First visit uses a short human-check prompt; re-bootstrap with a prior/persisted session uses session-expired copy. After the token is consumed the gate unmounts (`loading` → `ready`) and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify`.
 
@@ -152,7 +135,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **Local dev:** set `TURNSTILE_DISABLED=true` or omit both keys to skip verification (same pattern as rate limits without Upstash).
 
-### Phase 4 — Session secret cookie
+### Session secret cookie
 
 **Modules:** `src/lib/session-cookie.ts`, updates to `src/lib/agent-client.ts`, Route Handlers under `src/app/api/session/`, `chat/`, `livekit/token/`
 
@@ -168,11 +151,11 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 | Variable | Purpose |
 |----------|---------|
-| `SESSION_BINDING_ENABLED` | Enable cookie + secret forwarding (set `true` with agent Postgres E4) |
+| `SESSION_BINDING_ENABLED` | Enable cookie + secret forwarding (set `true` with agent Postgres) |
 
 **Client:** `sessionId` remains in Zustand/localStorage; secret never exposed to JS. Fresh start after deploy replaces `sessionId` when cookie missing.
 
-### Phase 7 — Booking OTP proxy routes
+### Booking OTP proxy routes
 
 **Modules:** `src/app/api/bookings/confirm/route.ts`, `cancel/route.ts`, `pending/route.ts`, `src/lib/agent-client.ts` (confirm/cancel/pending + SSE `ui`), `src/lib/stores/booking-otp-store.ts`, `src/components/chat/booking-otp-card.tsx`
 
@@ -180,7 +163,7 @@ Backend-only phases (2, 5–6, 9–12) are documented in the agent API [`securit
 
 **UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; rehydrated via `GET /api/bookings/pending` on bootstrap. LiveKit topic `ui_events`.
 
-### Phase 8 — Meetings list + cancel OTP
+### Meetings list + cancel OTP
 
 **Modules:** `meetings-list-card.tsx`, `booking-cancel-otp-card.tsx`, `meetings-list-store.ts`, `booking-cancel-otp-store.ts`, BFF `/api/bookings/cancel-request`, `/api/cancellations/*`, history `parts`
 

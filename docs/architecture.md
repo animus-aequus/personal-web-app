@@ -203,7 +203,7 @@ On mobile in **in-app browsers** (Facebook / Messenger / Instagram UA), the chat
 | `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | `/api/livekit/token` only | Never in browser |
 | `AGENT_API_BASE_URL` | Server only | Default `http://localhost:8000` |
 
-**Security rollout:** BFF-side controls (edge Upstash IP shield, Turnstile, session cookie) are tracked in [`security.md`](security.md). Agent API booking quotas (E9), shared text+voice message budget (E10), and graph `recursion_limit` (E12): optional repo [`../personal-voice-agent/docs/security.md`](../personal-voice-agent/docs/security.md). BFF edge RL does not duplicate the agent Postgres session counters.
+**Security controls:** BFF-side controls (edge Upstash IP shield, Turnstile, session cookie) are documented in [`security.md`](security.md). Agent API booking quotas, shared text+voice message budget, and graph `recursion_limit`: optional repo [`../personal-voice-agent/docs/security.md`](../personal-voice-agent/docs/security.md). BFF edge RL does not duplicate the agent Postgres session counters.
 
 **Agent working notes:** opt-in `docs/tmp/` (inactive by default; see `.cursor/rules/docs-tmp.mdc`).
 
@@ -230,7 +230,7 @@ On mobile in **in-app browsers** (Facebook / Messenger / Instagram UA), the chat
 
 ## Related docs
 
-- Security controls and rollout: [`security.md`](security.md)
+- Security controls: [`security.md`](security.md)
 - Outbound API contract: [`agent_api_contract.md`](agent_api_contract.md)
 - Module map: [`project_structure.md`](project_structure.md)
 - Human onboarding: [`README.md`](README.md)
