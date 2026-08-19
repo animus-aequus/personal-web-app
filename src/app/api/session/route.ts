@@ -111,6 +111,7 @@ export async function POST(request: Request) {
       inviteToken: body.invite_token ?? null,
     });
 
+    const invitationName = data.invitation_name?.trim() || null;
     const response = NextResponse.json(
       {
         session_id: data.session_id,
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
         language: data.language ?? "en",
         timezone: data.timezone ?? DEFAULT_TIMEZONE,
         session_type: data.session_type,
+        ...(invitationName ? { invitation_name: invitationName } : {}),
       },
       { headers: { "Cache-Control": "no-store" } },
     );

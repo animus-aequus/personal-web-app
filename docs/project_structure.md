@@ -57,6 +57,8 @@ personal-website/                 # this repo
 | `lib/public-access.ts` | Cached pause status + `enforcePublicAccess()` early reject |
 | `lib/stores/public-pause-store.ts` | Pause state for the UI + `refreshPublicPauseState()` |
 | `components/chat/public-pause-modal.tsx` | Full-screen pause notice (overlay + OK) |
+| `components/chat/invalid-invite-modal.tsx` | Overlay when `?invite=` fails (403) |
+| `components/chat/invite-welcome-modal.tsx` | Welcome overlay after a successful invited magic-link session |
 | `lib/livekit/room.ts` | LiveKit room naming helpers |
 | `lib/livekit/voice-languages.ts` | Voice STT language catalog + TTS-fallback helpers |
 | `lib/livekit/voice-chat-sync.ts` | `chat_sync` data channel → Zustand |
@@ -87,6 +89,7 @@ personal-website/                 # this repo
 | Page shell / routing | `src/app/(site)/layout.tsx`, `src/app/(site)/page.tsx`, `src/app/(site)/terms/page.tsx`, `src/app/layout.tsx` |
 | Styling / design tokens | `src/app/globals.css`, `src/components/ui/*` |
 | Public access pause (early reject, status, modal) | `src/lib/public-access.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx` |
+| Magic-link invite UI (invalid + welcome) | `src/lib/chat/use-chat-session.ts`, `src/components/chat/invalid-invite-modal.tsx`, `src/components/chat/invite-welcome-modal.tsx`, `src/lib/stores/invalid-invite-store.ts`, `src/lib/stores/invite-welcome-store.ts` |
 | Agent API contract / cross-service behaviour | `docs/agent_api_contract.md`, then agent API repo if in workspace |
 
 ## Layering rules (do not break)

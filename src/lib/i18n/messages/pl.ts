@@ -106,6 +106,10 @@ export const pl = {
     invalidTitle: "Nieprawidłowe zaproszenie",
     invalidBody:
       "Ten link zaproszenia jest nieprawidłowy, wygasł albo został już wyczerpany. Możesz kontynuować jako zwykły gość.",
+    welcomeTitle: "Witaj, {{name}}!",
+    welcomeBody:
+      "Dziękuję za skorzystanie z zaproszenia. Zapraszam do korzystania z aplikacji, rozmowy z asystentem, umówienia spotkania i kontaktu ze mną.",
+    welcomeCta: "Zaczynamy",
   },
   rateLimit: {
     title: "Osiągnięto limit",

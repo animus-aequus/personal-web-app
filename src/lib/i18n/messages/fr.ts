@@ -108,6 +108,10 @@ export const fr = {
     invalidTitle: "Invitation invalide",
     invalidBody:
       "Ce lien d'invitation est invalide, expiré ou déjà épuisé. Vous pouvez continuer en tant que visiteur classique.",
+    welcomeTitle: "Bonjour, {{name}} !",
+    welcomeBody:
+      "Merci d'avoir utilisé cette invitation. N'hésitez pas à explorer l'application, à discuter avec l'assistant, à réserver une réunion et à me contacter — je serai ravi d'échanger.",
+    welcomeCta: "C'est parti",
   },
   rateLimit: {
     title: "Limite atteinte",

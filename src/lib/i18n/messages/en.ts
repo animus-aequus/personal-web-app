@@ -105,6 +105,10 @@ export const en = {
     invalidTitle: "Invalid invitation",
     invalidBody:
       "This invitation link is invalid, expired, or has already been used up. You can continue as a regular visitor.",
+    welcomeTitle: "Hello, {{name}}!",
+    welcomeBody:
+      "Thank you for using this invitation. Feel free to explore the app, chat with the assistant, book a meeting and get in touch — I'd be glad to connect.",
+    welcomeCta: "Let's go",
   },
   rateLimit: {
     title: "Limit reached",

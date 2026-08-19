@@ -21,6 +21,7 @@ import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
 import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
+import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import {
   fetchPublicStatus,
@@ -149,6 +150,17 @@ class InviteInvalidClientError extends Error {
   }
 }
 
+function normalizeInvitationName(raw: unknown): string | null {
+  if (typeof raw !== "string") {
+    return null;
+  }
+  const trimmed = raw.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 128);
+}
+
 async function ensureServerSession(
   persistedId: string | null,
   turnstileToken: string,
@@ -160,6 +172,7 @@ async function ensureServerSession(
   language: LocaleCode;
   timezone: string;
   sessionType: SessionType;
+  invitationName: string | null;
 }> {
   const body: Record<string, string> = {
     language,
@@ -207,14 +220,20 @@ async function ensureServerSession(
     language?: string;
     timezone?: string;
     session_type: SessionType;
+    invitation_name?: string | null;
   };
   const sessionType: SessionType =
     data.session_type === "invited" ? "invited" : "public";
+  const invitationName =
+    sessionType === "invited" && inviteToken
+      ? normalizeInvitationName(data.invitation_name)
+      : null;
   return {
     sessionId: data.session_id,
     language: normalizeLocale(data.language, language),
     timezone: data.timezone?.trim() || timezone,
     sessionType,
+    invitationName,
   };
 }
 
@@ -319,9 +338,6 @@ async function finishReadySession(
     rehydratePendingBooking(session.sessionId),
     rehydratePendingCancellations(session.sessionId),
   ]);
-  if (!isCurrent()) {
-    return;
-  }
 }
 
 type BootstrapDeps = {
@@ -423,6 +439,12 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
         browserTimezone,
         inviteToken,
       );
+      // Queue the welcome before any later isCurrent() bail-out or token
+      // clear. A superseded Strict Mode / remount run still redeemed; the
+      // follow-up bootstrap resumes without invitation_name.
+      if (session.invitationName) {
+        useInviteWelcomeStore.getState().show(session.invitationName);
+      }
       clearHeldInviteToken();
       await finishReadySession(
         { isCurrent, loadInitial, setSessionId },

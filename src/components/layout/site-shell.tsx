@@ -10,12 +10,14 @@ import {
   ReadyChatSurface,
 } from "@/components/chat/chat-panel";
 import { InvalidInviteModal } from "@/components/chat/invalid-invite-modal";
+import { InviteWelcomeModal } from "@/components/chat/invite-welcome-modal";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
 import { AppShell } from "@/components/layout/app-shell";
 import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { TurnstileProvider } from "@/components/turnstile/turnstile-provider";
 import { useChatSession } from "@/lib/chat/use-chat-session";
 import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
+import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
 // Eager client import so device profiling runs with the app shell (module init).
 import "@/lib/stores/device-profile-store";
 
@@ -56,6 +58,7 @@ function SiteShellInner({ children }: SiteShellProps) {
     appendLive,
   } = useChatSession();
   const invalidInviteOpen = useInvalidInviteStore((s) => s.open);
+  const inviteWelcomeOpen = useInviteWelcomeStore((s) => s.open);
 
   const voiceReconnectRef = useRef<(() => void) | null>(null);
 
@@ -110,6 +113,7 @@ function SiteShellInner({ children }: SiteShellProps) {
             {children}
           </div>
         ) : null}
+        {inviteWelcomeOpen ? <InviteWelcomeModal /> : null}
       </AppShell>
     );
   }

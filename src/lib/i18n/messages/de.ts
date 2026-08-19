@@ -107,6 +107,10 @@ export const de = {
     invalidTitle: "Ungültige Einladung",
     invalidBody:
       "Dieser Einladungslink ist ungültig, abgelaufen oder bereits aufgebraucht. Du kannst als regulärer Besucher fortfahren.",
+    welcomeTitle: "Hallo, {{name}}!",
+    welcomeBody:
+      "Danke, dass du diese Einladung genutzt hast. Schau dich gerne um, probiere den Assistenten aus, buche ein Meeting und nimm Kontakt auf — ich freue mich darauf.",
+    welcomeCta: "Los geht's",
   },
   rateLimit: {
     title: "Limit erreicht",

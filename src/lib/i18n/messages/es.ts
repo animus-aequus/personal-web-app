@@ -107,6 +107,10 @@ export const es = {
     invalidTitle: "Invitación no válida",
     invalidBody:
       "Este enlace de invitación no es válido, ha caducado o ya se ha agotado. Puedes continuar como visitante habitual.",
+    welcomeTitle: "¡Hola, {{name}}!",
+    welcomeBody:
+      "Gracias por usar esta invitación. Explora la aplicación, habla con el asistente, reserva una reunión y escríbeme — estaré encantado de conectar.",
+    welcomeCta: "Vamos",
   },
   rateLimit: {
     title: "Límite alcanzado",

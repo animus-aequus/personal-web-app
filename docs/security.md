@@ -181,13 +181,13 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 ### Public access cost guard (early reject + LangSmith webhook)
 
-**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `notifyLangSmithAlert()` / `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`, invite UI in `use-chat-session.ts` / `invalid-invite-modal.tsx`
+**Modules:** `src/lib/public-access-config.ts`, `src/lib/public-access.ts`, `src/app/api/public-status/route.ts`, `src/app/api/webhooks/langsmith/route.ts`, `notifyLangSmithAlert()` / `pauseAssistant()` / `fetchAgentConfig()` in `src/lib/agent-client.ts`, `src/lib/stores/public-pause-store.ts`, `src/components/chat/public-pause-modal.tsx`, invite UI in `use-chat-session.ts` / `invalid-invite-modal.tsx` / `invite-welcome-modal.tsx`
 
 **Pause buckets:** agent `GET /api/v1/config` returns `paused_by_type.public` and `paused_by_type.invited`. BFF `GET /api/public-status` mirrors both. Bootstrap gates on **invited** when `?invite=` is present or the persisted `sessionType` is `invited`; otherwise **public**. Hard enforcement of turn caps remains on the agent (`try_consume_turn(session_type)`). Invited sessions may **fall back** to the public turn budget when invited is exhausted but public still has capacity; `paused_by_type.invited` is effective only when **both** buckets are paused. `POST /api/session`, chat, and LiveKit token no longer apply a type-agnostic early reject — the agent resolves type on create/resume/turn.
 
 **UI:** when the relevant bucket is paused the session phase becomes `paused`. Mid-session pauses (text **503** `assistant_paused`, voice `ui_events` `assistant_paused`) call `applyAssistantPaused(sessionType)` and show the same localized pause modal (`pause.defaultMessage`). Overlay + `OK`; chrome stays disabled after acknowledging.
 
-**Invites:** `?invite=` is read on bootstrap, sent as `invite_token` on `POST /api/session`, then stripped from the URL. **403** `invite_invalid` opens a dialog; OK resumes a prior session if one existed, otherwise creates a public session.
+**Invites:** `?invite=` is read on bootstrap, sent as `invite_token` on `POST /api/session`, then stripped from the URL. **403** `invite_invalid` opens a dialog; OK resumes a prior session if one existed, otherwise creates a public session. A **fresh redeem** returns `invitation_name` (`invitations.name`) and the UI shows a one-shot welcome overlay. Same-invite resume (already consumed for this session) and exhausted/invalid tokens do not.
 
 **LangSmith webhook:** notifies via Telegram only (`POST /api/v1/admin/langsmith-alert`). Does **not** pause the assistant.
 

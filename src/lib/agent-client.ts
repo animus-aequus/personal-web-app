@@ -56,6 +56,8 @@ export type CreateSessionResponse = {
   session_type: "public" | "invited";
   session_secret?: string | null;
   session_expires_at?: string | null;
+  /** invitations.name — present only after a fresh invite_token redeem. */
+  invitation_name?: string | null;
 };
 
 export type UpdateSessionResponse = {

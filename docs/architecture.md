@@ -28,9 +28,10 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 1. On first load (after Zustand rehydration), `SiteShell` (`app/(site)/layout.tsx`) runs `useChatSession` → `POST /api/session` → agent API returns `session_id`. Bootstrap runs once for the shared layout lifetime (chat + sibling pages such as `/terms`), not on every client navigation.
 2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
-3. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
-4. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
-5. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
+3. A **fresh** `?invite=` redeem returns `invitation_name`; after the session is ready, `SiteShell` shows a one-shot welcome overlay (not persisted). Same-invite resume and exhausted/invalid tokens do not return `invitation_name` and do not show the overlay.
+4. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
+5. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
+6. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
 
 ## Request lifecycle
 
