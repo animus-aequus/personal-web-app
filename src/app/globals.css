@@ -148,3 +148,13 @@
 .chat-markdown > :last-child {
   margin-bottom: 0;
 }
+
+@keyframes invite-welcome-border-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.invite-welcome-border-spin {
+  animation: invite-welcome-border-spin 6s linear infinite;
+}
