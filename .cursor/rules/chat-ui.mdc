@@ -23,8 +23,8 @@ Read `docs/architecture.md` (Message merge, Session identity) before non-trivial
 ## Session bootstrap
 
 - App Turnstile (`AppHumanGate`) runs in `SiteShell` for the `(site)` layout lifetime
-- `/chat` layout `RouteAccessGate` evaluates catalog conditions (Phase 1: `pause` only)
-- `useChatSession` runs only on `/chat` after the gate; leaving `/chat` unmounts chat (no keep-alive)
+- `/chat` layout `RouteAccessGate` evaluates catalog conditions: `operatingHours` then `pause`
+- `useChatSession` runs only on `/chat` after the gate; leaving `/chat` unmounts chat (no keep-alive of the React tree). Resume reuses `pa_session_secret` and skips Turnstile until the cookie expires
 - `TextChatArea` mounts only when `sessionId` exists, with `key={sessionId}`
 - **Why:** `useChat` + `DefaultChatTransport` bind `sessionId` at creation time
 

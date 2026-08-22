@@ -8,6 +8,7 @@ import {
   RateLimitExceededError,
   streamAgentChatFromResponse,
 } from "@/lib/agent-client";
+import { enforceOperatingHours } from "@/lib/app-config";
 import {
   CHAT_MESSAGE_MAX,
   isChatMessageTooLong,
@@ -35,6 +36,11 @@ export async function POST(request: Request) {
   // Pause is enforced on the agent using web_sessions.session_type — do not
   // apply a type-agnostic public-only early reject here.
   try {
+    const hoursBlocked = await enforceOperatingHours();
+    if (hoursBlocked) {
+      return hoursBlocked;
+    }
+
     if (isChatRequestBodyTooLarge(request.headers.get("content-length"))) {
       return NextResponse.json(
         { error: "message_too_long", maxChars: CHAT_MESSAGE_MAX },

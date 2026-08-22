@@ -108,6 +108,24 @@ export const es = {
     defaultMessage:
       "Debido al gran interés, el acceso al asistente está temporalmente en pausa.",
   },
+  hoursClosed: {
+    title: "Asistente no disponible",
+    body: "El asistente no está disponible ahora. Consulta el horario a continuación.",
+    bodyWithNext:
+      "El asistente no está disponible ahora. Próxima apertura: {{nextOpen}}.",
+    scheduleTitle: "Horario",
+    closed: "Cerrado",
+    window: "{{open}}–{{close}}",
+    weekdays: {
+      mon: "Lun",
+      tue: "Mar",
+      wed: "Mié",
+      thu: "Jue",
+      fri: "Vie",
+      sat: "Sáb",
+      sun: "Dom",
+    },
+  },
   invite: {
     invalidTitle: "Invitación no válida",
     invalidBody:

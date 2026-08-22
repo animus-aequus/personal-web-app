@@ -24,10 +24,19 @@ import {
   PAUSED_ERROR_CODE,
   type SessionType,
 } from "@/lib/public-access-config";
+import {
+  ASSISTANT_OFFLINE_ERROR_CODE,
+  type OperatingHoursStatus,
+} from "@/lib/operating-hours-config";
+import {
+  parseAssistantOfflineFrom503,
+  resolveAssistantOfflineStatus,
+} from "@/lib/operating-hours/assistant-offline";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
+import { useHoursClosedStore } from "@/lib/stores/hours-closed-store";
 import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
 import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
@@ -35,12 +44,15 @@ import {
   applyAssistantPaused,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
-import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
+import {
+  TURNSTILE_ERROR_CODE,
+  TURNSTILE_TOKEN_FIELD,
+} from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
 
 /**
  * Coarse lifecycle for the chat surface:
- * - `verifying` — Turnstile gate when no stashed app-level token is available.
+ * - `verifying` — Turnstile gate for a fresh visitor, or after the session cookie expired.
  * - `loading`   — session create/resume and/or initial history fetch.
  * - `ready`     — session established and initial history settled.
  * - `error`     — bootstrap or initial history failed; UI shows a retry affordance.
@@ -58,6 +70,8 @@ type UseChatSessionResult = {
   isReverification: boolean;
   /** Session create/resume returned pause after the route gate (fail-open race). */
   entryPaused: boolean;
+  /** Session create returned assistant_offline after the route gate (fail-open race). */
+  entryHoursClosed: OperatingHoursStatus | null;
   error: string | null;
   retry: () => void;
   acknowledgeInvalidInvite: () => void;
@@ -79,6 +93,30 @@ class AssistantPausedClientError extends Error {
   constructor() {
     super(PAUSED_ERROR_CODE);
     this.name = "AssistantPausedClientError";
+  }
+}
+
+class AssistantOfflineClientError extends Error {
+  readonly nextOpenAt: string | null;
+
+  constructor(nextOpenAt: string | null) {
+    super(ASSISTANT_OFFLINE_ERROR_CODE);
+    this.name = "AssistantOfflineClientError";
+    this.nextOpenAt = nextOpenAt;
+  }
+}
+
+class TurnstileRequiredClientError extends Error {
+  constructor() {
+    super(TURNSTILE_ERROR_CODE);
+    this.name = "TurnstileRequiredClientError";
+  }
+}
+
+class SessionAuthClientError extends Error {
+  constructor() {
+    super("session_auth_failed");
+    this.name = "SessionAuthClientError";
   }
 }
 
@@ -127,24 +165,42 @@ async function ensureServerSession(
   });
 
   if (!response.ok) {
-    await notifyTurnstileFailureIfNeeded(response);
+    if (turnstileToken) {
+      await notifyTurnstileFailureIfNeeded(response);
+    }
     const text = await response.text();
+    if (response.status === 401) {
+      throw new SessionAuthClientError();
+    }
     if (response.status === 403) {
       try {
         const parsed = JSON.parse(text) as { error?: string };
         if (parsed.error === INVITE_INVALID_ERROR_CODE) {
           throw new InviteInvalidClientError();
         }
+        if (parsed.error === TURNSTILE_ERROR_CODE) {
+          throw new TurnstileRequiredClientError();
+        }
       } catch (error) {
-        if (error instanceof InviteInvalidClientError) {
+        if (
+          error instanceof InviteInvalidClientError ||
+          error instanceof TurnstileRequiredClientError
+        ) {
           throw error;
         }
       }
       if (text.includes(INVITE_INVALID_ERROR_CODE)) {
         throw new InviteInvalidClientError();
       }
+      if (text.includes(TURNSTILE_ERROR_CODE)) {
+        throw new TurnstileRequiredClientError();
+      }
     }
     if (response.status === 503) {
+      const offline = parseAssistantOfflineFrom503(response.status, text);
+      if (offline) {
+        throw new AssistantOfflineClientError(offline.nextOpenAt);
+      }
       try {
         const parsed = JSON.parse(text) as { error?: string };
         if (parsed.error === PAUSED_ERROR_CODE) {
@@ -152,6 +208,9 @@ async function ensureServerSession(
         }
       } catch (error) {
         if (error instanceof AssistantPausedClientError) {
+          throw error;
+        }
+        if (error instanceof AssistantOfflineClientError) {
           throw error;
         }
       }
@@ -299,8 +358,80 @@ type BootstrapDeps = {
   setBootstrapStage: (stage: BootstrapStage) => void;
   setIsReverification: (value: boolean) => void;
   setEntryPaused: (value: boolean) => void;
+  setEntryHoursClosed: (value: OperatingHoursStatus | null) => void;
   hadReadySession: () => boolean;
 };
+
+type SessionBootstrapResult = {
+  sessionId: string;
+  language: LocaleCode;
+  timezone: string;
+  sessionType: SessionType;
+  invitationName: string | null;
+};
+
+async function mintTurnstileToken(deps: {
+  isCurrent: () => boolean;
+  turnstileEnabled: boolean;
+  acquireToken: () => Promise<string>;
+  resetAfterUse: () => void;
+  setBootstrapStage: (stage: BootstrapStage) => void;
+}): Promise<string | null> {
+  const {
+    isCurrent,
+    turnstileEnabled,
+    acquireToken,
+    resetAfterUse,
+    setBootstrapStage,
+  } = deps;
+  if (!turnstileEnabled) {
+    return "";
+  }
+  setBootstrapStage("verifying");
+  const token = await acquireToken();
+  if (!isCurrent()) {
+    resetAfterUse();
+    return null;
+  }
+  setBootstrapStage("loading");
+  return token;
+}
+
+async function ensureServerSessionOrRecreate(
+  persistedId: string | null,
+  turnstileToken: string,
+  language: LocaleCode,
+  timezone: string,
+  inviteToken: string | null,
+  mint: () => Promise<string | null>,
+  resetAfterUse: () => void,
+): Promise<SessionBootstrapResult | null> {
+  try {
+    return await ensureServerSession(
+      persistedId,
+      turnstileToken,
+      language,
+      timezone,
+      inviteToken,
+    );
+  } catch (error) {
+    if (!(error instanceof SessionAuthClientError) || !persistedId) {
+      throw error;
+    }
+    resetAfterUse();
+    const freshToken = await mint();
+    if (freshToken === null) {
+      return null;
+    }
+    return await ensureServerSession(
+      null,
+      freshToken,
+      language,
+      timezone,
+      inviteToken,
+    );
+  }
+}
 
 /**
  * Session bootstrap. React setState runs only after the first await so this is
@@ -319,8 +450,18 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     setBootstrapStage,
     setIsReverification,
     setEntryPaused,
+    setEntryHoursClosed,
     hadReadySession,
   } = deps;
+
+  const mint = () =>
+    mintTurnstileToken({
+      isCurrent,
+      turnstileEnabled,
+      acquireToken,
+      resetAfterUse,
+      setBootstrapStage,
+    });
 
   try {
     await useChatStore.persist.rehydrate();
@@ -330,12 +471,14 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
 
     setBootstrapError(null);
     setEntryPaused(false);
+    setEntryHoursClosed(null);
     setSessionId(null);
     resetHistory();
     useBookingOtpStore.getState().clear();
     useBookingCancelOtpStore.getState().clear();
     useMeetingsListStore.getState().clear();
     useDirectMessageStore.getState().clear();
+    useHoursClosedStore.getState().reset();
 
     const inviteToken = takeInviteToken();
     const storeState = useChatStore.getState();
@@ -354,14 +497,17 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     }
     setIsReverification(Boolean(persistedId) || hadReadySession());
 
-    const stashedToken = takeStashedTurnstileToken();
-    if (!stashedToken && turnstileEnabled) {
-      setBootstrapStage("verifying");
+    let turnstileToken = takeStashedTurnstileToken() ?? "";
+    if (!turnstileToken && !persistedId) {
+      const minted = await mint();
+      if (minted === null) {
+        return;
+      }
+      turnstileToken = minted;
     } else {
       setBootstrapStage("loading");
     }
 
-    const turnstileToken = stashedToken ?? (await acquireToken());
     if (!isCurrent()) {
       resetAfterUse();
       return;
@@ -370,13 +516,44 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     setBootstrapStage("loading");
 
     try {
-      const session = await ensureServerSession(
-        persistedId,
-        turnstileToken,
-        earlyLanguage,
-        browserTimezone,
-        inviteToken,
-      );
+      let session: SessionBootstrapResult | null;
+      try {
+        session = await ensureServerSessionOrRecreate(
+          persistedId,
+          turnstileToken,
+          earlyLanguage,
+          browserTimezone,
+          inviteToken,
+          mint,
+          resetAfterUse,
+        );
+      } catch (error) {
+        if (
+          error instanceof TurnstileRequiredClientError ||
+          error instanceof SessionAuthClientError
+        ) {
+          const minted = await mint();
+          if (minted === null) {
+            return;
+          }
+          const resumeId =
+            error instanceof SessionAuthClientError ? null : persistedId;
+          session = await ensureServerSessionOrRecreate(
+            resumeId,
+            minted,
+            earlyLanguage,
+            browserTimezone,
+            inviteToken,
+            mint,
+            resetAfterUse,
+          );
+        } else {
+          throw error;
+        }
+      }
+      if (!session) {
+        return;
+      }
       // Queue the welcome before any later isCurrent() bail-out or token
       // clear. A superseded Strict Mode / remount run still redeemed; the
       // follow-up bootstrap resumes without invitation_name.
@@ -400,6 +577,14 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
       if (error instanceof AssistantPausedClientError) {
         void applyAssistantPaused(pauseGateType);
         setEntryPaused(true);
+        return;
+      }
+      if (error instanceof AssistantOfflineClientError) {
+        const hours = await resolveAssistantOfflineStatus(error.nextOpenAt);
+        if (!isCurrent()) {
+          return;
+        }
+        setEntryHoursClosed(hours);
         return;
       }
       throw error;
@@ -437,6 +622,8 @@ export function useChatSession(): UseChatSessionResult {
     useState<BootstrapStage>("loading");
   const [isReverification, setIsReverification] = useState(false);
   const [entryPaused, setEntryPaused] = useState(false);
+  const [entryHoursClosed, setEntryHoursClosed] =
+    useState<OperatingHoursStatus | null>(null);
 
   const runIdRef = useRef(0);
   const hadReadySessionRef = useRef(false);
@@ -455,6 +642,7 @@ export function useChatSession(): UseChatSessionResult {
       setBootstrapStage,
       setIsReverification,
       setEntryPaused,
+      setEntryHoursClosed,
       hadReadySession: () => hadReadySessionRef.current,
     });
   }, [
@@ -498,56 +686,57 @@ export function useChatSession(): UseChatSessionResult {
         const browserTimezone = resolveBrowserTimezone();
         const resumeId = hadPriorSession ? storeState.sessionId : null;
 
-        if (turnstileEnabled) {
-          setBootstrapStage("verifying");
-        }
-        const turnstileToken = await acquireToken();
-        if (!isCurrent()) {
-          resetAfterUse();
-          return;
-        }
-        setBootstrapStage("loading");
+        const mint = () =>
+          mintTurnstileToken({
+            isCurrent,
+            turnstileEnabled,
+            acquireToken,
+            resetAfterUse,
+            setBootstrapStage,
+          });
 
-        try {
-          let session;
+        let session: SessionBootstrapResult | null = null;
+        if (resumeId) {
           try {
             session = await ensureServerSession(
               resumeId,
-              turnstileToken,
+              "",
               earlyLanguage,
               browserTimezone,
               null,
             );
           } catch (error) {
-            const staleSession =
-              resumeId &&
-              error instanceof Error &&
-              error.message.includes("(401)");
-            if (!staleSession) {
+            if (
+              !(error instanceof TurnstileRequiredClientError) &&
+              !(error instanceof SessionAuthClientError)
+            ) {
               throw error;
             }
-            // Turnstile tokens are single-use — mint a fresh one for create.
-            resetAfterUse();
-            const freshToken = await acquireToken();
-            if (!isCurrent()) {
-              resetAfterUse();
-              return;
-            }
-            session = await ensureServerSession(
-              null,
-              freshToken,
-              earlyLanguage,
-              browserTimezone,
-              null,
-            );
           }
-          await finishReadySession(
-            { isCurrent, loadInitial, setSessionId },
-            session,
-          );
-        } finally {
-          resetAfterUse();
         }
+
+        if (!session) {
+          const turnstileToken = await mint();
+          if (turnstileToken === null) {
+            return;
+          }
+          session = await ensureServerSessionOrRecreate(
+            resumeId,
+            turnstileToken,
+            earlyLanguage,
+            browserTimezone,
+            null,
+            mint,
+            resetAfterUse,
+          );
+        }
+        if (!session) {
+          return;
+        }
+        await finishReadySession(
+          { isCurrent, loadInitial, setSessionId },
+          session,
+        );
       } catch (error) {
         if (!isCurrent()) {
           return;
@@ -558,11 +747,20 @@ export function useChatSession(): UseChatSessionResult {
           setEntryPaused(true);
           return;
         }
+        if (error instanceof AssistantOfflineClientError) {
+          const hours = await resolveAssistantOfflineStatus(error.nextOpenAt);
+          if (!isCurrent()) {
+            return;
+          }
+          setEntryHoursClosed(hours);
+          return;
+        }
         console.error("Invalid-invite recovery failed:", error);
         setBootstrapError(
           error instanceof Error ? error.message : "Failed to start chat",
         );
       } finally {
+        resetAfterUse();
         // Always clear — a superseded run must not leave OK permanently disabled.
         useInvalidInviteStore.getState().setRecovering(false);
       }
@@ -626,6 +824,7 @@ export function useChatSession(): UseChatSessionResult {
     phase,
     isReverification,
     entryPaused,
+    entryHoursClosed,
     error: bootstrapError ?? historyError,
     retry: () => {
       void startBootstrap();

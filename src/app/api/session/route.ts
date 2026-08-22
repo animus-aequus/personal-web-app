@@ -8,6 +8,7 @@ import {
   AssistantPausedError,
   RateLimitExceededError,
 } from "@/lib/agent-client";
+import { enforceOperatingHours } from "@/lib/app-config";
 import { isLocaleCode } from "@/lib/i18n/locales";
 import { DEFAULT_TIMEZONE } from "@/lib/i18n/timezone";
 import { INVITE_INVALID_ERROR_CODE } from "@/lib/public-access-config";
@@ -92,16 +93,24 @@ export async function POST(request: Request) {
       [TURNSTILE_TOKEN_FIELD]?: string;
     };
 
-    const turnstileBlocked = await enforceTurnstile(
-      request,
-      body[TURNSTILE_TOKEN_FIELD],
-    );
-    if (turnstileBlocked) {
-      return turnstileBlocked;
+    const hoursBlocked = await enforceOperatingHours();
+    if (hoursBlocked) {
+      return hoursBlocked;
     }
 
     const cookieStore = await cookies();
     const existingSecret = cookieStore.get(SESSION_SECRET_COOKIE)?.value;
+
+    // Resume with a live session cookie already passed a human check.
+    if (!existingSecret) {
+      const turnstileBlocked = await enforceTurnstile(
+        request,
+        body[TURNSTILE_TOKEN_FIELD],
+      );
+      if (turnstileBlocked) {
+        return turnstileBlocked;
+      }
+    }
 
     const data = await createAgentSession(body.session_id ?? undefined, {
       clientIp: getClientIp(request),

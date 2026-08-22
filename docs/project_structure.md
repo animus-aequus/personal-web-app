@@ -39,7 +39,9 @@ personal-website/                 # this repo
 | `components/layout/site-shell.tsx` | Turnstile + i18n + AppShell chrome (no chat session) |
 | `components/layout/app-shell.tsx` | Sidebar settings chrome |
 | `components/access/route-access-gate.tsx` | Host for the route-access engine (`useRouteAccess`) |
-| `lib/access/*` | Catalog, evaluate, pause condition (Phase 1: `/chat` → pause only) |
+| `lib/access/*` | Catalog, evaluate, operating-hours + pause conditions |
+| `app/api/app-config/route.ts` | `GET` operating hours from Postgres (`BFF_DATABASE_URL`) |
+| `lib/app-config.ts`, `lib/db/postgres.ts` | BFF read + cache + `enforceOperatingHours()` |
 | `components/chat/chat-page-client.tsx` | Chat lifecycle on `/chat` after the gate passes |
 | `components/chat/chat-panel.tsx` | Chat surface (`TextChatArea`, voice, merge) |
 | `components/chat/message-list.tsx` | Renders merged message list |
@@ -95,6 +97,7 @@ personal-website/                 # this repo
 | Page shell / routing | `src/app/(site)/layout.tsx`, `src/app/(site)/page.tsx`, `src/app/(site)/chat/*`, `src/app/(site)/about-me/page.tsx`, `src/app/(site)/terms/page.tsx`, `src/app/layout.tsx` |
 | Styling / design tokens | `src/app/globals.css`, `src/components/ui/*` |
 | Public access pause (early reject, status, modal, `/chat` gate) | `src/lib/public-access.ts`, `src/lib/stores/public-pause-store.ts`, `src/lib/access/*`, `src/components/access/*`, `src/components/chat/public-pause-modal.tsx` |
+| Operating hours (BFF Postgres, `/chat` gate, proxy enforce) | `src/lib/app-config.ts`, `src/lib/db/postgres.ts`, `src/app/api/app-config/route.ts`, `src/components/chat/hours-closed-modal.tsx` |
 | Magic-link invite UI (invalid + welcome) | `src/lib/chat/use-chat-session.ts`, `src/components/chat/invalid-invite-modal.tsx`, `src/components/chat/invite-welcome-modal.tsx`, `src/lib/stores/invalid-invite-store.ts`, `src/lib/stores/invite-welcome-store.ts` |
 | Agent API contract / cross-service behaviour | `docs/agent_api_contract.md`, then agent API repo if in workspace |
 

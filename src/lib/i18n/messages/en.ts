@@ -106,6 +106,23 @@ export const en = {
     defaultMessage:
       "Due to high interest, access to the assistant is temporarily paused.",
   },
+  hoursClosed: {
+    title: "Assistant offline",
+    body: "The assistant is not available right now. Please check the schedule below.",
+    bodyWithNext: "The assistant is not available right now. Next opening: {{nextOpen}}.",
+    scheduleTitle: "Opening hours",
+    closed: "Closed",
+    window: "{{open}}–{{close}}",
+    weekdays: {
+      mon: "Mon",
+      tue: "Tue",
+      wed: "Wed",
+      thu: "Thu",
+      fri: "Fri",
+      sat: "Sat",
+      sun: "Sun",
+    },
+  },
   invite: {
     invalidTitle: "Invalid invitation",
     invalidBody:

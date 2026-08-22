@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect } from "react";
 
 import { PauseFallback } from "@/components/access/pause-fallback";
+import { HoursClosedFallback } from "@/components/access/hours-closed-fallback";
 import {
   ChatSessionError,
   ChatSessionLoading,
@@ -17,6 +18,7 @@ import { ABOUT_ME_PATH } from "@/lib/site-paths";
 import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
 import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
 import { useVoiceChromeStore } from "@/lib/stores/voice-chrome-store";
+import { useHoursClosedStore } from "@/lib/stores/hours-closed-store";
 import { useVoiceReconnectStore } from "@/lib/stores/voice-reconnect-store";
 
 export function ChatPageClient() {
@@ -25,6 +27,7 @@ export function ChatPageClient() {
     phase,
     isReverification,
     entryPaused,
+    entryHoursClosed,
     retry,
     acknowledgeInvalidInvite,
     historyStatus,
@@ -42,6 +45,10 @@ export function ChatPageClient() {
     router.push(ABOUT_ME_PATH);
   }, [router]);
 
+  const dismissEntryHoursClosed = useCallback(() => {
+    router.push(ABOUT_ME_PATH);
+  }, [router]);
+
   const handleVoiceReconnectChange = useCallback(
     (reconnect: (() => void) | null) => {
       setReconnect(reconnect);
@@ -53,11 +60,21 @@ export function ChatPageClient() {
     return () => {
       setReconnect(null);
       useVoiceChromeStore.getState().reset();
+      useHoursClosedStore.getState().reset();
     };
   }, [setReconnect]);
 
   if (entryPaused) {
     return <PauseFallback onDismiss={dismissEntryPause} />;
+  }
+
+  if (entryHoursClosed) {
+    return (
+      <HoursClosedFallback
+        payload={entryHoursClosed}
+        onDismiss={dismissEntryHoursClosed}
+      />
+    );
   }
 
   if (invalidInviteOpen) {

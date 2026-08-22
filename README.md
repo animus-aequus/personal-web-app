@@ -44,6 +44,7 @@ npm run dev
 | `NEXT_PUBLIC_LIVEKIT_AGENT_NAME` | Agent name for `useSession` (client; default `personal-voice-agent`) |
 | `ADMIN_PAUSE_SECRET` | `X-Admin-Secret` sent to agent admin routes (pause / LangSmith alert; server-only; must match agent env) |
 | `LANGSMITH_WEBHOOK_SECRET` | Expected `X-Webhook-Secret` on `POST /api/webhooks/langsmith` (server-only) |
+| `BFF_DATABASE_URL` | Optional read-only Postgres URL (`bff_reader`) for `GET /api/app-config` (transaction pooler `:6543`). Omit locally → hours gate always open. |
 
 ## Routes (this app)
 
@@ -57,6 +58,7 @@ npm run dev
 | `POST /api/chat` | Proxy chat; AI SDK SSE response |
 | `POST /api/livekit/token` | Mint LiveKit room token |
 | `GET /api/public-status` | Pause state for the `/chat` access gate (after Turnstile, before session) |
+| `GET /api/app-config` | Operating hours from Postgres (BFF read-only; excluded from edge RL) |
 | `POST /api/webhooks/langsmith` | LangSmith cost alert → Telegram notify (no pause) |
 
 Voice uses room names `web-{session_id}--{connection_id}` per connect; room metadata carries `session_id` so text and voice can share server-side conversation state. Details: [`docs/agent_api_contract.md`](docs/agent_api_contract.md).

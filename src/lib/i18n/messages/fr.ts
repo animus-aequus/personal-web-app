@@ -109,6 +109,24 @@ export const fr = {
     defaultMessage:
       "En raison d'un fort intérêt, l'accès à l'assistant est temporairement suspendu.",
   },
+  hoursClosed: {
+    title: "Assistant hors ligne",
+    body: "L'assistant n'est pas disponible pour le moment. Consultez les horaires ci-dessous.",
+    bodyWithNext:
+      "L'assistant n'est pas disponible pour le moment. Prochaine ouverture : {{nextOpen}}.",
+    scheduleTitle: "Horaires",
+    closed: "Fermé",
+    window: "{{open}}–{{close}}",
+    weekdays: {
+      mon: "Lun",
+      tue: "Mar",
+      wed: "Mer",
+      thu: "Jeu",
+      fri: "Ven",
+      sat: "Sam",
+      sun: "Dim",
+    },
+  },
   invite: {
     invalidTitle: "Invitation invalide",
     invalidBody:

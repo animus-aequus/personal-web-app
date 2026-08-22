@@ -68,7 +68,8 @@ Precise session quotas (messages, actions, DMs, graph recursion) live on the age
 | `GET /api/cancellations/pending` | yes | — | required | — |
 | `POST /api/direct-messages` | yes | — | required | dual-window DM |
 | `POST /api/direct-messages/cancel` | yes | — | required | action budget |
-| `GET /api/public-status` | — | — | — | — |
+| `GET /api/public-status` | — | — | — |
+| `GET /api/app-config` | — | — | — |
 | `POST /api/webhooks/langsmith` | — | — | `X-Webhook-Secret` | — |
 
 ---
@@ -79,7 +80,7 @@ Precise session quotas (messages, actions, DMs, graph recursion) live on the age
 
 **Modules:** `src/proxy.ts`, `src/lib/rate-limit-config.ts`, `src/lib/rate-limit.ts`
 
-**Scope:** all `/api/*` except `/api/public-status` and `/api/webhooks/*` (Next.js Proxy matcher).
+**Scope:** all `/api/*` except `/api/public-status`, `/api/app-config`, and `/api/webhooks/*` (Next.js Proxy matcher).
 
 **Store:** Upstash Redis (`UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`) — **BFF only**. Precise session quotas live on the agent in Postgres.
 
@@ -120,7 +121,7 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **Routes verified:** `POST /api/session` only. Chat and LiveKit token rely on session secret + BFF/agent rate limits — not per-request Turnstile (avoids repeated visible challenges, especially in privacy browsers).
 
-**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). **App-level gate** (`AppHumanGate` in `SiteShell`) must pass before any `(site)` view, including static pages and before the `/chat` pause gate. The token is stashed (not `resetAfterUse` at unlock) and consumed on `POST /api/session`. If the stash is empty (return to `/chat`, retry, invalid-invite recovery), `useChatSession` shows the in-page verifying gate again. First visit uses a short human-check prompt; re-bootstrap with a prior/persisted session uses session-expired copy. After the token is consumed the gate unmounts (`loading` → `ready`) and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify`. Pause no longer skips Turnstile.
+**Client:** `@marsidev/react-turnstile` in managed mode (widget mode configured in Cloudflare dashboard; `appearance: interaction-only` on the client). **App-level gate** (`AppHumanGate` in `SiteShell`) must pass before any `(site)` view, including static pages and before the `/chat` pause gate. The token is stashed (not `resetAfterUse` at unlock) and consumed on the first `POST /api/session` (fresh create). **Resume** with a live `pa_session_secret` cookie skips `siteverify` and the in-page verifying gate — in-app `/chat` ↔ `/about-me` / `/terms` navigation does not re-challenge until the session cookie expires. If the cookie is missing or the agent returns 401, `useChatSession` shows the verifying gate and mints a new token. First visit uses a short human-check prompt; expired-session re-bootstrap uses session-expired copy. After a token is consumed the gate unmounts (`loading` → `ready`) and `reset()` is deferred until the next `acquireToken()` (e.g. retry). Optional Cloudflare widget pre-clearance/`cf_clearance` only skips zone WAF Challenge Pages — it does not replace BFF `siteverify` on fresh create. Pause no longer skips Turnstile.
 
 **Failure UX:** `403 { "error": "turnstile_failed" }` → shadcn Sonner error toast (top-center): “Verification failed. Please try again.” Bootstrap failures show a generic “Something went wrong. Please try again.” screen with a primary Retry button (technical details only in the console).
 
@@ -143,7 +144,7 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **BFF behaviour:**
 
-- `POST /api/session` — forwards existing cookie as `X-Session-Secret` for resume; sets cookie when agent returns `session_secret` (fresh start) or refreshes `Max-Age` on resume
+- `POST /api/session` — Turnstile `siteverify` on **fresh** create (no session cookie). Resume with `pa_session_secret` skips Turnstile and forwards the cookie as `X-Session-Secret`; sets cookie when agent returns `session_secret` (fresh start) or refreshes `Max-Age` on resume
 - `POST /api/chat`, `GET /api/session/messages`, `POST /api/livekit/token` — require cookie when binding enabled; forward `X-Session-Secret` to agent API
 - LiveKit: `verifyAgentSession()` before JWT mint
 
@@ -187,6 +188,20 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **UI:** entry pause is the `/chat` access engine (not a `useChatSession` phase). Mid-session pauses (text **503** `assistant_paused`, voice `ui_events` `assistant_paused`) call `applyAssistantPaused(sessionType)` and show the same localized pause modal (`pause.defaultMessage`). Overlay + `OK` → `/about-me` (entry and mid-session). There is no dead-end paused chrome on `/`.
 
+### Operating hours (BFF Postgres + `/chat` gate)
+
+**Modules:** `src/lib/db/postgres.ts`, `src/lib/app-config.ts`, `src/lib/operating-hours/*`, `src/app/api/app-config/route.ts`, `src/lib/access/conditions/operating-hours.ts`, `src/components/chat/hours-closed-modal.tsx`
+
+**Storage (agent Postgres):** table `app_config` (`key`, `value` jsonb, `updated_at`). Seed row `operating_hours` (per-weekday windows, IANA timezone). RLS enabled; policy `app_config_bff_reader_select` grants **SELECT** to role `bff_reader` only. Agent runtime uses the `postgres` role (bypasses RLS). Not `app_runtime_state`.
+
+**BFF:** `BFF_DATABASE_URL` connects as `bff_reader` (transaction pooler). Missing URL → gate and `enforceOperatingHours()` **fail-open** (always open for local dev). `GET /api/app-config` evaluates `open` / `nextOpenAt` server-side (~30 s cache). Excluded from Upstash edge RL in `proxy.ts`.
+
+**Gate order on `/chat`:** Turnstile → `operatingHours` → `pause` → session bootstrap. Outside hours: `HoursClosedModal` + redirect `/about-me`; pause/agent not called.
+
+**Proxy enforce:** `enforceOperatingHours()` on `POST /api/session`, `POST /api/chat`, `POST /api/livekit/token` returns **503** `{ "error": "assistant_offline", "next_open_at"?: "<ISO>" }` when DB is configured and currently closed.
+
+**Env (website):** `BFF_DATABASE_URL` (server-only, read-only role).
+
 **Invites:** `?invite=` is read on bootstrap, sent as `invite_token` on `POST /api/session`, then stripped from the URL. **403** `invite_invalid` opens a dialog; OK resumes a prior session if one existed, otherwise creates a public session. A **fresh redeem** returns `invitation_name` (`invitations.name`) and the UI shows a one-shot welcome overlay. Same-invite resume (already consumed for this session) and exhausted/invalid tokens do not.
 
 **LangSmith webhook:** notifies via Telegram only (`POST /api/v1/admin/langsmith-alert`). Does **not** pause the assistant.
@@ -194,6 +209,14 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 **Env:** `LANGSMITH_WEBHOOK_SECRET`, `ADMIN_PAUSE_SECRET` (both server-only; the second must match the agent).
 
 Resume, manual pause and limit changes are SQL-only — see the runbook in the agent API [`security.md`](../../personal-voice-agent/docs/security.md).
+
+### `app_config` (operating hours for BFF)
+
+**Agent modules:** migration `018_add_app_config`, `app/db/models/app_config.py`
+
+**Store:** `app_config` (`key` text PK, `value` jsonb, `updated_at`). Seed `operating_hours` with IANA timezone and per-weekday windows (`"0"`–`"6"` = Mon–Sun; `[]` = closed). RLS enabled; `bff_reader` has SELECT via policy `app_config_bff_reader_select`. Website BFF reads through `BFF_DATABASE_URL` — not the agent HTTP API. Distinct from `app_runtime_state` (pause/turn limits) and from calendar `working_hours.py` (booking tool JSON).
+
+**Ops:** set `bff_reader` password after migration; grant only on `app_config`. Keep ECS schedule and `operating_hours` row in sync manually.
 
 ---
 

@@ -17,6 +17,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/api/((?!public-status|webhooks/).*)",
+    "/api/((?!public-status|app-config|webhooks/).*)",
   ],
 };

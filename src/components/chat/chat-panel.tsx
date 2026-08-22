@@ -22,6 +22,7 @@ import { DirectMessageCard } from "@/components/chat/direct-message-card";
 import { MeetingsListCard } from "@/components/chat/meetings-list-card";
 import { MessageList } from "@/components/chat/message-list";
 import { PublicPauseModal } from "@/components/chat/public-pause-modal";
+import { HoursClosedModal } from "@/components/chat/hours-closed-modal";
 import { RateLimitModal } from "@/components/chat/rate-limit-modal";
 import { Button } from "@/components/ui/button";
 import { AgentAura } from "@/components/visualizer/agent-aura";
@@ -36,6 +37,11 @@ import {
   throwIfMessageTooLongResponse,
 } from "@/lib/chat/chat-message-errors";
 import { bucketForType, PAUSED_ERROR_CODE } from "@/lib/public-access-config";
+import { ASSISTANT_OFFLINE_ERROR_CODE } from "@/lib/operating-hours-config";
+import {
+  parseAssistantOfflineFrom503,
+  resolveAssistantOfflineStatus,
+} from "@/lib/operating-hours/assistant-offline";
 import { ABOUT_ME_PATH } from "@/lib/site-paths";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
@@ -47,6 +53,7 @@ import {
   refreshPublicPauseState,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
+import { useHoursClosedStore } from "@/lib/stores/hours-closed-store";
 import { ensureMicrophonePermission } from "@/lib/livekit/microphone-permission";
 import { livekitRoomName, livekitVoiceRoomName } from "@/lib/livekit/room";
 import { normalizeLocale } from "@/lib/i18n/locales";
@@ -234,9 +241,19 @@ function TextChatArea({
             await handleRateLimitResponse(response, "voice");
             throw new Error("rate_limit_exceeded");
           }
-          const payload = (await response.json().catch(() => ({}))) as {
-            error?: string;
-          };
+          const text = await response.text();
+          const offline = parseAssistantOfflineFrom503(response.status, text);
+          if (offline) {
+            const hours = await resolveAssistantOfflineStatus(offline.nextOpenAt);
+            useHoursClosedStore.getState().show(hours);
+            throw new Error(ASSISTANT_OFFLINE_ERROR_CODE);
+          }
+          let payload: { error?: string } = {};
+          try {
+            payload = JSON.parse(text) as { error?: string };
+          } catch {
+            // ignore malformed body
+          }
           throw new Error(payload.error ?? "Token generation failed");
         }
 
@@ -328,6 +345,13 @@ function TextChatArea({
           onVoiceDisconnect();
           return;
         }
+        if (
+          error instanceof Error &&
+          error.message === ASSISTANT_OFFLINE_ERROR_CODE
+        ) {
+          onVoiceDisconnect();
+          return;
+        }
         console.error("LiveKit session failed to start", error);
         void refreshPublicPauseState();
         reportLiveKitStartError();
@@ -353,8 +377,15 @@ function TextChatArea({
             throw new Error("rate_limit_exceeded");
           }
           if (response.status === 503) {
+            const text = await response.clone().text();
+            const offline = parseAssistantOfflineFrom503(response.status, text);
+            if (offline) {
+              const hours = await resolveAssistantOfflineStatus(offline.nextOpenAt);
+              useHoursClosedStore.getState().show(hours);
+              throw new Error(ASSISTANT_OFFLINE_ERROR_CODE);
+            }
             try {
-              const body = (await response.clone().json()) as { error?: string };
+              const body = JSON.parse(text) as { error?: string };
               if (body.error === PAUSED_ERROR_CODE) {
                 const sessionType =
                   useChatStore.getState().sessionType ?? "public";
@@ -364,7 +395,8 @@ function TextChatArea({
             } catch (error) {
               if (
                 error instanceof Error &&
-                error.message === PAUSED_ERROR_CODE
+                (error.message === PAUSED_ERROR_CODE ||
+                  error.message === ASSISTANT_OFFLINE_ERROR_CODE)
               ) {
                 throw error;
               }
@@ -393,11 +425,19 @@ function TextChatArea({
   const pauseDismissed = usePublicPauseStore((s) => s.dismissed);
   const dismissPause = usePublicPauseStore((s) => s.dismiss);
   const paused = bucketForType(pauseStatus, activeType).paused;
+  const hoursClosed = useHoursClosedStore((s) => s.hours);
+  const hoursDismissed = useHoursClosedStore((s) => s.dismissed);
+  const dismissHours = useHoursClosedStore((s) => s.dismiss);
   const router = useRouter();
   const handlePauseAcknowledge = useCallback(() => {
     dismissPause();
     router.push(ABOUT_ME_PATH);
   }, [dismissPause, router]);
+  const handleHoursAcknowledge = useCallback(() => {
+    dismissHours();
+    router.push(ABOUT_ME_PATH);
+  }, [dismissHours, router]);
+  const hoursBlocked = Boolean(hoursClosed && !hoursDismissed);
 
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
@@ -406,7 +446,8 @@ function TextChatArea({
       if (
         error.message === "rate_limit_exceeded" ||
         error.message === MESSAGE_TOO_LONG_ERROR ||
-        error.message === PAUSED_ERROR_CODE
+        error.message === PAUSED_ERROR_CODE ||
+        error.message === ASSISTANT_OFFLINE_ERROR_CODE
       ) {
         return;
       }
@@ -742,13 +783,20 @@ function TextChatArea({
           onVoiceReconnect={onVoiceReconnect}
           userTrack={userTrack}
           voiceRoom={session.room}
-          disabled={paused}
+          disabled={paused || hoursBlocked}
           isLoading={isLoading}
           onChromeHeightChange={setChromeHeight}
         />
 
         {paused && !pauseDismissed ? (
           <PublicPauseModal onAcknowledge={handlePauseAcknowledge} />
+        ) : null}
+
+        {hoursBlocked && hoursClosed ? (
+          <HoursClosedModal
+            operatingHours={hoursClosed}
+            onAcknowledge={handleHoursAcknowledge}
+          />
         ) : null}
 
         <RateLimitModal />

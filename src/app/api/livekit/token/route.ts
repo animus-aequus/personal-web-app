@@ -9,6 +9,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { verifyAgentSession } from "@/lib/agent-client";
+import { enforceOperatingHours } from "@/lib/app-config";
 import { livekitRoomName, sessionIdFromRoomName } from "@/lib/livekit/room";
 import {
   parseVoiceLanguage,
@@ -51,6 +52,11 @@ function requireEnv(name: string, value: string | undefined): string {
 export async function POST(request: Request) {
   // Pause is enforced on the agent voice turn path by session_type.
   try {
+    const hoursBlocked = await enforceOperatingHours();
+    if (hoursBlocked) {
+      return hoursBlocked;
+    }
+
     const livekitUrl = requireEnv("LIVEKIT_URL", LIVEKIT_URL);
     const apiKey = requireEnv("LIVEKIT_API_KEY", LIVEKIT_API_KEY);
     const apiSecret = requireEnv("LIVEKIT_API_SECRET", LIVEKIT_API_SECRET);

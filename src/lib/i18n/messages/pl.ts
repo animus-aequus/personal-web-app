@@ -107,6 +107,23 @@ export const pl = {
     defaultMessage:
       "Ze względu na duże zainteresowanie dostęp do asystenta jest tymczasowo wstrzymany.",
   },
+  hoursClosed: {
+    title: "Asystent niedostępny",
+    body: "Asystent jest teraz niedostępny. Sprawdź godziny otwarcia poniżej.",
+    bodyWithNext: "Asystent jest teraz niedostępny. Następne otwarcie: {{nextOpen}}.",
+    scheduleTitle: "Godziny otwarcia",
+    closed: "Zamknięte",
+    window: "{{open}}–{{close}}",
+    weekdays: {
+      mon: "Pon",
+      tue: "Wt",
+      wed: "Śr",
+      thu: "Czw",
+      fri: "Pt",
+      sat: "Sob",
+      sun: "Ndz",
+    },
+  },
   invite: {
     invalidTitle: "Nieprawidłowe zaproszenie",
     invalidBody:
