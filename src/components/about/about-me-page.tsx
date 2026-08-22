@@ -14,7 +14,9 @@ export function AboutMePageContent() {
 
   return (
     <div className="relative flex min-h-full flex-1 flex-col overflow-hidden">
-      <GreetingRadialAura active />
+      <div className="pointer-events-none fixed inset-0 z-0 h-dvh w-full">
+        <GreetingRadialAura active />
+      </div>
       <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-1 flex-col px-6 py-8 text-foreground drop-shadow-[0_1px_1px_rgba(0,0,0,0.55)] sm:py-14">
         <Link
           href={CHAT_PATH}
