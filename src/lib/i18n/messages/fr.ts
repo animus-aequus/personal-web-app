@@ -98,7 +98,13 @@ export const fr = {
   aboutMe: {
     title: "À propos",
     backToChat: "Retour au chat",
-    comingSoon: "Cette page arrive bientôt.",
+    email: "E-mail",
+    phone: "Téléphone",
+    bio: {
+      p1: "Depuis quatre ans, je travaille comme développeur frontend et mobile, en livrant des interfaces web et natives que les gens utilisent vraiment — dont des applications comptant des millions d’utilisateurs par mois — et je suis tout aussi à l’aise côté backend, AWS et IA appliquée.",
+      p2: "Ce mélange me permet de mener un produit de l’écran à l’infrastructure : une UI soignée, des services solides et de l’IA quand elle aide vraiment.",
+      p3: "Je suis titulaire d’une licence (B.Sc.) en Business Informatics. L’assistant sur ce site en dit plus ou aide à me contacter.",
+    },
   },
   voice: {
     ttsFallbackWarning:

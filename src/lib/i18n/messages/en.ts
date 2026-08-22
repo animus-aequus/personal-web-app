@@ -95,7 +95,13 @@ export const en = {
   aboutMe: {
     title: "About me",
     backToChat: "Back to chat",
-    comingSoon: "This page is coming soon.",
+    email: "Email",
+    phone: "Phone",
+    bio: {
+      p1: "I have spent the last four years as a frontend and mobile developer, shipping web and native interfaces people actually use — including apps with millions of monthly users — and I work just as comfortably across backend services, AWS, and applied AI.",
+      p2: "That mix lets me take a product from the screen to the infrastructure behind it: thoughtful UI, solid services, and AI where it genuinely helps.",
+      p3: "I hold a Bachelor of Science (Licencjat) in Business Informatics. The assistant on this site can tell you more or help you get in touch.",
+    },
   },
   voice: {
     ttsFallbackWarning:

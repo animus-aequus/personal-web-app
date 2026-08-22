@@ -97,7 +97,13 @@ export const de = {
   aboutMe: {
     title: "Über mich",
     backToChat: "Zurück zum Chat",
-    comingSoon: "Diese Seite folgt in Kürze.",
+    email: "E-Mail",
+    phone: "Telefon",
+    bio: {
+      p1: "Seit vier Jahren arbeite ich als Frontend- und Mobile-Entwickler und liefere Web- und native Oberflächen, die Menschen wirklich nutzen — darunter Anwendungen mit Millionen Nutzern im Monat — und ich arbeite genauso sicher mit Backend-Services, AWS und Applied AI.",
+      p2: "So kann ich ein Produkt vom Screen bis zur Infrastruktur begleiten: durchdachtes UI, solide Services und KI, wo sie wirklich hilft.",
+      p3: "Ich habe einen Bachelor of Science (Licencjat) in Business Informatics. Der Assistent auf dieser Seite erzählt mehr oder hilft beim Kontakt.",
+    },
   },
   voice: {
     ttsFallbackWarning:

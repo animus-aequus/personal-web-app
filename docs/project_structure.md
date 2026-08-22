@@ -24,7 +24,7 @@ personal-website/                 # this repo
 | `app/(site)/page.tsx` | Redirect `/` → `/chat` (preserves query, including `?invite=`) |
 | `app/(site)/chat/layout.tsx` | `RouteAccessGate` (pause) before chat page |
 | `app/(site)/chat/page.tsx` | Chat session + UI (`ChatPageClient`) |
-| `app/(site)/about-me/page.tsx` | About-me placeholder (pause-modal dismiss target) |
+| `app/(site)/about-me/page.tsx` | About-me profile card + intro (pause-modal dismiss target) |
 | `app/(site)/terms/page.tsx` | Terms of use (no chat session) |
 | `app/layout.tsx` | Root layout, fonts, global styles |
 | `app/api/session/route.ts` | Proxy session bootstrap → agent API |
