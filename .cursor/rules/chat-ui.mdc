@@ -1,6 +1,6 @@
 ---
 description: Chat UI, useChat transport, Zustand message store, and merge logic
-globs: src/components/chat/**,src/lib/stores/**,src/components/layout/site-shell.tsx
+globs: src/components/chat/**,src/lib/stores/**,src/components/layout/site-shell.tsx,src/lib/access/**,src/components/access/**
 alwaysApply: false
 ---
 
@@ -12,15 +12,19 @@ Read `docs/architecture.md` (Message merge, Session identity) before non-trivial
 
 | File | Role |
 |------|------|
-| `site-shell.tsx` | Turnstile + i18n + `useChatSession` + `AppShell`; keeps chat mounted across `/` and `/terms` |
+| `site-shell.tsx` | Turnstile + i18n + `AppShell` chrome; no `useChatSession` |
+| `app-human-gate.tsx` | App-level Turnstile before any `(site)` view |
+| `route-access-gate.tsx` | `/chat` layout host for the access engine |
+| `chat-page-client.tsx` | `useChatSession` + chat surface after the pause gate |
 | `chat-panel.tsx` | `TextChatArea`, voice toggle, `useChat` / `useSession`, merge (`ReadyChatSurface`) |
 | `message-list.tsx` | Renders `ChatMessage[]` |
 | `message-input.tsx` | Text send callback |
 
 ## Session bootstrap
 
-- `SiteShell` runs `useChatSession` once for the `(site)` layout lifetime (not on every navigation)
-- `ReadyChatSurface` stays mounted (hidden on non-chat routes) so Turnstile / history / `useChat` are not reset
+- App Turnstile (`AppHumanGate`) runs in `SiteShell` for the `(site)` layout lifetime
+- `/chat` layout `RouteAccessGate` evaluates catalog conditions (Phase 1: `pause` only)
+- `useChatSession` runs only on `/chat` after the gate; leaving `/chat` unmounts chat (no keep-alive)
 - `TextChatArea` mounts only when `sessionId` exists, with `key={sessionId}`
 - **Why:** `useChat` + `DefaultChatTransport` bind `sessionId` at creation time
 
@@ -67,4 +71,4 @@ new DefaultChatTransport({
 - Mount/unmount `useSession` when toggling voice (see rule `livekit-voice`)
 - Use session transcriptions as persisted chat history
 - Create `useChat` before `sessionId` is known
-- Remount session bootstrap when navigating between `(site)` pages (chat ↔ terms)
+- Keep chat mounted in the `(site)` layout across `/chat` ↔ `/terms` / `/about-me`

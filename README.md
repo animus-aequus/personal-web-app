@@ -49,11 +49,14 @@ npm run dev
 
 | Path | Role |
 |------|------|
-| `/` | Chat UI (messages, input, voice toggle) |
+| `/` | Redirects to `/chat` (preserves `?invite=`) |
+| `/chat` | Chat UI (messages, input, voice toggle) |
+| `/about-me` | About-me placeholder (pause-modal dismiss target) |
+| `/terms` | Terms of use |
 | `POST /api/session` | Proxy session bootstrap to agent API |
 | `POST /api/chat` | Proxy chat; AI SDK SSE response |
 | `POST /api/livekit/token` | Mint LiveKit room token |
-| `GET /api/public-status` | Pause state for the UI (read before Turnstile/session) |
+| `GET /api/public-status` | Pause state for the `/chat` access gate (after Turnstile, before session) |
 | `POST /api/webhooks/langsmith` | LangSmith cost alert → Telegram notify (no pause) |
 
 Voice uses room names `web-{session_id}--{connection_id}` per connect; room metadata carries `session_id` so text and voice can share server-side conversation state. Details: [`docs/agent_api_contract.md`](docs/agent_api_contract.md).

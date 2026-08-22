@@ -15,6 +15,7 @@ import {
   type LocaleCode,
 } from "@/lib/i18n/locales";
 import { useChatStore } from "@/lib/stores/chat-store";
+import { useVoiceReconnectStore } from "@/lib/stores/voice-reconnect-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -42,8 +43,6 @@ import {
 
 type AppShellProps = {
   children: React.ReactNode;
-  sessionId?: string | null;
-  onVoiceReconnect?: () => void;
 };
 
 const SIDEBAR_TRANSITION_MS = 300;
@@ -271,11 +270,10 @@ function MobileMenuButton() {
   );
 }
 
-export function AppShell({
-  children,
-  sessionId,
-  onVoiceReconnect,
-}: AppShellProps) {
+export function AppShell({ children }: AppShellProps) {
+  const sessionId = useChatStore((store) => store.sessionId);
+  const onVoiceReconnect = useVoiceReconnectStore((store) => store.trigger);
+
   return (
     <SidebarProvider>
       <SettingsSidebar

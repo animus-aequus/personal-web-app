@@ -11,6 +11,8 @@ type VoiceChromeStore = {
   setVoiceReconnectPending: (pending: boolean) => void;
   voiceLanguageChangeInFlight: boolean;
   setVoiceLanguageChangeInFlight: (inFlight: boolean) => void;
+  /** Clear ephemeral voice UI locks (e.g. leaving `/chat`). */
+  reset: () => void;
 };
 
 export const useVoiceChromeStore = create<VoiceChromeStore>((set) => ({
@@ -34,5 +36,17 @@ export const useVoiceChromeStore = create<VoiceChromeStore>((set) => ({
       state.voiceLanguageChangeInFlight === voiceLanguageChangeInFlight
         ? state
         : { voiceLanguageChangeInFlight },
+    ),
+  reset: () =>
+    set((state) =>
+      state.voiceChromeState === null &&
+      !state.voiceReconnectPending &&
+      !state.voiceLanguageChangeInFlight
+        ? state
+        : {
+            voiceChromeState: null,
+            voiceReconnectPending: false,
+            voiceLanguageChangeInFlight: false,
+          },
     ),
 }));

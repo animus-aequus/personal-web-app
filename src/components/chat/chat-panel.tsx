@@ -7,6 +7,7 @@ import { TokenSource } from "livekit-client";
 import { motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useRouter } from "next/navigation";
 
 import { AgentSessionProvider } from "@/components/agents-ui/agent-session-provider";
 import { AgentBetaBadge } from "@/components/chat/agent-beta-badge";
@@ -35,6 +36,7 @@ import {
   throwIfMessageTooLongResponse,
 } from "@/lib/chat/chat-message-errors";
 import { bucketForType, PAUSED_ERROR_CODE } from "@/lib/public-access-config";
+import { ABOUT_ME_PATH } from "@/lib/site-paths";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
 import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
@@ -391,6 +393,11 @@ function TextChatArea({
   const pauseDismissed = usePublicPauseStore((s) => s.dismissed);
   const dismissPause = usePublicPauseStore((s) => s.dismiss);
   const paused = bucketForType(pauseStatus, activeType).paused;
+  const router = useRouter();
+  const handlePauseAcknowledge = useCallback(() => {
+    dismissPause();
+    router.push(ABOUT_ME_PATH);
+  }, [dismissPause, router]);
 
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
@@ -741,7 +748,7 @@ function TextChatArea({
         />
 
         {paused && !pauseDismissed ? (
-          <PublicPauseModal onAcknowledge={dismissPause} />
+          <PublicPauseModal onAcknowledge={handlePauseAcknowledge} />
         ) : null}
 
         <RateLimitModal />
@@ -749,25 +756,6 @@ function TextChatArea({
         <BookingSuccessDialog />
       </div>
     </AgentSessionProvider>
-  );
-}
-
-/** Bootstrap stopped before Turnstile and session creation — nothing to chat with. */
-export function PausedChatPanel() {
-  const { t } = useTranslation();
-  const dismissed = usePublicPauseStore((s) => s.dismissed);
-  const dismiss = usePublicPauseStore((s) => s.dismiss);
-
-  if (!dismissed) {
-    return <PublicPauseModal onAcknowledge={dismiss} />;
-  }
-
-  return (
-    <div className="flex h-dvh w-full items-center justify-center px-6 text-center">
-      <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
-        {t("pause.defaultMessage")}
-      </p>
-    </div>
   );
 }
 
@@ -799,14 +787,11 @@ type ReadyChatSurfaceProps = {
   historyStatus: HistoryStatus;
   loadOlder: ReturnType<typeof useChatSession>["loadOlder"];
   appendLive: ReturnType<typeof useChatSession>["appendLive"];
-  /** Keep mounted while navigating away so session/voice/useChat state survives. */
-  hidden?: boolean;
   onVoiceReconnectChange?: (reconnect: (() => void) | null) => void;
 };
 
 /**
- * Owns voice toggle state for the session lifetime. Stays mounted across
- * in-app routes (chat ↔ terms) so Turnstile/bootstrap are not repeated.
+ * Owns voice toggle state for the session lifetime. Unmounts when leaving `/chat`.
  */
 export function ReadyChatSurface({
   sessionId,
@@ -815,7 +800,6 @@ export function ReadyChatSurface({
   historyStatus,
   loadOlder,
   appendLive,
-  hidden = false,
   onVoiceReconnectChange,
 }: ReadyChatSurfaceProps) {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -873,14 +857,7 @@ export function ReadyChatSurface({
   }, [handleVoiceReconnect, onVoiceReconnectChange]);
 
   return (
-    <div
-      className={cn(
-        "flex h-dvh w-full flex-col overflow-hidden",
-        hidden && "hidden",
-      )}
-      inert={hidden || undefined}
-      aria-hidden={hidden}
-    >
+    <div className="flex h-dvh w-full flex-col overflow-hidden">
       <TextChatArea
         sessionId={sessionId}
         historyRows={historyRows}

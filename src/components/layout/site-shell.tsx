@@ -1,36 +1,22 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { useCallback, useRef, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
-import {
-  ChatSessionError,
-  ChatSessionLoading,
-  PausedChatPanel,
-  ReadyChatSurface,
-} from "@/components/chat/chat-panel";
-import { InvalidInviteModal } from "@/components/chat/invalid-invite-modal";
-import { InviteWelcomeModal } from "@/components/chat/invite-welcome-modal";
+import { AppHumanGate } from "@/components/turnstile/app-human-gate";
 import { I18nProvider } from "@/components/i18n/i18n-provider";
 import { AppShell } from "@/components/layout/app-shell";
-import { SessionVerificationGate } from "@/components/turnstile/session-verification-gate";
 import { TurnstileProvider } from "@/components/turnstile/turnstile-provider";
-import { useChatSession } from "@/lib/chat/use-chat-session";
-import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
-import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
+import { useChatStore } from "@/lib/stores/chat-store";
 // Eager client import so device profiling runs with the app shell (module init).
 import "@/lib/stores/device-profile-store";
-
-const CHAT_PATH = "/";
 
 type SiteShellProps = {
   children: ReactNode;
 };
 
 /**
- * Shared chrome for chat and sibling pages (e.g. terms).
- * Session bootstrap + Turnstile run once for the app shell lifetime; the chat
- * surface stays mounted (hidden) while visiting other routes so context is kept.
+ * Shared chrome for chat and sibling pages.
+ * Turnstile unlocks the app; chat session lives only on `/chat`.
  */
 export function SiteShell({ children }: SiteShellProps) {
   return (
@@ -43,80 +29,13 @@ export function SiteShell({ children }: SiteShellProps) {
 }
 
 function SiteShellInner({ children }: SiteShellProps) {
-  const pathname = usePathname();
-  const showChat = pathname === CHAT_PATH;
-  const {
-    sessionId,
-    phase,
-    isReverification,
-    retry,
-    acknowledgeInvalidInvite,
-    historyStatus,
-    rows: historyRows,
-    hasMore: hasMoreHistory,
-    loadOlder,
-    appendLive,
-  } = useChatSession();
-  const invalidInviteOpen = useInvalidInviteStore((s) => s.open);
-  const inviteWelcomeOpen = useInviteWelcomeStore((s) => s.open);
-
-  const voiceReconnectRef = useRef<(() => void) | null>(null);
-
-  const handleVoiceReconnectChange = useCallback(
-    (reconnect: (() => void) | null) => {
-      voiceReconnectRef.current = reconnect;
-    },
-    [],
-  );
-
-  const onVoiceReconnect = useCallback(() => {
-    voiceReconnectRef.current?.();
+  useEffect(() => {
+    void useChatStore.persist.rehydrate();
   }, []);
 
-  if (phase === "paused") {
-    return <PausedChatPanel />;
-  }
-
-  if (invalidInviteOpen) {
-    return (
-      <>
-        <ChatSessionLoading />
-        <InvalidInviteModal onAcknowledge={acknowledgeInvalidInvite} />
-      </>
-    );
-  }
-
-  if (phase === "verifying") {
-    return <SessionVerificationGate isReverification={isReverification} />;
-  }
-
-  if (phase === "error") {
-    return <ChatSessionError onRetry={retry} />;
-  }
-
-  if (phase === "ready" && sessionId) {
-    return (
-      <AppShell sessionId={sessionId} onVoiceReconnect={onVoiceReconnect}>
-        <ReadyChatSurface
-          key={sessionId}
-          sessionId={sessionId}
-          historyRows={historyRows}
-          hasMoreHistory={hasMoreHistory}
-          historyStatus={historyStatus}
-          loadOlder={loadOlder}
-          appendLive={appendLive}
-          hidden={!showChat}
-          onVoiceReconnectChange={handleVoiceReconnectChange}
-        />
-        {!showChat ? (
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {children}
-          </div>
-        ) : null}
-        {inviteWelcomeOpen ? <InviteWelcomeModal /> : null}
-      </AppShell>
-    );
-  }
-
-  return <ChatSessionLoading />;
+  return (
+    <AppHumanGate>
+      <AppShell>{children}</AppShell>
+    </AppHumanGate>
+  );
 }

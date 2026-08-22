@@ -15,7 +15,7 @@ type PublicPauseStore = {
   status: PublicAccessStatus;
   /** Bucket currently gating the UI (public vs invited). */
   activeType: SessionType;
-  /** True once the visitor acknowledged the modal (chrome stays disabled). */
+  /** True once the visitor acknowledged the modal. */
   dismissed: boolean;
   setStatus: (status: PublicAccessStatus, activeType?: SessionType) => void;
   setActiveType: (activeType: SessionType) => void;

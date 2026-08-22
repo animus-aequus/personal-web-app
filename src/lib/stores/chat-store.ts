@@ -59,7 +59,8 @@ type ChatStore = {
 
 /**
  * Persists `sessionId`, `sessionType`, and `language`. Hydration is deferred
- * (`skipHydration`) and driven explicitly by `useChatSession`.
+ * (`skipHydration`) and driven explicitly by `SiteShell` / the `/chat` access
+ * gate / `useChatSession`.
  */
 export const useChatStore = create<ChatStore>()(
   persist(

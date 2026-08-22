@@ -4,7 +4,7 @@ import { getPublicStatus, invalidatePublicStatusCache } from "@/lib/public-acces
 
 export const revalidate = 0;
 
-/** Read before Turnstile and session creation, so a paused assistant costs nothing. */
+/** Pause state for the `/chat` route-access gate (after app-level Turnstile). */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   if (url.searchParams.get("refresh") === "1") {

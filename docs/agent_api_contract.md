@@ -75,7 +75,7 @@ Precise quotas are enforced on the agent (Postgres). The BFF applies a coarse pe
 
 ### `GET /config`, `POST /admin/pause`, and `POST /admin/langsmith-alert` (public access guard)
 
-`/config` is unauthenticated and carries no counters. Pause state lives only in `paused_by_type` (`public` and `invited`). While public is paused, `features.text_chat` and `features.voice_chat` are `false`. This app reads config through `getPublicStatus()` (15 s cache) for `GET /api/public-status` and bootstrap gating by session type / invite intent.
+`/config` is unauthenticated and carries no counters. Pause state lives only in `paused_by_type` (`public` and `invited`). While public is paused, `features.text_chat` and `features.voice_chat` are `false`. This app reads config through `getPublicStatus()` (15 s cache) for `GET /api/public-status` and the `/chat` RouteAccessGate pause condition (session type / invite intent).
 
 `/admin/pause` needs `X-API-Key` **and** `X-Admin-Secret`. It pauses the **public** bucket only (invited keeps its own turn limits). `source` is `"manual"`. Idempotent: `changed` is `false` when already paused.
 

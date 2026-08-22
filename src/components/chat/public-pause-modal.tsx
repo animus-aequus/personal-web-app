@@ -12,7 +12,7 @@ type PublicPauseModalProps = {
 
 /**
  * Full-screen notice shown when access to the assistant is paused.
- * Chat chrome stays disabled after acknowledging — this only clears the overlay.
+ * OK dismisses the overlay; callers redirect to `/about-me`.
  */
 export function PublicPauseModal({ onAcknowledge }: PublicPauseModalProps) {
   const { t } = useTranslation();

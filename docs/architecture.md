@@ -26,32 +26,37 @@ Do not add scheduling logic, LLM calls, or calendar integration here.
 
 ## Session identity
 
-1. On first load (after Zustand rehydration), `SiteShell` (`app/(site)/layout.tsx`) runs `useChatSession` → `POST /api/session` → agent API returns `session_id`. Bootstrap runs once for the shared layout lifetime (chat + sibling pages such as `/terms`), not on every client navigation.
-2. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
-3. A **fresh** `?invite=` redeem returns `invitation_name`; after the session is ready, `SiteShell` shows a one-shot welcome overlay (not persisted). Same-invite resume and exhausted/invalid tokens do not return `invitation_name` and do not show the overlay.
-4. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
-5. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
-6. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
+1. `/` redirects to `/chat` (query string preserved, including `?invite=`). Chat UI lives only on `/chat`. Visiting `/terms` or `/about-me` unmounts chat — there is no layout keep-alive.
+2. `SiteShell` (`app/(site)/layout.tsx`) is shared chrome: Turnstile (`AppHumanGate`), i18n, `AppShell`, and `{children}`. It does **not** own `useChatSession`.
+3. App-level Turnstile must pass before any `(site)` view, including static pages. The widget token is stashed and later consumed by `POST /api/session` (server `siteverify` is still only on that route).
+4. `/chat` layout runs `RouteAccessGate`. Phase 1 catalog is `"/chat": ["pause"]`. Pause is an **entry** gate: `GET /api/public-status`, fail-open if the agent is unreachable. Fail → `PublicPauseModal`; OK → `/about-me`.
+5. After the gate passes, `ChatPageClient` runs `useChatSession` → `POST /api/session` → agent API returns `session_id`. Returning to `/chat` remounts this sequence (Turnstile stash may already be spent, so a verifying gate can show again).
+6. On resume, `POST /api/session` with `{ session_id }` validates the persisted id.
+7. A **fresh** `?invite=` redeem returns `invitation_name`; after the session is ready, `ChatPageClient` shows a one-shot welcome overlay (not persisted). Same-invite resume and exhausted/invalid tokens do not return `invitation_name` and do not show the overlay.
+8. `sessionId` and UI `language` (`en|pl|de|es|fr`) are stored in Zustand (`useChatStore`, key `personal-agent-chat`). Message bodies are **not** persisted locally. After session create/resume, `language` is overwritten from the agent response (DB is authoritative). Users change language from the settings sidebar (`PATCH /api/session` with optimistic update). UI copy is rendered via **i18next** (`src/lib/i18n/messages/*.ts`; non-`en` catalogs `satisfies TranslationDictionary`).
+9. Text and voice for the same `sessionId` share server checkpoint state (`thread_id = web:{sessionId}` on the agent API).
+10. Chat history is loaded from the agent API (`GET /api/session/messages`), paginated newest-first (10 rows per page).
 
 ## Request lifecycle
 
 ### Bootstrap
 
-`useChatSession` (`src/lib/chat/use-chat-session.ts`) is the single source of truth
-for startup. It runs one ordered sequence and exposes a coarse `phase`
-(`loading` → `ready` → `error`) that `SiteShell` renders directly. The ready chat
-surface stays mounted (hidden) when navigating to sibling routes under
-`app/(site)/` so Turnstile and history are not repeated:
+Order on `/chat`: **Turnstile (app layout)** → **RouteAccessGate (pause)** → **`useChatSession`**.
+
+`useChatSession` (`src/lib/chat/use-chat-session.ts`) owns session create/resume and history, not entry pause. It exposes `phase` (`verifying` | `loading` | `ready` | `error`) that `ChatPageClient` renders. `verifying` is skipped when an app-gate token was stashed.
 
 1. Explicitly rehydrate the persisted `sessionId` (`useChatStore.persist.rehydrate()`;
-   the store uses `skipHydration: true` to avoid SSR mismatch and module-load races).
-2. Client `POST /api/session` (body `{ session_id }` when resuming, `{}` when new).
-3. Route Handler proxies to agent API `POST /api/v1/sessions` via `createAgentSession()` in `src/lib/agent-client.ts`.
-4. `sessionId` saved to Zustand; `useChatHistory.loadInitial()` fetches the newest history page (10 UI rows) from `GET /api/session/messages?sessionId=…`.
-5. `phase` becomes `ready` once the session exists and the first page settles (even when empty). `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly; an empty thread shows the greeting with the input enabled.
+   the store uses `skipHydration: true` to avoid SSR mismatch and module-load races). `SiteShell` also rehydrates so language works on static pages.
+2. Take the stashed Turnstile token, or `acquireToken()` if none (re-shows the verifying gate).
+3. Client `POST /api/session` (body `{ session_id }` when resuming, `{}` when new).
+4. Route Handler proxies to agent API `POST /api/v1/sessions` via `createAgentSession()` in `src/lib/agent-client.ts`.
+5. `sessionId` saved to Zustand; `useChatHistory.loadInitial()` fetches the newest history page (10 UI rows) from `GET /api/session/messages?sessionId=…`.
+6. `phase` becomes `ready` once the session exists and the first page settles (even when empty). `TextChatArea` mounts with `key={sessionId}` so `useChat` transport binds correctly; an empty thread shows the greeting with the input enabled.
 
 A `runId` guard makes the sequence resilient to React Strict Mode double-invocation
 and retries: only the latest run may commit state.
+
+Mid-session pause (text **503** `assistant_paused`, voice `ui_events`) still uses `applyAssistantPaused` and the same modal; OK also goes to `/about-me`.
 
 ### Chat history (paginated)
 
@@ -228,6 +233,7 @@ On mobile in **in-app browsers** (Facebook / Messenger / Instagram UA), the chat
 4. Do not mount/unmount `useSession` on voice toggle — use `start()` / `end()`.
 5. `sessionId` must match agent API `session_id` for shared thread state.
 6. Agent API and LiveKit secrets only in Route Handlers.
+7. Chat session / `useChat` live only on `/chat` — do not keep them mounted in the `(site)` layout.
 
 ## Related docs
 

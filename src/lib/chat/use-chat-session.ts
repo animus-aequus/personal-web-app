@@ -2,8 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { useTurnstile } from "@/components/turnstile/turnstile-provider";
+import {
+  takeStashedTurnstileToken,
+  useTurnstile,
+} from "@/components/turnstile/turnstile-provider";
 import { type HistoryStatus, useChatHistory } from "@/lib/chat/use-chat-history";
+import {
+  clearHeldInviteToken,
+  resolvePauseGateType,
+  takeInviteToken,
+} from "@/lib/chat/invite-token";
 import {
   normalizeLocale,
   resolveBrowserLocale,
@@ -13,7 +21,7 @@ import { syncSessionTimezone } from "@/lib/i18n/sync-session-timezone";
 import { resolveBrowserTimezone } from "@/lib/i18n/timezone";
 import {
   INVITE_INVALID_ERROR_CODE,
-  bucketForType,
+  PAUSED_ERROR_CODE,
   type SessionType,
 } from "@/lib/public-access-config";
 import { useBookingCancelOtpStore } from "@/lib/stores/booking-cancel-otp-store";
@@ -24,7 +32,7 @@ import { useInvalidInviteStore } from "@/lib/stores/invalid-invite-store";
 import { useInviteWelcomeStore } from "@/lib/stores/invite-welcome-store";
 import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import {
-  fetchPublicStatus,
+  applyAssistantPaused,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
 import { TURNSTILE_TOKEN_FIELD } from "@/lib/turnstile/turnstile-config";
@@ -32,26 +40,24 @@ import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast"
 
 /**
  * Coarse lifecycle for the chat surface:
- * - `paused`    — relevant access bucket is paused; nothing is created (zero cost).
- * - `verifying` — Turnstile gate (human check) before session create/resume.
+ * - `verifying` — Turnstile gate when no stashed app-level token is available.
  * - `loading`   — session create/resume and/or initial history fetch.
  * - `ready`     — session established and initial history settled.
  * - `error`     — bootstrap or initial history failed; UI shows a retry affordance.
+ *
+ * Entry pause is the `/chat` RouteAccessGate, not this hook.
  */
-export type ChatSessionPhase =
-  | "paused"
-  | "verifying"
-  | "loading"
-  | "ready"
-  | "error";
+export type ChatSessionPhase = "verifying" | "loading" | "ready" | "error";
 
-type BootstrapStage = "verifying" | "loading" | "paused";
+type BootstrapStage = "verifying" | "loading";
 
 type UseChatSessionResult = {
   sessionId: string | null;
   phase: ChatSessionPhase;
   /** True when bootstrap is re-checking after a prior/persisted session. */
   isReverification: boolean;
+  /** Session create/resume returned pause after the route gate (fail-open race). */
+  entryPaused: boolean;
   error: string | null;
   retry: () => void;
   acknowledgeInvalidInvite: () => void;
@@ -62,91 +68,17 @@ type UseChatSessionResult = {
   appendLive: ReturnType<typeof useChatHistory>["appendLive"];
 };
 
-/** Survives Strict Mode remount / bootstrap restart after URL strip. */
-const PENDING_INVITE_STORAGE_KEY = "pending_invite_token";
-
-function readInviteTokenFromUrl(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const raw = new URLSearchParams(window.location.search).get("invite");
-  const trimmed = raw?.trim();
-  return trimmed || null;
-}
-
-function stripInviteFromUrl(): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-  const url = new URL(window.location.href);
-  if (!url.searchParams.has("invite")) {
-    return;
-  }
-  url.searchParams.delete("invite");
-  const next = `${url.pathname}${url.search}${url.hash}`;
-  window.history.replaceState(window.history.state, "", next);
-}
-
-function readHeldInviteToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  try {
-    const held = sessionStorage.getItem(PENDING_INVITE_STORAGE_KEY)?.trim();
-    return held || null;
-  } catch {
-    return null;
-  }
-}
-
-function holdInviteToken(token: string): void {
-  try {
-    sessionStorage.setItem(PENDING_INVITE_STORAGE_KEY, token);
-  } catch {
-    // Private mode / quota — URL strip still applies; token stays in memory.
-  }
-}
-
-function clearHeldInviteToken(): void {
-  try {
-    sessionStorage.removeItem(PENDING_INVITE_STORAGE_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-/**
- * Take invite from URL (preferred) or sessionStorage hold.
- * Strips ``?invite=`` immediately to reduce Referer leakage.
- */
-function takeInviteToken(): string | null {
-  const fromUrl = readInviteTokenFromUrl();
-  if (fromUrl) {
-    holdInviteToken(fromUrl);
-    stripInviteFromUrl();
-    return fromUrl;
-  }
-  return readHeldInviteToken();
-}
-
-function resolvePauseGateType(
-  inviteToken: string | null,
-  persistedType: SessionType | null,
-  persistedId: string | null,
-): SessionType {
-  if (inviteToken) {
-    return "invited";
-  }
-  if (persistedType === "invited" && persistedId) {
-    return "invited";
-  }
-  return "public";
-}
-
 class InviteInvalidClientError extends Error {
   constructor() {
     super(INVITE_INVALID_ERROR_CODE);
     this.name = "InviteInvalidClientError";
+  }
+}
+
+class AssistantPausedClientError extends Error {
+  constructor() {
+    super(PAUSED_ERROR_CODE);
+    this.name = "AssistantPausedClientError";
   }
 }
 
@@ -210,6 +142,21 @@ async function ensureServerSession(
       }
       if (text.includes(INVITE_INVALID_ERROR_CODE)) {
         throw new InviteInvalidClientError();
+      }
+    }
+    if (response.status === 503) {
+      try {
+        const parsed = JSON.parse(text) as { error?: string };
+        if (parsed.error === PAUSED_ERROR_CODE) {
+          throw new AssistantPausedClientError();
+        }
+      } catch (error) {
+        if (error instanceof AssistantPausedClientError) {
+          throw error;
+        }
+      }
+      if (text.includes(PAUSED_ERROR_CODE)) {
+        throw new AssistantPausedClientError();
       }
     }
     throw new Error(text);
@@ -351,6 +298,7 @@ type BootstrapDeps = {
   setBootstrapError: (error: string | null) => void;
   setBootstrapStage: (stage: BootstrapStage) => void;
   setIsReverification: (value: boolean) => void;
+  setEntryPaused: (value: boolean) => void;
   hadReadySession: () => boolean;
 };
 
@@ -370,6 +318,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     setBootstrapError,
     setBootstrapStage,
     setIsReverification,
+    setEntryPaused,
     hadReadySession,
   } = deps;
 
@@ -380,6 +329,7 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     }
 
     setBootstrapError(null);
+    setEntryPaused(false);
     setSessionId(null);
     resetHistory();
     useBookingOtpStore.getState().clear();
@@ -390,24 +340,11 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     const inviteToken = takeInviteToken();
     const storeState = useChatStore.getState();
     const persistedId = storeState.sessionId;
-    const persistedType = storeState.sessionType;
     const pauseGateType = resolvePauseGateType(
       inviteToken,
-      persistedType,
+      storeState.sessionType,
       persistedId,
     );
-
-    // Before Turnstile and session creation: a paused assistant must not cost
-    // a Turnstile verification, an Upstash command or a session row.
-    const publicStatus = await fetchPublicStatus();
-    if (!isCurrent()) {
-      return;
-    }
-    usePublicPauseStore.getState().setStatus(publicStatus, pauseGateType);
-    if (bucketForType(publicStatus, pauseGateType).paused) {
-      setBootstrapStage("paused");
-      return;
-    }
 
     // Early path: persisted language from rehydrate/merge, else navigator.
     const earlyLanguage = storeState.language ?? resolveBrowserLocale();
@@ -417,13 +354,14 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
     }
     setIsReverification(Boolean(persistedId) || hadReadySession());
 
-    if (turnstileEnabled) {
+    const stashedToken = takeStashedTurnstileToken();
+    if (!stashedToken && turnstileEnabled) {
       setBootstrapStage("verifying");
     } else {
       setBootstrapStage("loading");
     }
 
-    const turnstileToken = await acquireToken();
+    const turnstileToken = stashedToken ?? (await acquireToken());
     if (!isCurrent()) {
       resetAfterUse();
       return;
@@ -457,6 +395,11 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
         // Keep prior session id in the Zustand store; React sessionId stays null
         // until the user acknowledges the dialog (resume or fresh public).
         setBootstrapStage("loading");
+        return;
+      }
+      if (error instanceof AssistantPausedClientError) {
+        void applyAssistantPaused(pauseGateType);
+        setEntryPaused(true);
         return;
       }
       throw error;
@@ -493,6 +436,7 @@ export function useChatSession(): UseChatSessionResult {
   const [bootstrapStage, setBootstrapStage] =
     useState<BootstrapStage>("loading");
   const [isReverification, setIsReverification] = useState(false);
+  const [entryPaused, setEntryPaused] = useState(false);
 
   const runIdRef = useRef(0);
   const hadReadySessionRef = useRef(false);
@@ -510,6 +454,7 @@ export function useChatSession(): UseChatSessionResult {
       setBootstrapError,
       setBootstrapStage,
       setIsReverification,
+      setEntryPaused,
       hadReadySession: () => hadReadySessionRef.current,
     });
   }, [
@@ -607,6 +552,12 @@ export function useChatSession(): UseChatSessionResult {
         if (!isCurrent()) {
           return;
         }
+        if (error instanceof AssistantPausedClientError) {
+          const type = useChatStore.getState().sessionType ?? "public";
+          void applyAssistantPaused(type);
+          setEntryPaused(true);
+          return;
+        }
         console.error("Invalid-invite recovery failed:", error);
         setBootstrapError(
           error instanceof Error ? error.message : "Failed to start chat",
@@ -619,18 +570,16 @@ export function useChatSession(): UseChatSessionResult {
   }, [acquireToken, loadInitial, resetAfterUse, turnstileEnabled]);
 
   const phase: ChatSessionPhase =
-    bootstrapStage === "paused"
-      ? "paused"
-      : bootstrapError || historyStatus === "error"
-        ? "error"
-        : sessionId &&
-            (historyStatus === "ready" ||
-              historyStatus === "exhausted" ||
-              historyStatus === "loading_more")
-          ? "ready"
-          : bootstrapStage === "verifying"
-            ? "verifying"
-            : "loading";
+    bootstrapError || historyStatus === "error"
+      ? "error"
+      : sessionId &&
+          (historyStatus === "ready" ||
+            historyStatus === "exhausted" ||
+            historyStatus === "loading_more")
+        ? "ready"
+        : bootstrapStage === "verifying"
+          ? "verifying"
+          : "loading";
 
   useEffect(() => {
     if (phase === "ready") {
@@ -676,6 +625,7 @@ export function useChatSession(): UseChatSessionResult {
     sessionId,
     phase,
     isReverification,
+    entryPaused,
     error: bootstrapError ?? historyError,
     retry: () => {
       void startBootstrap();

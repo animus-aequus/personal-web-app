@@ -93,6 +93,11 @@ export const pl = {
       },
     },
   },
+  aboutMe: {
+    title: "O mnie",
+    backToChat: "Wróć do czatu",
+    comingSoon: "Ta strona pojawi się wkrótce.",
+  },
   voice: {
     ttsFallbackWarning:
       "Odpowiedzi głosowe w tym języku nie są jeszcze obsługiwane. Asystent odpowie po angielsku.",

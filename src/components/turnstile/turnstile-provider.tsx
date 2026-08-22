@@ -44,6 +44,19 @@ const SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY?.trim() ?? "";
 const WIDGET_READY_TIMEOUT_MS = 15_000;
 const TOKEN_TIMEOUT_MS = 30_000;
 
+/** Unused widget token from the app-level human gate, consumed by session create. */
+let stashedTurnstileToken: string | null = null;
+
+export function stashTurnstileToken(token: string): void {
+  stashedTurnstileToken = token;
+}
+
+export function takeStashedTurnstileToken(): string | null {
+  const token = stashedTurnstileToken;
+  stashedTurnstileToken = null;
+  return token;
+}
+
 function waitWithTimeout(
   wait: Promise<void>,
   ms: number,

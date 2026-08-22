@@ -95,6 +95,11 @@ export const fr = {
       },
     },
   },
+  aboutMe: {
+    title: "À propos",
+    backToChat: "Retour au chat",
+    comingSoon: "Cette page arrive bientôt.",
+  },
   voice: {
     ttsFallbackWarning:
       "Les réponses vocales dans cette langue ne sont pas encore prises en charge. L'assistant répondra en anglais.",

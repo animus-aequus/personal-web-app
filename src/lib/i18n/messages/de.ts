@@ -94,6 +94,11 @@ export const de = {
       },
     },
   },
+  aboutMe: {
+    title: "Über mich",
+    backToChat: "Zurück zum Chat",
+    comingSoon: "Diese Seite folgt in Kürze.",
+  },
   voice: {
     ttsFallbackWarning:
       "Sprachantworten in dieser Sprache werden noch nicht unterstützt. Der Assistent antwortet auf Englisch.",

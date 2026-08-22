@@ -92,6 +92,11 @@ export const en = {
       },
     },
   },
+  aboutMe: {
+    title: "About me",
+    backToChat: "Back to chat",
+    comingSoon: "This page is coming soon.",
+  },
   voice: {
     ttsFallbackWarning:
       "Voice replies in this language are not supported yet. The agent will answer in English.",

@@ -6,16 +6,7 @@ import { useTranslation } from "react-i18next";
 
 import { CHAT_PATH } from "@/lib/site-paths";
 
-const SECTION_KEYS = [
-  "service",
-  "ai",
-  "noAdvice",
-  "liability",
-  "data",
-  "changes",
-] as const;
-
-export function TermsPageContent() {
+export function AboutMePageContent() {
   const { t } = useTranslation();
 
   return (
@@ -25,29 +16,15 @@ export function TermsPageContent() {
         className="mb-8 w-fit text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline self-center lg:self-start flex items-center gap-2"
       >
         <ArrowLeftIcon className="size-4" />
-        {t("terms.backToChat")}
+        {t("aboutMe.backToChat")}
       </Link>
 
       <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-        {t("terms.title")}
+        {t("aboutMe.title")}
       </h1>
-      <p className="mt-2 text-xs text-muted-foreground">{t("terms.updated")}</p>
       <p className="mt-6 text-sm leading-relaxed text-muted-foreground">
-        {t("terms.intro")}
+        {t("aboutMe.comingSoon")}
       </p>
-
-      <div className="mt-10 space-y-8">
-        {SECTION_KEYS.map((key) => (
-          <section key={key} className="space-y-2">
-            <h2 className="text-base font-medium text-foreground">
-              {t(`terms.sections.${key}.title`)}
-            </h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              {t(`terms.sections.${key}.body`)}
-            </p>
-          </section>
-        ))}
-      </div>
     </div>
   );
 }
