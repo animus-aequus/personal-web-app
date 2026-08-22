@@ -8,8 +8,7 @@ export const CHAT_CONTROL = {
   BAR_TEXT_BUTTON_GAP: 16,
   MIC_VOICE: 56,
   MIC_TEXT: 40,
-  MIC_TEXT_DESKTOP: 32,
-  VOICE_SIDE_BUTTON: 40,
+  VOICE_SIDE_BUTTON: 48,
   VOICE_BUTTON_GAP: 16,
   DESKTOP_MIN_PX: 768,
   TEXT_LINE_PX: 24,
@@ -18,10 +17,6 @@ export const CHAT_CONTROL = {
   RADIAL_CLUSTER: userRadialClusterSize(),
   MORPH_MS: 0.45,
 } as const;
-
-export function textButtonSize(isDesktop: boolean): number {
-  return isDesktop ? CHAT_CONTROL.MIC_TEXT_DESKTOP : CHAT_CONTROL.MIC_TEXT;
-}
 
 export function textContentBlockHeight(
   textHeight: number,

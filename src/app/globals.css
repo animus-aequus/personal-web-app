@@ -133,6 +133,13 @@
   body {
     @apply bg-background text-foreground font-sans text-[15px] leading-relaxed tracking-normal;
   }
+  button:not(:disabled):not([data-disabled="true"]) {
+    cursor: pointer;
+  }
+  button:disabled,
+  button[data-disabled="true"] {
+    cursor: default;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

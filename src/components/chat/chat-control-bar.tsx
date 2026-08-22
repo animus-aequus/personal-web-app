@@ -25,13 +25,13 @@ import { Trans, useTranslation } from "react-i18next";
 import { AgentWaveVisualizer } from "@/components/agents-ui/agent-wave-visualizer";
 import { VoiceTurnProgress } from "@/components/chat/voice-turn-progress";
 import { UserRadialDots } from "@/components/agents-ui/user-radial-dots";
+import { MotionButton } from "@/components/ui/button";
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-core";
 import type { Room } from "livekit-client";
 import {
   CHAT_CONTROL,
   computeControlBarGeometry,
   measureTextareaMetrics,
-  textButtonSize,
   textSlotWidthForBar,
   type TextareaMetrics,
 } from "@/lib/chat/control-bar-geometry";
@@ -130,17 +130,17 @@ function primaryButtonClass(state: VoiceChromeState | null): string {
     case "loading":
       return "bg-muted text-muted-foreground";
     case "idle":
-      return "bg-muted text-foreground hover:bg-muted/80";
+      return "bg-primary/70 text-black/70 hover:text-black hover:bg-primary";
     case "speaking":
-      return "bg-primary text-primary-foreground hover:bg-primary/90";
+      return "bg-red-600/80 hover:bg-red-600";
     case "thinking":
       return "bg-muted text-primary";
     case "answering":
-      return "bg-red-600 text-white hover:bg-red-700";
+      return "bg-red-600 hover:bg-red-700";
     case "error":
-      return "bg-red-600 text-white hover:bg-red-700";
+      return "bg-red-600 hover:bg-red-700";
     default:
-      return "bg-primary text-primary-foreground hover:bg-primary/90";
+      return "bg-primary hover:bg-primary/90";
   }
 }
 
@@ -195,7 +195,7 @@ export function ChatControlBar({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wasLoadingRef = useRef(Boolean(isLoading));
 
-  const buttonSize = textButtonSize(isDesktop);
+  const buttonSize = CHAT_CONTROL.MIC_TEXT;
   const showSendButton = !voiceEnabled && value.length > 0;
   const isOverLimit = !voiceEnabled && isChatMessageTooLong(value);
   const showTtsFallbackWarning = voiceEnabled && hasTtsFallback(language);
@@ -294,6 +294,7 @@ export function ChatControlBar({
     if (!textarea) {
       return;
     }
+    console.log("layout effect");
     const metrics = measureTextareaMetrics(
       textarea,
       textSlotWidthForBar(
@@ -447,15 +448,14 @@ export function ChatControlBar({
         >
           {/* Keyboard sits beside the primary unit — never inside the radial. */}
           {voiceEnabled && geometry.showKeyboard ? (
-            <motion.button
+            <MotionButton
               type="button"
+              variant="secondary"
+              size="icon"
               onClick={onExitVoice}
               disabled={disabled || !keyboardExitEnabled}
               aria-label={t("chat.exitToText")}
-              className={cn(
-                "absolute z-10 flex items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground",
-                (disabled || !keyboardExitEnabled) && "opacity-50",
-              )}
+              className="absolute z-10 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
               initial={false}
               animate={{
                 width: geometry.keyboardSize,
@@ -466,7 +466,7 @@ export function ChatControlBar({
               transition={MORPH_TRANSITION}
             >
               <Keyboard className="size-5" />
-            </motion.button>
+            </MotionButton>
           ) : null}
 
           {/* Primary unit: floating mic + optional user radial (speaking only). */}
@@ -497,16 +497,16 @@ export function ChatControlBar({
                 ) : null}
               </AnimatePresence>
 
-              <motion.button
+              <MotionButton
                 type="button"
+                variant="ghost"
+                size="icon"
                 onClick={onVoicePrimaryClick}
                 disabled={primaryDisabled(voiceChromeState, Boolean(disabled))}
                 aria-label={primaryAriaLabel(voiceChromeState, t)}
                 className={cn(
-                  "absolute z-10 flex items-center justify-center rounded-full transition-colors duration-300",
+                  "absolute z-10 rounded-full transition-colors duration-300 text-black/80 hover:text-black",
                   primaryButtonClass(voiceChromeState),
-                  primaryDisabled(voiceChromeState, Boolean(disabled)) &&
-                    "opacity-50",
                   voiceChromeState === "thinking" && "ring-2 ring-primary/40",
                 )}
                 initial={false}
@@ -575,7 +575,7 @@ export function ChatControlBar({
                     )}
                   </AnimatePresence>
                 )}
-              </motion.button>
+              </MotionButton>
             </motion.div>
           ) : null}
 
@@ -646,16 +646,15 @@ export function ChatControlBar({
                   />
                 </motion.div>
 
-                <motion.button
+                <MotionButton
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={onVoiceToggle}
                   disabled={disabled}
                   aria-pressed={voiceEnabled}
                   aria-label={t("chat.startVoice")}
-                  className={cn(
-                    "absolute z-10 flex items-center justify-center rounded-full text-foreground/80 hover:bg-muted/60 hover:text-foreground",
-                    disabled && "opacity-50",
-                  )}
+                  className="absolute z-10 rounded-full text-foreground/80 hover:text-foreground"
                   initial={false}
                   animate={{
                     width: geometry.micSize,
@@ -665,20 +664,19 @@ export function ChatControlBar({
                   }}
                   transition={MORPH_TRANSITION}
                 >
-                  <Mic className={cn(isDesktop ? "size-4" : "size-5")} />
-                </motion.button>
+                  <Mic className="size-5" />
+                </MotionButton>
 
                 <AnimatePresence>
                   {showSendButton ? (
-                    <motion.button
+                    <MotionButton
                       key="send"
                       type="submit"
+                      variant="default"
+                      size="icon"
                       disabled={disabled || isLoading || isOverLimit}
                       aria-label={t("chat.sendMessage")}
-                      className={cn(
-                        "absolute z-10 flex items-center justify-center rounded-full bg-primary hover:bg-primary/90",
-                        (disabled || isLoading || isOverLimit) && "opacity-50",
-                      )}
+                      className="absolute z-10 rounded-full"
                       style={{
                         left: geometry.sendLeft,
                         width: geometry.sendSize,
@@ -693,13 +691,8 @@ export function ChatControlBar({
                       exit={{ x: buttonSize, opacity: 0 }}
                       transition={SEND_LAYOUT_TRANSITION}
                     >
-                      <Send
-                        className={cn(
-                          "text-black",
-                          isDesktop ? "size-4" : "size-5",
-                        )}
-                      />
-                    </motion.button>
+                      <Send className={cn(isDesktop ? "size-4" : "size-5")} />
+                    </MotionButton>
                   ) : null}
                 </AnimatePresence>
               </>
