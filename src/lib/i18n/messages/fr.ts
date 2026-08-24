@@ -37,6 +37,8 @@ export const fr = {
     assistantThinking: "L'assistant réfléchit…",
     scrollUpOlder: "Faites défiler vers le haut pour les messages plus anciens",
     errorGeneric: "Une erreur s'est produite. Veuillez réessayer.",
+    sessionRepaired:
+      "Impossible de se connecter à la session enregistrée. Une nouvelle session a été créée.",
     messageTooLong: "Le message ne peut pas dépasser {{length}} caractères.",
     stopResponse: "Arrêter la réponse",
     endVoice: "Terminer la conversation vocale",

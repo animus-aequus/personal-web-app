@@ -37,6 +37,8 @@ export const pl = {
     assistantThinking: "Asystent myśli…",
     scrollUpOlder: "Przewiń w górę, aby zobaczyć starsze wiadomości",
     errorGeneric: "Coś poszło nie tak. Spróbuj ponownie.",
+    sessionRepaired:
+      "Nie udało się zalogować do zapisanej sesji. Utworzono nową.",
     messageTooLong: "Wiadomość nie może być dłuższa niż {{length}} znaków.",
     stopResponse: "Zatrzymaj odpowiedź",
     endVoice: "Zakończ rozmowę głosową",

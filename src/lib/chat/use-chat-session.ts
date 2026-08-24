@@ -44,11 +44,15 @@ import {
   applyAssistantPaused,
   usePublicPauseStore,
 } from "@/lib/stores/public-pause-store";
+import { showSessionRepairedToast } from "@/lib/chat/session-repair-toast";
 import {
   TURNSTILE_ERROR_CODE,
   TURNSTILE_TOKEN_FIELD,
 } from "@/lib/turnstile/turnstile-config";
 import { notifyTurnstileFailureIfNeeded } from "@/lib/turnstile/turnstile-toast";
+
+/** Resume attempts before discarding a persisted session and creating a new one. */
+const SESSION_RESUME_MAX_ATTEMPTS = 3;
 
 /**
  * Coarse lifecycle for the chat surface:
@@ -169,7 +173,11 @@ async function ensureServerSession(
       await notifyTurnstileFailureIfNeeded(response);
     }
     const text = await response.text();
-    if (response.status === 401) {
+    if (
+      response.status === 401 ||
+      response.status === 422 ||
+      (response.status >= 500 && response.status !== 503)
+    ) {
       throw new SessionAuthClientError();
     }
     if (response.status === 403) {
@@ -397,8 +405,7 @@ async function mintTurnstileToken(deps: {
   return token;
 }
 
-async function ensureServerSessionOrRecreate(
-  persistedId: string | null,
+async function createFreshServerSession(
   turnstileToken: string,
   language: LocaleCode,
   timezone: string,
@@ -408,14 +415,14 @@ async function ensureServerSessionOrRecreate(
 ): Promise<SessionBootstrapResult | null> {
   try {
     return await ensureServerSession(
-      persistedId,
+      null,
       turnstileToken,
       language,
       timezone,
       inviteToken,
     );
   } catch (error) {
-    if (!(error instanceof SessionAuthClientError) || !persistedId) {
+    if (!(error instanceof TurnstileRequiredClientError)) {
       throw error;
     }
     resetAfterUse();
@@ -431,6 +438,92 @@ async function ensureServerSessionOrRecreate(
       inviteToken,
     );
   }
+}
+
+/**
+ * Resume a persisted session, or create one when there is no saved id.
+ * After {@link SESSION_RESUME_MAX_ATTEMPTS} failed resumes (401 / 422 / 5xx),
+ * a fresh session is attempted. Turnstile challenges do not count toward that
+ * budget. localStorage and the session cookie are overwritten only when that
+ * create succeeds — if it also fails (backend down), the saved session is kept.
+ */
+async function ensureServerSessionOrRecreate(
+  persistedId: string | null,
+  turnstileToken: string,
+  language: LocaleCode,
+  timezone: string,
+  inviteToken: string | null,
+  mint: () => Promise<string | null>,
+  resetAfterUse: () => void,
+  isCurrent: () => boolean,
+): Promise<SessionBootstrapResult | null> {
+  if (!persistedId) {
+    return createFreshServerSession(
+      turnstileToken,
+      language,
+      timezone,
+      inviteToken,
+      mint,
+      resetAfterUse,
+    );
+  }
+
+  let token = turnstileToken;
+  let resumeFailures = 0;
+  let mintedForResume = false;
+
+  while (resumeFailures < SESSION_RESUME_MAX_ATTEMPTS) {
+    if (!isCurrent()) {
+      return null;
+    }
+    try {
+      return await ensureServerSession(
+        persistedId,
+        token,
+        language,
+        timezone,
+        inviteToken,
+      );
+    } catch (error) {
+      if (error instanceof TurnstileRequiredClientError) {
+        if (mintedForResume) {
+          throw error;
+        }
+        resetAfterUse();
+        const minted = await mint();
+        if (minted === null) {
+          return null;
+        }
+        token = minted;
+        mintedForResume = true;
+        continue;
+      }
+      if (!(error instanceof SessionAuthClientError)) {
+        throw error;
+      }
+      resumeFailures += 1;
+    }
+  }
+
+  if (!isCurrent()) {
+    return null;
+  }
+
+  const session = await createFreshServerSession(
+    token,
+    language,
+    timezone,
+    inviteToken,
+    mint,
+    resetAfterUse,
+  );
+  if (!session) {
+    return null;
+  }
+  if (isCurrent()) {
+    showSessionRepairedToast();
+  }
+  return session;
 }
 
 /**
@@ -526,26 +619,23 @@ async function bootstrapChatSession(deps: BootstrapDeps): Promise<void> {
           inviteToken,
           mint,
           resetAfterUse,
+          isCurrent,
         );
       } catch (error) {
-        if (
-          error instanceof TurnstileRequiredClientError ||
-          error instanceof SessionAuthClientError
-        ) {
+        if (error instanceof TurnstileRequiredClientError) {
           const minted = await mint();
           if (minted === null) {
             return;
           }
-          const resumeId =
-            error instanceof SessionAuthClientError ? null : persistedId;
           session = await ensureServerSessionOrRecreate(
-            resumeId,
+            useChatStore.getState().sessionId,
             minted,
             earlyLanguage,
             browserTimezone,
             inviteToken,
             mint,
             resetAfterUse,
+            isCurrent,
           );
         } else {
           throw error;
@@ -695,41 +785,16 @@ export function useChatSession(): UseChatSessionResult {
             setBootstrapStage,
           });
 
-        let session: SessionBootstrapResult | null = null;
-        if (resumeId) {
-          try {
-            session = await ensureServerSession(
-              resumeId,
-              "",
-              earlyLanguage,
-              browserTimezone,
-              null,
-            );
-          } catch (error) {
-            if (
-              !(error instanceof TurnstileRequiredClientError) &&
-              !(error instanceof SessionAuthClientError)
-            ) {
-              throw error;
-            }
-          }
-        }
-
-        if (!session) {
-          const turnstileToken = await mint();
-          if (turnstileToken === null) {
-            return;
-          }
-          session = await ensureServerSessionOrRecreate(
-            resumeId,
-            turnstileToken,
-            earlyLanguage,
-            browserTimezone,
-            null,
-            mint,
-            resetAfterUse,
-          );
-        }
+        const session = await ensureServerSessionOrRecreate(
+          resumeId,
+          "",
+          earlyLanguage,
+          browserTimezone,
+          null,
+          mint,
+          resetAfterUse,
+          isCurrent,
+        );
         if (!session) {
           return;
         }

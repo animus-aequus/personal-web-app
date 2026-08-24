@@ -37,6 +37,8 @@ export const en = {
     assistantThinking: "Assistant is thinking…",
     scrollUpOlder: "Scroll up for older messages",
     errorGeneric: "Something went wrong. Please try again.",
+    sessionRepaired:
+      "Could not sign in to the saved session. A new session was created.",
     messageTooLong: "Message cannot be longer than {{length}} characters.",
     stopResponse: "Stop response",
     endVoice: "End voice conversation",

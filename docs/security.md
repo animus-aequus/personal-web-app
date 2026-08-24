@@ -154,7 +154,7 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 |----------|---------|
 | `SESSION_BINDING_ENABLED` | Enable cookie + secret forwarding (set `true` with agent Postgres) |
 
-**Client:** `sessionId` remains in Zustand/localStorage; secret never exposed to JS. Fresh start after deploy replaces `sessionId` when cookie missing.
+**Client:** `sessionId` remains in Zustand/localStorage; secret never exposed to JS. Fresh start after deploy replaces `sessionId` when cookie missing. If resume of a persisted session fails **3** times, the client attempts a new session; localStorage and `pa_session_secret` are overwritten only when that create succeeds (info toast). A failed replacement create (backend down) leaves the saved session in place.
 
 ### Booking OTP proxy routes
 
