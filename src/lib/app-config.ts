@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getBffPostgres } from "@/lib/db/postgres";
+import { getBffPostgres, resetBffPostgres } from "@/lib/db/postgres";
 import {
   APP_CONFIG_PATH,
   ASSISTANT_OFFLINE_ERROR_CODE,
@@ -16,8 +16,11 @@ import {
 } from "@/lib/operating-hours/evaluate";
 
 const CONFIG_CACHE_TTL_MS = 30_000;
+/** Fail-open rather than stall the `/chat` gate on a wedged pooler connection. */
+const CONFIG_READ_TIMEOUT_MS = 4_000;
 
 let cached: { config: AppConfigResponse; at: number } | undefined;
+let inflight: Promise<AppConfigResponse> | undefined;
 
 export function invalidateAppConfigCache(): void {
   cached = undefined;
@@ -32,6 +35,22 @@ function failOpenOperatingHours(): OperatingHoursStatus {
   };
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(label)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 /** Returns config from Postgres, or null to fail-open (no DB URL or read error). */
 async function readOperatingHoursConfig(): Promise<OperatingHoursConfig | null> {
   const sql = getBffPostgres();
@@ -42,38 +61,47 @@ async function readOperatingHoursConfig(): Promise<OperatingHoursConfig | null> 
     return null;
   }
   try {
-    const rows = await sql<{ value: unknown }[]>`
-      SELECT value
-      FROM app_config
-      WHERE key = 'operating_hours'
-      LIMIT 1
-    `;
+    const rows = await withTimeout(
+      sql<{ value: unknown }[]>`
+        SELECT value
+        FROM app_config
+        WHERE key = 'operating_hours'
+        LIMIT 1
+      `,
+      CONFIG_READ_TIMEOUT_MS,
+      "app-config postgres timed out",
+    );
     if (!rows.length) {
       return DEFAULT_OPERATING_HOURS_CONFIG;
     }
     return normalizeOperatingHoursConfig(rows[0].value);
   } catch (error) {
     console.warn("[app-config] operating_hours read failed", error);
+    resetBffPostgres();
     return null;
   }
 }
 
 /** Operating hours from Postgres when configured; fail-open when DB is absent or errors. */
 export async function getAppConfig(): Promise<AppConfigResponse> {
-  const now = Date.now();
-  if (cached && now - cached.at < CONFIG_CACHE_TTL_MS) {
+  if (cached && Date.now() - cached.at < CONFIG_CACHE_TTL_MS) {
     return cached.config;
   }
-
-  const config = await readOperatingHoursConfig();
-  const response: AppConfigResponse = {
-    operatingHours: config
-      ? evaluateOperatingHours(config)
-      : failOpenOperatingHours(),
-  };
-
-  cached = { config: response, at: now };
-  return response;
+  if (!inflight) {
+    inflight = (async () => {
+      const config = await readOperatingHoursConfig();
+      const response: AppConfigResponse = {
+        operatingHours: config
+          ? evaluateOperatingHours(config)
+          : failOpenOperatingHours(),
+      };
+      cached = { config: response, at: Date.now() };
+      return response;
+    })().finally(() => {
+      inflight = undefined;
+    });
+  }
+  return inflight;
 }
 
 /** Returns 503 when outside operating hours; null to proceed. Fail-open without DB URL. */

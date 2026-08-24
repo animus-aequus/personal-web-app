@@ -17,18 +17,25 @@ export function useRouteAccess(pathname: string): RouteAccessState {
     const controller = new AbortController();
 
     void (async () => {
-      const verdict = await evaluateRouteAccess(pathname, controller.signal);
-      if (runId !== runIdRef.current || controller.signal.aborted) {
-        return;
+      try {
+        const verdict = await evaluateRouteAccess(pathname, controller.signal);
+        if (runId !== runIdRef.current || controller.signal.aborted) {
+          return;
+        }
+        if (verdict.status === "fail") {
+          setCompleted({
+            pathname,
+            state: { status: "blocked", fallback: verdict.fallback },
+          });
+          return;
+        }
+        setCompleted({ pathname, state: { status: "allowed" } });
+      } catch {
+        if (runId !== runIdRef.current || controller.signal.aborted) {
+          return;
+        }
+        setCompleted({ pathname, state: { status: "allowed" } });
       }
-      if (verdict.status === "fail") {
-        setCompleted({
-          pathname,
-          state: { status: "blocked", fallback: verdict.fallback },
-        });
-        return;
-      }
-      setCompleted({ pathname, state: { status: "allowed" } });
     })();
 
     return () => {

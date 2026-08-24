@@ -7,7 +7,7 @@ import { ABOUT_ME_PATH } from "@/lib/site-paths";
 export const operatingHoursCondition: AccessCondition = {
   id: "operatingHours",
   async evaluate({ signal }) {
-    const config = await fetchAppConfig();
+    const config = await fetchAppConfig(signal);
     if (signal.aborted) {
       return { status: "pass" };
     }

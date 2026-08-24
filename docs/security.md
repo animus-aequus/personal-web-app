@@ -194,7 +194,7 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **Storage (agent Postgres):** table `app_config` (`key`, `value` jsonb, `updated_at`). Seed row `operating_hours` (per-weekday windows, IANA timezone). RLS enabled; policy `app_config_bff_reader_select` grants **SELECT** to role `bff_reader` only. Agent runtime uses the `postgres` role (bypasses RLS). Not `app_runtime_state`.
 
-**BFF:** `BFF_DATABASE_URL` connects as `bff_reader` (transaction pooler). Missing URL → gate and `enforceOperatingHours()` **fail-open** (always open for local dev). `GET /api/app-config` evaluates `open` / `nextOpenAt` server-side (~30 s cache). Excluded from Upstash edge RL in `proxy.ts`.
+**BFF:** `BFF_DATABASE_URL` connects as `bff_reader` (transaction pooler). Missing URL, read error, or a ~4 s query timeout → gate and `enforceOperatingHours()` **fail-open**. Wedged `max: 1` clients are dropped and reconnected. `GET /api/app-config` evaluates `open` / `nextOpenAt` server-side (~30 s cache, in-flight coalesced; cache timestamp is taken after the read). Client fetch is abortable (Strict Mode) and times out ~6 s, then fail-open. Excluded from Upstash edge RL in `proxy.ts`.
 
 **Gate order on `/chat`:** Turnstile → `operatingHours` → `pause` → session bootstrap. Outside hours: `HoursClosedModal` + redirect `/about-me`; pause/agent not called.
 
