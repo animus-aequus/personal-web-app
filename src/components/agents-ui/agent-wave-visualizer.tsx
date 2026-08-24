@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   useTrackVolume,
   useVoiceAssistant,
+  type AgentState,
   type TrackReference,
 } from "@livekit/components-react";
 import type { TrackReferenceOrPlaceholder } from "@livekit/components-core";
@@ -30,6 +31,24 @@ function buildWavePath(time: number, amplitude: number): string {
   return path;
 }
 
+function waveAmplitude(
+  hasTrack: boolean,
+  state: AgentState | undefined,
+  volume: number,
+  time: number,
+): number {
+  if (!hasTrack) {
+    return 3;
+  }
+  if (state === "speaking") {
+    return 6 + volume * 26;
+  }
+  if (state === "thinking" || state === "connecting" || state === "initializing") {
+    return 5 + Math.sin(time * 6) * 2;
+  }
+  return 4 + volume * 8;
+}
+
 type AgentWaveVisualizerProps = {
   track?: TrackReferenceOrPlaceholder;
   className?: string;
@@ -45,32 +64,39 @@ export function AgentWaveVisualizer({ track, className }: AgentWaveVisualizerPro
       : undefined,
   );
 
-  const [time, setTime] = useState(0);
+  const pathRef = useRef<SVGPathElement>(null);
+  const hasTrackRef = useRef(Boolean(activeTrack));
+  const stateRef = useRef(state);
+  const volumeRef = useRef(volume);
+
+  hasTrackRef.current = Boolean(activeTrack);
+  stateRef.current = state;
+  volumeRef.current = volume;
 
   useEffect(() => {
     let frame = 0;
     const tick = (now: number) => {
-      setTime(now / 1000);
+      const path = pathRef.current;
+      if (path) {
+        const time = now / 1000;
+        path.setAttribute(
+          "d",
+          buildWavePath(
+            time,
+            waveAmplitude(
+              hasTrackRef.current,
+              stateRef.current,
+              volumeRef.current,
+              time,
+            ),
+          ),
+        );
+      }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, []);
-
-  const amplitude = useMemo(() => {
-    if (!activeTrack) {
-      return 3;
-    }
-    if (state === "speaking") {
-      return 6 + volume * 26;
-    }
-    if (state === "thinking" || state === "connecting" || state === "initializing") {
-      return 5 + Math.sin(time * 6) * 2;
-    }
-    return 4 + volume * 8;
-  }, [activeTrack, state, volume, time]);
-
-  const path = buildWavePath(time, amplitude);
 
   return (
     <svg
@@ -81,7 +107,8 @@ export function AgentWaveVisualizer({ track, className }: AgentWaveVisualizerPro
       aria-hidden
     >
       <path
-        d={path}
+        ref={pathRef}
+        d={buildWavePath(0, 3)}
         fill="none"
         stroke={WAVE_COLOR}
         strokeWidth={2}

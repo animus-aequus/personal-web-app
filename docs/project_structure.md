@@ -50,6 +50,7 @@ personal-website/                 # this repo
 | `components/visualizer/agent-aura.tsx` | three.js/R3F background aura (reasoning + streaming) |
 | `components/visualizer/greeting-blob.tsx` | three.js/R3F 3D water blob behind empty-state greeting |
 | `components/visualizer/greeting-radial-aura.tsx` | Low-tier radial aura fallback (fullscreen shader quad) |
+| `components/visualizer/webgl-context-guard.tsx` | Shared `webglcontextlost` remount for R3F canvases |
 | `lib/device-profile.ts` | Client device form-factor + performance-tier inference |
 | `lib/stores/device-profile-store.ts` | Ephemeral device profile (`formFactor`, `tier`) for UI LOD |
 | `hooks/use-prefers-reduced-motion.ts` | Shared `prefers-reduced-motion` subscription |

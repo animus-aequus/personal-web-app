@@ -4,6 +4,10 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import * as THREE from "three";
 
+import {
+  WebGlContextGuard,
+  useWebGlRemountEpoch,
+} from "@/components/visualizer/webgl-context-guard";
 import { AURA_PALETTE } from "@/lib/visualizer/aura-palette";
 
 /**
@@ -202,6 +206,7 @@ type GreetingRadialAuraProps = {
 
 export function GreetingRadialAura({ active }: GreetingRadialAuraProps) {
   const pageVisible = usePageVisible();
+  const { glEpoch, onContextLost } = useWebGlRemountEpoch();
   const running = active && pageVisible;
 
   if (!active) {
@@ -215,6 +220,7 @@ export function GreetingRadialAura({ active }: GreetingRadialAuraProps) {
       style={{ pointerEvents: "none" }}
     >
       <Canvas
+        key={`radial-gl-${glEpoch}`}
         style={{ pointerEvents: "none" }}
         // Demand + capped invalidate: avoid the 60fps full-screen WebGL tax.
         frameloop={running ? "demand" : "never"}
@@ -235,6 +241,7 @@ export function GreetingRadialAura({ active }: GreetingRadialAuraProps) {
           }
         }}
       >
+        <WebGlContextGuard onContextLost={onContextLost} />
         <RadialAuraFrameDriver enabled={running} />
         <RadialAuraQuad />
       </Canvas>

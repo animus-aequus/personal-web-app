@@ -141,7 +141,7 @@ Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` —
 | Session hook | `chat-panel.tsx` | `useSession`, lifecycle, merge |
 | Session context | `agent-session-provider.tsx` | `SessionProvider` + `RoomAudioRenderer` |
 | Audio unlock | `start-audio-button.tsx` | `StartAudio` fallback |
-| Visualizer | `agent-wave-visualizer.tsx` | Agent wave + user radial dots in control bar |
+| Visualizer | `agent-wave-visualizer.tsx` | Agent wave (SVG path mutated in rAF, no per-frame React state) + user radial dots in control bar |
 | Room naming | `lib/livekit/room.ts` | `livekitVoiceRoomName`, parsers |
 | Data sync | `lib/livekit/voice-chat-sync.ts` | `chat_sync` → Zustand |
 
@@ -161,7 +161,7 @@ A full-viewport, gradient border glow (three.js / `@react-three/fiber`) sits **b
   - Voice: `thinking`/`connecting`/`initializing` → `thinking`, `speaking` → `responding`.
 - Exactly one bridge owns `phase` at a time: the text effect no-ops while `voiceEnabled`; the voice bridge no-ops while inactive.
 - `audioLevel` is high-frequency and transient — read via `getState()` in the render loop, never subscribed to in React.
-- Mounted in `app/page.tsx` behind a `relative z-10` content wrapper; `pointer-events-none`. Respects `prefers-reduced-motion`; the render loop is paused (`frameloop="never"`) shortly after returning to `idle`.
+- Mounted in `app/page.tsx` behind a `relative z-10` content wrapper; `pointer-events-none`. Respects `prefers-reduced-motion`; the render loop is paused (`frameloop="never"`) shortly after returning to `idle`. `webglcontextlost` remounts the canvas (shared `WebGlContextGuard`).
 
 ## Empty-state greeting blob
 
@@ -178,7 +178,7 @@ A soft, shape-shifting **3D water blob** (three.js / `@react-three/fiber`) sits 
 - **Mobile** always uses the lightweight radial aura — never the 3D blob.
 - **Desktop** with effective tier `medium` or `low` (save-data, reduced-motion profile, or runtime FPS downgrade off `high`): radial aura — never a reduced-quality 3D blob.
 - Local `performanceOverride` may **step down only** on a sustained slow-frame trend (no mid-session upgrade; refresh re-profiles). Sampling uses clamped R3F `delta` + warmup after render-loop resumes. First step off `high` unmounts the blob canvas and mounts the radial aura.
-- Loop only while greeting + tab are visible; `prefers-reduced-motion` skips WebGL for a static CSS radial. `webglcontextlost` remounts the 3D canvas.
+- Loop only while greeting + tab are visible; `prefers-reduced-motion` skips WebGL for a static CSS radial. `webglcontextlost` remounts both the 3D blob and radial-aura canvases (shared `WebGlContextGuard`).
 
 ## Device profile
 

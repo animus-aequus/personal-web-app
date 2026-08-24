@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
+import {
+  WebGlContextGuard,
+  useWebGlRemountEpoch,
+} from "@/components/visualizer/webgl-context-guard";
 import { useAgentActivityStore } from "@/lib/stores/agent-activity-store";
 import { buildAuraPaletteGlsl } from "@/lib/visualizer/aura-palette";
 
@@ -273,6 +277,7 @@ function AuraQuad({ reduceMotion }: { reduceMotion: boolean }) {
 export function AgentAura() {
   const reduceMotion = usePrefersReducedMotion();
   const [active, setActive] = useState(false);
+  const { glEpoch, onContextLost } = useWebGlRemountEpoch();
 
   // Render only while the agent is busy (plus a short tail for the fade-out),
   // so the GPU is idle on a quiet page.
@@ -309,6 +314,7 @@ export function AgentAura() {
       style={{ pointerEvents: "none" }}
     >
       <Canvas
+        key={`agent-aura-gl-${glEpoch}`}
         style={{ pointerEvents: "none" }}
         frameloop={active ? "always" : "never"}
         dpr={[1, 1.5]}
@@ -323,6 +329,7 @@ export function AgentAura() {
           }
         }}
       >
+        <WebGlContextGuard onContextLost={onContextLost} />
         <AuraQuad reduceMotion={reduceMotion} />
       </Canvas>
     </div>

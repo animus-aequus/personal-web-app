@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { motion } from "motion/react";
 import {
   useCallback,
@@ -15,6 +15,10 @@ import * as THREE from "three";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { GreetingRadialAura } from "@/components/visualizer/greeting-radial-aura";
+import {
+  WebGlContextGuard,
+  useWebGlRemountEpoch,
+} from "@/components/visualizer/webgl-context-guard";
 import {
   degradePerformanceTier,
   type PerformanceTier,
@@ -355,26 +359,6 @@ type WaterBlobProps = {
   onSustainedSlowdown: () => void;
 };
 
-/** Registers webglcontextlost with explicit teardown on unmount / remount. */
-function WebGlContextGuard({ onContextLost }: { onContextLost: () => void }) {
-  const { gl } = useThree();
-
-  useEffect(() => {
-    const canvas = gl.domElement;
-    const handleLost = (event: Event) => {
-      event.preventDefault();
-      // Remount with a new context — common after backgrounding on mobile GPUs.
-      queueMicrotask(onContextLost);
-    };
-    canvas.addEventListener("webglcontextlost", handleLost);
-    return () => {
-      canvas.removeEventListener("webglcontextlost", handleLost);
-    };
-  }, [gl, onContextLost]);
-
-  return null;
-}
-
 function WaterBlob({
   shaderQuality,
   detail,
@@ -603,8 +587,7 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
   /** Runtime override — null means “use store tier”. */
   const [performanceOverride, setPerformanceOverride] =
     useState<PerformanceTier | null>(null);
-  /** Bumped on webglcontextlost so Canvas remounts a fresh context. */
-  const [glEpoch, setGlEpoch] = useState(0);
+  const { glEpoch, onContextLost } = useWebGlRemountEpoch();
 
   const effectiveTier = performanceOverride ?? storeTier;
   // Mobile always → radial aura. Desktop blob only at tier `high`.
@@ -620,10 +603,6 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
       degradePerformanceTier(prev ?? storeTier),
     );
   }, [storeTier]);
-
-  const handleContextLost = useCallback(() => {
-    setGlEpoch((n) => n + 1);
-  }, []);
 
   if (!active) {
     return null;
@@ -665,7 +644,7 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
           }
         }}
       >
-        <WebGlContextGuard onContextLost={handleContextLost} />
+        <WebGlContextGuard onContextLost={onContextLost} />
         <WaterBlob
           detail={quality.detail}
           shaderQuality={quality.shaderQuality}
