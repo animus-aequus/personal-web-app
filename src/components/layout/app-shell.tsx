@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Languages, X } from "lucide-react";
+import { Languages, User, X } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 
 import { LogoIconButton } from "@/components/layout/logo-icon-button";
@@ -14,6 +16,7 @@ import {
   normalizeLocale,
   type LocaleCode,
 } from "@/lib/i18n/locales";
+import { ABOUT_ME_PATH } from "@/lib/site-paths";
 import { useChatStore } from "@/lib/stores/chat-store";
 import { useVoiceReconnectStore } from "@/lib/stores/voice-reconnect-store";
 import { cn } from "@/lib/utils";
@@ -36,7 +39,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
@@ -148,8 +150,20 @@ function LanguageSettings({
       onValueChange={handleChange}
       disabled={languageSelectDisabled}
     >
-      <SidebarContent className="py-4 group-data-[collapsible=icon]:hidden">
-        <div className="flex flex-col gap-2 px-2">
+      {isCollapsedDesktop ? (
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SelectTrigger
+              render={<SidebarMenuButton tooltip={t("sidebar.language")} />}
+              className="size-8 border-0 bg-transparent p-0 shadow-none hover:bg-transparent focus-visible:ring-0 data-[size=default]:h-8 [&>svg:last-child]:hidden"
+              disabled={languageSelectDisabled}
+            >
+              <Languages />
+            </SelectTrigger>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      ) : (
+        <div className="flex flex-col gap-2">
           <Label
             htmlFor="app-language-select"
             className="pl-2 text-sm font-medium text-muted-foreground"
@@ -164,26 +178,10 @@ function LanguageSettings({
             <SelectValue />
           </SelectTrigger>
         </div>
-      </SidebarContent>
-
-      <SidebarFooter className="hidden border-t border-border p-2 group-data-[collapsible=icon]:block">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SelectTrigger
-              render={
-                <SidebarMenuButton tooltip={t("sidebar.language")} />
-              }
-              className="size-8 border-0 bg-transparent p-0 shadow-none hover:bg-transparent focus-visible:ring-0 data-[size=default]:h-8 [&>svg:last-child]:hidden"
-              disabled={languageSelectDisabled}
-            >
-              <Languages />
-            </SelectTrigger>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
+      )}
 
       <SelectContent
-        side={isCollapsedDesktop ? "right" : "bottom"}
+        side={isCollapsedDesktop ? "right" : "top"}
         align="center"
         sideOffset={isCollapsedDesktop ? 8 : 4}
       >
@@ -194,6 +192,32 @@ function LanguageSettings({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function AboutMeNavItem() {
+  const { t } = useTranslation();
+  const pathname = usePathname();
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton
+          tooltip={t("aboutMe.title")}
+          render={<Link href={ABOUT_ME_PATH} />}
+          isActive={pathname === ABOUT_ME_PATH}
+          onClick={() => {
+            if (isMobile) {
+              setOpenMobile(false);
+            }
+          }}
+        >
+          <User />
+          <span>{t("aboutMe.title")}</span>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
   );
 }
 
@@ -243,11 +267,15 @@ function SettingsSidebar({
           )}
         </div>
       </SidebarHeader>
-      <LanguageSettings
-        sessionId={sessionId}
-        onVoiceReconnect={onVoiceReconnect}
-      />
-      <SidebarRail />
+      <SidebarContent className="px-2 pt-2">
+        <AboutMeNavItem />
+      </SidebarContent>
+      <SidebarFooter className="mt-auto border-t border-border">
+        <LanguageSettings
+          sessionId={sessionId}
+          onVoiceReconnect={onVoiceReconnect}
+        />
+      </SidebarFooter>
     </Sidebar>
   );
 }
