@@ -140,10 +140,16 @@ function createUniforms() {
   };
 }
 
-function RadialAuraQuad() {
+function RadialAuraQuad({ onReady }: { onReady?: () => void }) {
   const { size } = useThree();
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const uniforms = useMemo(() => createUniforms(), []);
+  const readyPhaseRef = useRef(0);
+  const onReadyRef = useRef(onReady);
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
 
   useEffect(() => {
     const material = materialRef.current;
@@ -161,6 +167,15 @@ function RadialAuraQuad() {
     }
     const dt = Math.min(delta, 0.08);
     material.uniforms.uTime.value += dt * 1.45;
+
+    if (readyPhaseRef.current === 0) {
+      readyPhaseRef.current = 1;
+      return;
+    }
+    if (readyPhaseRef.current === 1) {
+      readyPhaseRef.current = 2;
+      onReadyRef.current?.();
+    }
   });
 
   return (
@@ -202,9 +217,13 @@ function RadialAuraFrameDriver({ enabled }: { enabled: boolean }) {
 
 type GreetingRadialAuraProps = {
   active: boolean;
+  onReady?: () => void;
 };
 
-export function GreetingRadialAura({ active }: GreetingRadialAuraProps) {
+export function GreetingRadialAura({
+  active,
+  onReady,
+}: GreetingRadialAuraProps) {
   const pageVisible = usePageVisible();
   const { glEpoch, onContextLost } = useWebGlRemountEpoch();
   const running = active && pageVisible;
@@ -243,7 +262,7 @@ export function GreetingRadialAura({ active }: GreetingRadialAuraProps) {
       >
         <WebGlContextGuard onContextLost={onContextLost} />
         <RadialAuraFrameDriver enabled={running} />
-        <RadialAuraQuad />
+        <RadialAuraQuad onReady={onReady} />
       </Canvas>
     </div>
   );

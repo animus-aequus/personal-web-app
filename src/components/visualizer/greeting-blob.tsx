@@ -3,6 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { motion } from "motion/react";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -38,7 +39,7 @@ const TURQUOISE_RGB = AURA_PALETTE[2].rgb;
  */
 
 type BlobRenderQuality = {
-  detail: 3 | 4 | 5;
+  detail: 3 | 4 | 5 | 6;
   /** Shader LOD: 0 low / 1 medium / 2 high. */
   shaderQuality: 0 | 1 | 2;
   dpr: [number, number];
@@ -48,7 +49,7 @@ type BlobRenderQuality = {
 /** Full-quality 3D blob settings — desktop + tier `high` only. */
 function blobQualityFor(): BlobRenderQuality {
   return {
-    detail: 5,
+    detail: 6,
     shaderQuality: 2,
     dpr: [1, 1.25],
     antialias: true,
@@ -107,23 +108,24 @@ const VERTEX_SHADER = /* glsl */ `
     vec3 a = normalize(p);
     vec3 b = normalize(seed);
     float dist = acos(clamp(dot(a, b), -1.0, 1.0));
-    float travel = mod(t * 0.62 + phase, 3.1);
+    float travel = mod(t * 0.48 + phase, 3.1);
     float front = dist - travel;
-    float envelope = exp(-front * front * 28.0);
-    float ring = sin(dist * 22.0 - t * 3.4 + phase * 6.28318);
-    float fade = exp(-dist * 0.85) * (1.0 - smoothstep(2.2, 3.0, travel));
+    float envelope = exp(-front * front * 18.0);
+    float ring = sin(dist * 14.0 - t * 2.4 + phase * 6.28318);
+    float fade = exp(-dist * 0.75) * (1.0 - smoothstep(2.2, 3.0, travel));
     return ring * envelope * fade;
   }
 
   float displace(vec3 p, float t, out float rippleOut) {
+    // Long-wavelength volume — surface tension holding a drop together.
     float bulk =
-      0.55 * sin(p.x * 1.55 + t * 0.45) * cos(p.y * 1.3 - t * 0.34) +
-      0.40 * sin(p.y * 1.85 + t * 0.32 + 1.3) * cos(p.z * 1.45 + t * 0.27) +
-      0.35 * sin(p.z * 1.65 - t * 0.38 + 0.7) * cos(p.x * 1.4 + t * 0.24);
+      0.50 * sin(p.x * 1.12 + t * 0.36) * cos(p.y * 0.92 - t * 0.26) +
+      0.38 * sin(p.y * 1.28 + t * 0.24 + 1.3) * cos(p.z * 1.05 + t * 0.2) +
+      0.30 * sin(p.z * 1.18 - t * 0.3 + 0.7) * cos(p.x * 0.98 + t * 0.18);
 
     float poke =
-      0.45 * sin(dot(p, normalize(vec3(1.0, 0.35, 0.2))) * 2.5 - t * 0.9) +
-      0.35 * sin(dot(p, normalize(vec3(-0.4, 1.0, 0.3))) * 2.1 + t * 0.75);
+      0.32 * sin(dot(p, normalize(vec3(1.0, 0.35, 0.2))) * 1.7 - t * 0.62) +
+      0.24 * sin(dot(p, normalize(vec3(-0.4, 1.0, 0.3))) * 1.45 + t * 0.5);
 
     float ripples =
       spreadingRipple(p, vec3(0.7, 0.5, 0.4), t, 0.0) +
@@ -135,19 +137,19 @@ const VERTEX_SHADER = /* glsl */ `
     if (uQuality >= 1.0) {
       ripples += spreadingRipple(p, vec3(0.15, -0.75, 0.45), t, 0.61);
       capillary =
-        0.55 * sin(p.x * 14.0 + p.y * 9.0 - t * 2.8) *
-          cos(p.z * 11.0 + t * 2.1) +
-        0.45 * sin(p.y * 16.0 - p.z * 8.0 + t * 3.2) *
-          cos(p.x * 12.0 - t * 1.9);
+        0.42 * sin(p.x * 6.8 + p.y * 4.6 - t * 1.55) *
+          cos(p.z * 5.4 + t * 1.15) +
+        0.32 * sin(p.y * 7.4 - p.z * 4.1 + t * 1.8) *
+          cos(p.x * 5.8 - t * 1.05);
     }
     if (uQuality >= 2.0) {
       ripples += spreadingRipple(p, vec3(-0.35, -0.2, 0.85), t, 0.83);
       ripples += spreadingRipple(p, vec3(0.55, -0.4, -0.7), t, 0.19);
-      micro = fbm(p * 2.1 + vec3(t * 0.25, t * 0.18, -t * 0.16)) * 2.0 - 1.0;
+      micro = fbm(p * 1.35 + vec3(t * 0.14, t * 0.1, -t * 0.09)) * 2.0 - 1.0;
     }
 
-    rippleOut = ripples * 0.55 + capillary * 0.25;
-    return bulk * 0.065 + poke * 0.028 + capillary * 0.012 + ripples * 0.02 + micro * 0.014;
+    rippleOut = ripples * 0.42 + capillary * 0.16;
+    return bulk * 0.042 + poke * 0.016 + capillary * 0.005 + ripples * 0.012 + micro * 0.005;
   }
 
   vec3 displacedPoint(vec3 p, float t) {
@@ -158,6 +160,11 @@ const VERTEX_SHADER = /* glsl */ `
   void main() {
     float t = uTime;
     vec3 pos = position;
+    // Rayleigh wobble — a drop stretching then squashing under surface tension.
+    float rayleigh = sin(t * 0.68);
+    pos.y *= 1.055 + 0.032 * rayleigh;
+    pos.x *= 1.0 - 0.016 * rayleigh;
+    pos.z *= 1.0 - 0.016 * rayleigh;
     float ripple;
     float d = displace(pos, t, ripple);
     vec3 displaced = pos + normalize(pos) * d;
@@ -169,7 +176,7 @@ const VERTEX_SHADER = /* glsl */ `
     if (uQuality >= 1.0) {
       vec3 t1 = normalize(cross(n0, abs(n0.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
       vec3 t2 = cross(n0, t1);
-      float e = 0.015;
+      float e = 0.01;
       vec3 d1 = displacedPoint(pos + t1 * e, t);
       vec3 d2 = displacedPoint(pos + t2 * e, t);
       displacedN = normalize(cross(d1 - displaced, d2 - displaced));
@@ -203,21 +210,22 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uOcean;
   uniform vec3 uTurquoise;
 
-  const float IOR = 1.333;
+  // Between water (1.333) and glass (~1.5) — crystalline droplet.
+  const float IOR = 1.42;
 
   // Oceanic environment — cooler sky / deep water ground, not pale grey.
   vec3 envColor(vec3 dir) {
     vec3 d = normalize(dir);
     float sky = d.y * 0.5 + 0.5;
-    vec3 zenith = mix(uOcean, vec3(0.55, 0.82, 1.0), 0.45);
-    vec3 horizon = mix(uTurquoise, uOcean, 0.35);
-    vec3 ground = mix(uDeep, vec3(0.02, 0.06, 0.14), 0.4);
-    float bands = 0.5 + 0.5 * sin(d.x * 6.0 + d.z * 4.5 + uTime * 0.12);
+    vec3 zenith = mix(uOcean, vec3(0.62, 0.86, 1.0), 0.5);
+    vec3 horizon = mix(uTurquoise, uOcean, 0.28);
+    vec3 ground = mix(uDeep, vec3(0.015, 0.05, 0.12), 0.45);
+    float bands = 0.5 + 0.5 * sin(d.x * 5.5 + d.z * 4.0 + uTime * 0.1);
     vec3 skyCol = mix(horizon, zenith, smoothstep(0.0, 1.0, sky));
-    skyCol = mix(skyCol, skyCol * vec3(0.9, 0.97, 1.06), bands * 0.12);
+    skyCol = mix(skyCol, skyCol * vec3(0.88, 0.96, 1.08), bands * 0.14);
     if (uQuality >= 2.0) {
-      float grid = 0.5 + 0.5 * sin(d.x * 16.0) * sin(d.y * 12.0);
-      skyCol += uTurquoise * grid * 0.08;
+      float streaks = 0.5 + 0.5 * sin(d.x * 13.0 + d.z * 8.0 + uTime * 0.18);
+      skyCol += uTurquoise * streaks * streaks * 0.1;
     }
     return mix(ground, skyCol, smoothstep(-0.35, 0.25, d.y));
   }
@@ -240,14 +248,15 @@ const FRAGMENT_SHADER = /* glsl */ `
     }
 
     float crest = clamp(vRipple, -1.0, 1.0);
-    vec3 Nshade = normalize(N + vec3(crest * 0.28, crest * 0.2, -crest * 0.12));
+    // Keep shading normals close to the geometry — crystal-smooth, not cloudy.
+    vec3 Nshade = normalize(N + vec3(crest * 0.1, crest * 0.08, -crest * 0.04));
 
     float ndotv = clamp(dot(Nshade, V), 0.0, 1.0);
-    float F0 = 0.045;
-    float fresnel = F0 + (1.0 - F0) * pow(1.0 - ndotv, 4.5);
+    float F0 = 0.06;
+    float fresnel = F0 + (1.0 - F0) * pow(1.0 - ndotv, 5.2);
     float crestLit = smoothstep(-0.15, 0.55, crest);
     float trough = smoothstep(0.1, -0.45, crest);
-    fresnel *= 0.75 + 0.55 * crestLit;
+    fresnel *= 0.88 + 0.38 * crestLit;
 
     vec3 I = -V;
     vec3 R = reflect(I, Nshade);
@@ -255,9 +264,9 @@ const FRAGMENT_SHADER = /* glsl */ `
 
     vec3 refracted;
     if (uQuality >= 1.0) {
-      vec3 refrR = safeRefract(I, Nshade, eta * 0.975);
+      vec3 refrR = safeRefract(I, Nshade, eta * 0.97);
       vec3 refrG = safeRefract(I, Nshade, eta);
-      vec3 refrB = safeRefract(I, Nshade, eta * 1.025);
+      vec3 refrB = safeRefract(I, Nshade, eta * 1.03);
       refracted = vec3(
         envColor(refrR).r,
         envColor(refrG).g,
@@ -267,52 +276,59 @@ const FRAGMENT_SHADER = /* glsl */ `
       refracted = envColor(safeRefract(I, Nshade, eta));
     }
 
-    float thickness = mix(0.35, 1.35, ndotv * ndotv);
-    thickness *= 1.0 + vDisplace * 1.8;
-    thickness *= 1.0 + 0.4 * trough;
-    // Oceanic Beer–Lambert: strip red/yellow, keep blue-green.
-    vec3 absorption = vec3(0.72, 0.22, 0.06);
+    float thickness = mix(0.22, 0.95, ndotv * ndotv);
+    thickness *= 1.0 + vDisplace * 1.2;
+    thickness *= 1.0 + 0.28 * trough;
+    // Crystal water: light absorption so the interior stays glassy, not inky.
+    vec3 absorption = vec3(0.38, 0.1, 0.025);
     vec3 transmitted = refracted * exp(-absorption * thickness);
 
-    // Volume tint: deep core -> ocean body -> turquoise in shallower / lit crests.
-    float depthMix = clamp(thickness * 0.55 + trough * 0.35 - crestLit * 0.25, 0.0, 1.0);
-    vec3 waterBody = mix(uTurquoise, uOcean, smoothstep(0.15, 0.55, depthMix));
-    waterBody = mix(waterBody, uDeep, smoothstep(0.45, 0.95, depthMix));
-    transmitted = mix(transmitted, transmitted * waterBody * 1.35, 0.72);
+    float depthMix = clamp(thickness * 0.42 + trough * 0.22 - crestLit * 0.18, 0.0, 1.0);
+    vec3 waterBody = mix(uTurquoise, uOcean, smoothstep(0.1, 0.55, depthMix));
+    waterBody = mix(waterBody, uDeep, smoothstep(0.62, 1.0, depthMix));
+    transmitted = mix(transmitted, transmitted * waterBody * 1.45, 0.42);
+    transmitted *= 1.12;
 
     vec3 reflected = envColor(R);
-    reflected = mix(reflected, mix(uOcean, uTurquoise, 0.35), 0.28);
+    reflected = mix(reflected, mix(uOcean, uTurquoise, 0.5), 0.12);
 
     vec3 H = normalize(L + V);
-    float specTight = pow(clamp(dot(Nshade, H), 0.0, 1.0), 160.0);
-    float specBroad = pow(clamp(dot(Nshade, H), 0.0, 1.0), 36.0);
+    float specTight = pow(clamp(dot(Nshade, H), 0.0, 1.0), 320.0);
+    float specBroad = pow(clamp(dot(Nshade, H), 0.0, 1.0), 48.0);
+    // Light focusing through the drop (exit highlight).
+    float transHighlight = pow(clamp(dot(-Nshade, L), 0.0, 1.0), 9.0) * ndotv;
 
-    vec3 col = transmitted * (1.0 - 0.2 * trough);
-    col = mix(col, reflected, fresnel * 0.92);
-    float sparkle = 0.4 + 0.7 * crestLit;
-    col += vec3(0.85, 0.95, 1.0) * specTight * (0.65 + 1.0 * fresnel) * sparkle;
-    col += mix(uOcean, uTurquoise, 0.5) * specBroad * (0.12 + 0.14 * crestLit);
+    vec3 col = transmitted * (1.0 - 0.08 * trough);
+    col = mix(col, reflected, fresnel);
+    float sparkle = 0.6 + 0.45 * crestLit;
+    col += vec3(0.94, 0.98, 1.0) * specTight * (1.15 + 1.35 * fresnel) * sparkle;
+    col += mix(uOcean, uTurquoise, 0.65) * specBroad * (0.14 + 0.12 * crestLit);
+    col += mix(uTurquoise, vec3(0.95, 0.99, 1.0), 0.55) * transHighlight * 0.32;
+    col += uTurquoise * ndotv * 0.07;
 
     if (uQuality >= 1.0) {
       vec3 L2 = normalize(vec3(-0.55, 0.45, 0.7));
       vec3 H2 = normalize(L2 + V);
-      float spec2 = pow(clamp(dot(Nshade, H2), 0.0, 1.0), 120.0);
-      col += vec3(0.75, 0.92, 1.0) * spec2 * 0.35 * sparkle;
-      float rippleGlint = pow(max(crest, 0.0), 1.15) * (0.4 + 0.7 * fresnel);
-      col += uTurquoise * rippleGlint * 0.45;
+      float spec2 = pow(clamp(dot(Nshade, H2), 0.0, 1.0), 240.0);
+      col += vec3(0.85, 0.96, 1.0) * spec2 * 0.55 * sparkle;
+      float rippleGlint = pow(max(crest, 0.0), 1.35) * (0.25 + 0.75 * fresnel);
+      col += uTurquoise * rippleGlint * 0.22;
+      float caustic = pow(abs(sin(R.x * 9.0 + R.z * 7.0 + uTime * 0.35)), 7.0);
+      col += uTurquoise * caustic * ndotv * 0.09;
     } else {
-      float rippleGlint = pow(max(crest, 0.0), 1.2) * 0.55;
-      col += uTurquoise * rippleGlint * 0.38;
+      float rippleGlint = pow(max(crest, 0.0), 1.35) * 0.4;
+      col += uTurquoise * rippleGlint * 0.24;
     }
 
-    col += mix(uOcean, uTurquoise, 0.4) * pow(1.0 - ndotv, 3.0) * (0.16 + 0.1 * crestLit);
+    col += mix(uOcean, uTurquoise, 0.55) * pow(1.0 - ndotv, 3.6) * (0.3 + 0.12 * crestLit);
 
-    float alpha = mix(0.14, 0.6, fresnel);
-    alpha += pow(1.0 - ndotv, 2.0) * 0.1;
-    alpha += crestLit * 0.06;
-    alpha = clamp(alpha, 0.1, 0.74);
+    // Solid-enough body so the silhouette reads as a drop, not an aura.
+    float alpha = mix(0.28, 0.78, fresnel);
+    alpha += pow(1.0 - ndotv, 2.4) * 0.1;
+    alpha += crestLit * 0.025;
+    alpha = clamp(alpha, 0.24, 0.82);
 
-    gl_FragColor = vec4(col, alpha);
+    gl_FragColor = vec4(col * alpha, alpha);
   }
 `;
 
@@ -351,9 +367,36 @@ const FPS_WARMUP_FRAMES = 24;
 /** After a degrade, wait before sampling again. */
 const FPS_COOLDOWN_FRAMES = 60;
 
+/**
+ * Fires once the WebGL scene has presented at least one frame (shader compile
+ * typically lands on frame 0). Headline animation waits for this so Motion
+ * does not compete with the GPU hitch.
+ */
+function FirstDrawnReady({ onReady }: { onReady?: () => void }) {
+  const phaseRef = useRef(0);
+  const onReadyRef = useRef(onReady);
+
+  useEffect(() => {
+    onReadyRef.current = onReady;
+  }, [onReady]);
+
+  useFrame(() => {
+    if (phaseRef.current === 0) {
+      phaseRef.current = 1;
+      return;
+    }
+    if (phaseRef.current === 1) {
+      phaseRef.current = 2;
+      onReadyRef.current?.();
+    }
+  });
+
+  return null;
+}
+
 type WaterBlobProps = {
   shaderQuality: 0 | 1 | 2;
-  detail: 3 | 4 | 5;
+  detail: 3 | 4 | 5 | 6;
   /** When the canvas render loop is live — used to reset FPS warmup after pauses. */
   tracking: boolean;
   onSustainedSlowdown: () => void;
@@ -368,8 +411,6 @@ function WaterBlob({
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const drift = useRef({ yaw: 0, pitch: 0, roll: 0, bob: 0 });
-  /** 0→1 enter pop in world space (avoids CSS transform on the Canvas). */
-  const enterPop = useRef(0);
   const fps = useRef({
     warmup: FPS_WARMUP_FRAMES,
     cooldown: 0,
@@ -422,6 +463,7 @@ function WaterBlob({
     // Clamp for both animation and FPS sampling — raw delta after a pause is
     // wall-clock catch-up, not GPU cost.
     const dt = Math.min(delta, 0.05);
+
     const material = materialRef.current;
     const mesh = meshRef.current;
     if (!material || !mesh) {
@@ -453,16 +495,13 @@ function WaterBlob({
     }
 
     const s = scaleForScreen();
-    // Critically-damped-ish ease toward 1 — soft pop without overshoot chaos.
-    enterPop.current += (1 - enterPop.current) * Math.min(1, dt * 3.2);
-    const pop = 0.78 + 0.22 * enterPop.current;
-    mesh.scale.setScalar(s * pop);
+    mesh.scale.setScalar(s);
 
     const d = drift.current;
-    d.yaw += dt * 0.18;
-    d.pitch += dt * 0.11;
-    d.roll += dt * 0.07;
-    d.bob += dt * 0.35;
+    d.yaw += dt * 0.12;
+    d.pitch += dt * 0.075;
+    d.roll += dt * 0.045;
+    d.bob += dt * 0.28;
 
     mesh.rotation.set(
       Math.sin(d.pitch) * 0.35 + Math.sin(d.bob * 0.6) * 0.08,
@@ -491,6 +530,7 @@ function WaterBlob({
         fragmentShader={FRAGMENT_SHADER}
         uniforms={uniforms}
         transparent
+        premultipliedAlpha
         depthWrite={false}
         side={THREE.FrontSide}
       />
@@ -501,6 +541,8 @@ function WaterBlob({
 type GreetingBlobProps = {
   /** When false, the canvas unmounts and frees the GPU. */
   active: boolean;
+  /** First presented frame (or immediately for the CSS fallback). */
+  onReady?: () => void;
 };
 
 /** Soft fade-in only — never CSS-scale the Canvas parent (R3F size / compositing drifts). */
@@ -510,10 +552,12 @@ function GreetingBlobEntrance({
   children,
   tier,
   form,
+  fade = true,
 }: {
   children: ReactNode;
   tier: string;
   form?: string;
+  fade?: boolean;
 }) {
   return (
     <motion.div
@@ -523,16 +567,19 @@ function GreetingBlobEntrance({
       data-blob-form={form}
       className="absolute inset-0 z-0 -translate-y-12 [&_canvas]:pointer-events-none [&_div]:pointer-events-none"
       style={{ pointerEvents: "none" }}
-      initial={{ opacity: 0 }}
+      initial={{ opacity: fade ? 0 : 1 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.85, ease: BLOB_ENTER_EASE }}
+      transition={{ duration: fade ? 0.85 : 0, ease: BLOB_ENTER_EASE }}
     >
       {children}
     </motion.div>
   );
 }
 
-function StaticGreetingBlobFallback() {
+function StaticGreetingBlobFallback({ onReady }: { onReady?: () => void }) {
+  useEffect(() => {
+    onReady?.();
+  }, [onReady]);
   return (
     <div
       aria-hidden
@@ -578,7 +625,10 @@ function StaticGreetingBlobFallback() {
   );
 }
 
-export function GreetingBlob({ active }: GreetingBlobProps) {
+export const GreetingBlob = memo(function GreetingBlob({
+  active,
+  onReady,
+}: GreetingBlobProps) {
   const reduceMotion = usePrefersReducedMotion();
   const pageVisible = usePageVisible();
   const formFactor = useDeviceProfileStore((s) => s.formFactor);
@@ -609,13 +659,13 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
   }
 
   if (reduceMotion) {
-    return <StaticGreetingBlobFallback />;
+    return <StaticGreetingBlobFallback onReady={onReady} />;
   }
 
   if (useRadialAura) {
     return (
       <GreetingBlobEntrance tier="radial" form={formFactor}>
-        <GreetingRadialAura active={active} />
+        <GreetingRadialAura active={active} onReady={onReady} />
       </GreetingBlobEntrance>
     );
   }
@@ -645,6 +695,7 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
         }}
       >
         <WebGlContextGuard onContextLost={onContextLost} />
+        <FirstDrawnReady onReady={onReady} />
         <WaterBlob
           detail={quality.detail}
           shaderQuality={quality.shaderQuality}
@@ -654,4 +705,4 @@ export function GreetingBlob({ active }: GreetingBlobProps) {
       </Canvas>
     </GreetingBlobEntrance>
   );
-}
+});

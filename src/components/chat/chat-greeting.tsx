@@ -15,6 +15,8 @@ const HOLD_MS = 2000;
 const DELETE_MS = 24;
 const GAP_MS = 500;
 const REDUCED_HINT_ROTATE_MS = 2500;
+/** Safety: start the headline even if the visualizer never reports a first frame. */
+const HEADLINE_GATE_FALLBACK_MS = 800;
 
 const EASE = [0.4, 0, 0.2, 1] as const;
 
@@ -81,14 +83,9 @@ type ChatGreetingProps = {
 
 type GreetingContentProps = {
   reducedMotion: boolean;
-  /** Fired once the headline reveal finishes (or immediately under reduced motion). */
-  onHeadlineReady?: () => void;
 };
 
-function GreetingContent({
-  reducedMotion,
-  onHeadlineReady,
-}: GreetingContentProps) {
+function GreetingContent({ reducedMotion }: GreetingContentProps) {
   const { t } = useTranslation();
   const headlineTokens = useMemo(
     () => tokenizeHeadline(t("greeting.headline")),
@@ -160,19 +157,12 @@ function GreetingContent({
     return () => window.clearInterval(id);
   }, [headlineReady, reducedMotion, hints.length]);
 
-  useEffect(() => {
-    if (reducedMotion) {
-      onHeadlineReady?.();
-    }
-  }, [reducedMotion, onHeadlineReady]);
-
   const handleHeadlineComplete = () => {
     if (headlineDoneRef.current || reducedMotion) {
       return;
     }
     headlineDoneRef.current = true;
     setHeadlineReady(true);
-    onHeadlineReady?.();
   };
 
   const displayedHint = reducedMotion
@@ -243,39 +233,36 @@ function GreetingContent({
   );
 }
 
-/** Safety cap if Motion's onAnimationComplete never fires. */
-const BLOB_DEFER_FALLBACK_MS = 800;
-
 export function ChatGreeting({ visible }: ChatGreetingProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { i18n } = useTranslation();
-  /** Defer WebGL mount until the headline has claimed the main thread. */
-  const [blobReady, setBlobReady] = useState(false);
   const [wasVisible, setWasVisible] = useState(visible);
+  /** WebGL first-frame (or fallback timer). Reduced-motion skips this gate. */
+  const [textArmed, setTextArmed] = useState(false);
 
-  // Reset / arm blob gate when visibility flips (avoid sync setState in effects).
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (!visible) {
-      setBlobReady(false);
-    } else if (reducedMotion) {
-      setBlobReady(true);
+      setTextArmed(false);
     }
   }
 
-  const markBlobReady = useCallback(() => {
-    setBlobReady(true);
+  const armText = useCallback(() => {
+    setTextArmed(true);
   }, []);
 
+  // If WebGL never signals (context failure, hung compile), show the headline anyway.
   useEffect(() => {
-    if (!visible || reducedMotion) {
+    if (!visible || textArmed || reducedMotion) {
       return;
     }
-    const id = window.setTimeout(() => {
-      setBlobReady(true);
-    }, BLOB_DEFER_FALLBACK_MS);
+    const id = window.setTimeout(armText, HEADLINE_GATE_FALLBACK_MS);
     return () => window.clearTimeout(id);
-  }, [visible, reducedMotion]);
+  }, [visible, textArmed, reducedMotion, armText]);
+
+  // `usePrefersReducedMotion` SSR/hydration snapshot is always false; after
+  // hydration, reduced-motion users must not wait on blob `onReady` / the timer.
+  const showHeadline = visible && (reducedMotion || textArmed);
 
   return (
     <motion.div
@@ -288,13 +275,12 @@ export function ChatGreeting({ visible }: ChatGreetingProps) {
       transition={{ duration: 0.35, ease: EASE }}
       aria-hidden={!visible}
     >
-      <GreetingBlob active={visible && blobReady} />
-      {visible ? (
+      <GreetingBlob active={visible} onReady={armText} />
+      {showHeadline ? (
         <div className="relative z-10 w-full">
           <GreetingContent
             key={`greeting-${i18n.language}`}
             reducedMotion={reducedMotion}
-            onHeadlineReady={markBlobReady}
           />
         </div>
       ) : null}

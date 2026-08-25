@@ -294,7 +294,7 @@ export function ChatControlBar({
     if (!textarea) {
       return;
     }
-    console.log("layout effect");
+
     const metrics = measureTextareaMetrics(
       textarea,
       textSlotWidthForBar(

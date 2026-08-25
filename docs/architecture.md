@@ -171,10 +171,10 @@ A soft, shape-shifting **3D water blob** (three.js / `@react-three/fiber`) sits 
 |-------|----------|------|
 | Blob renderer | `components/visualizer/greeting-blob.tsx` | R3F `<Canvas>` + deformed icosphere; Fresnel/IOR water shader; LOD from device profile + runtime FPS trend |
 | Radial aura (fallback) | `components/visualizer/greeting-radial-aura.tsx` | Cheap centered radial shimmer (inverse of edge `AgentAura`); always on mobile; on desktop when tier is not `high` |
-| Host | `components/chat/chat-greeting.tsx` | Mounts blob while greeting `visible`; text sits above at `z-10` |
+| Host | `components/chat/chat-greeting.tsx` | Mounts blob while greeting `visible` (`mergedMessages.length === 0` and not voice); unmounts the canvas otherwise. Text sits above at `z-10` |
 | Device profile | `lib/device-profile.ts` + `lib/stores/device-profile-store.ts` | Form factor + performance tier; bootstrapped in `SiteShell` |
 
-- 3D blob mounts **only** on **desktop** when effective tier is `high` (full shader LOD).
+- 3D blob mounts **only** on **desktop** when effective tier is `high` (full shader LOD). Visible immediately (soft CSS fade, no particle intro). Canvas unmounts when the greeting hides (non-empty thread or voice). Headline word animation waits for the visualizer’s second presented frame (after shader compile); an 800 ms timeout still shows the text if WebGL never signals. Reduced-motion skips the wait.
 - **Mobile** always uses the lightweight radial aura — never the 3D blob.
 - **Desktop** with effective tier `medium` or `low` (save-data, reduced-motion profile, or runtime FPS downgrade off `high`): radial aura — never a reduced-quality 3D blob.
 - Local `performanceOverride` may **step down only** on a sustained slow-frame trend (no mid-session upgrade; refresh re-profiles). Sampling uses clamped R3F `delta` + warmup after render-loop resumes. First step off `high` unmounts the blob canvas and mounts the radial aura.
