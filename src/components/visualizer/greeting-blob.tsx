@@ -1,6 +1,6 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { motion } from "motion/react";
 import {
   memo,
@@ -110,9 +110,13 @@ const VERTEX_SHADER = /* glsl */ `
     float dist = acos(clamp(dot(a, b), -1.0, 1.0));
     float travel = mod(t * 0.48 + phase, 3.1);
     float front = dist - travel;
-    float envelope = exp(-front * front * 18.0);
-    float ring = sin(dist * 14.0 - t * 2.4 + phase * 6.28318);
-    float fade = exp(-dist * 0.75) * (1.0 - smoothstep(2.2, 3.0, travel));
+    float envelope = exp(-front * front * 11.0);
+    float ring = sin(dist * 12.0 - t * 2.4 + phase * 6.28318);
+    // Birth matches death: a new ring used to appear at full strength on wrap.
+    float x = clamp(travel / 0.55, 0.0, 1.0);
+    float birth = x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
+    float death = 1.0 - smoothstep(2.15, 3.0, travel);
+    float fade = exp(-dist * 0.48) * birth * death;
     return ring * envelope * fade;
   }
 
@@ -148,8 +152,11 @@ const VERTEX_SHADER = /* glsl */ `
       micro = fbm(p * 1.35 + vec3(t * 0.14, t * 0.1, -t * 0.09)) * 2.0 - 1.0;
     }
 
-    rippleOut = ripples * 0.42 + capillary * 0.16;
-    return bulk * 0.042 + poke * 0.016 + capillary * 0.005 + ripples * 0.012 + micro * 0.005;
+    float introX = clamp(t / 1.1, 0.0, 1.0);
+    float intro = introX * introX * introX * (introX * (introX * 6.0 - 15.0) + 10.0);
+    rippleOut = (ripples * 0.7 + capillary * 0.18) * intro;
+    return bulk * 0.042 + poke * 0.016 +
+      (capillary * 0.005 + ripples * 0.026 + micro * 0.005) * intro;
   }
 
   vec3 displacedPoint(vec3 p, float t) {
@@ -205,13 +212,17 @@ const FRAGMENT_SHADER = /* glsl */ `
 
   uniform float uTime;
   uniform float uQuality;
-  uniform vec3 uLightDir;
+  uniform vec3 uLightPos;
   uniform vec3 uDeep;
   uniform vec3 uOcean;
   uniform vec3 uTurquoise;
 
   // Between water (1.333) and glass (~1.5) — crystalline droplet.
   const float IOR = 1.42;
+
+  float hash12(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
 
   // Oceanic environment — cooler sky / deep water ground, not pale grey.
   vec3 envColor(vec3 dir) {
@@ -241,22 +252,27 @@ const FRAGMENT_SHADER = /* glsl */ `
   void main() {
     vec3 N = normalize(vNormal);
     vec3 V = normalize(vViewDir);
-    vec3 L = normalize(uLightDir);
+    vec3 L = normalize(uLightPos - vWorldPos);
+    vec3 Lsky = normalize(vec3(-0.12, 1.0, 0.18));
 
     if (dot(N, V) < 0.0) {
       N = -N;
     }
 
     float crest = clamp(vRipple, -1.0, 1.0);
-    // Keep shading normals close to the geometry — crystal-smooth, not cloudy.
-    vec3 Nshade = normalize(N + vec3(crest * 0.1, crest * 0.08, -crest * 0.04));
+    vec3 Nshade = N;
+
+    float ndotl = clamp(dot(Nshade, L), 0.0, 1.0);
+    float facing = mix(0.12, 1.0, pow(ndotl, 0.72));
 
     float ndotv = clamp(dot(Nshade, V), 0.0, 1.0);
     float F0 = 0.06;
     float fresnel = F0 + (1.0 - F0) * pow(1.0 - ndotv, 5.2);
-    float crestLit = smoothstep(-0.15, 0.55, crest);
+    float crestLit = smoothstep(-0.08, 0.38, crest);
     float trough = smoothstep(0.1, -0.45, crest);
-    fresnel *= 0.88 + 0.38 * crestLit;
+    float slope = smoothstep(0.015, 0.28, abs(crest));
+    float crestPeak = pow(max(crest, 0.0), 1.05);
+    fresnel *= 0.88 + 0.55 * crestLit;
 
     vec3 I = -V;
     vec3 R = reflect(I, Nshade);
@@ -287,45 +303,53 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec3 waterBody = mix(uTurquoise, uOcean, smoothstep(0.1, 0.55, depthMix));
     waterBody = mix(waterBody, uDeep, smoothstep(0.62, 1.0, depthMix));
     transmitted = mix(transmitted, transmitted * waterBody * 1.45, 0.42);
-    transmitted *= 1.12;
+    transmitted *= 1.12 * facing;
 
     vec3 reflected = envColor(R);
     reflected = mix(reflected, mix(uOcean, uTurquoise, 0.5), 0.12);
 
     vec3 H = normalize(L + V);
-    float specTight = pow(clamp(dot(Nshade, H), 0.0, 1.0), 320.0);
-    float specBroad = pow(clamp(dot(Nshade, H), 0.0, 1.0), 48.0);
-    // Light focusing through the drop (exit highlight).
-    float transHighlight = pow(clamp(dot(-Nshade, L), 0.0, 1.0), 9.0) * ndotv;
+    float nh = clamp(dot(Nshade, H), 0.0, 1.0);
+    vec3 sunCol = vec3(1.0, 0.97, 0.92);
+    float sunCore = pow(nh, 110.0);
+    float glitter = pow(nh, 16.0);
+    vec3 T = cross(Nshade, L);
+    float tLen = length(T);
+    T = tLen > 1e-4 ? T / tLen : vec3(0.0, 0.0, 1.0);
+    vec3 bitangent = normalize(cross(T, Nshade));
+    float aniso = pow(clamp(1.0 - abs(dot(V, T)), 0.0, 1.0), 1.6);
+    float stretch = pow(clamp(abs(dot(H, bitangent)), 0.0, 1.0), 1.25);
+    float skyWrap = dot(Nshade, Lsky) * 0.5 + 0.5;
+    float transHighlight = pow(clamp(dot(-Nshade, L), 0.0, 1.0), 7.0) * ndotv;
 
     vec3 col = transmitted * (1.0 - 0.08 * trough);
-    col = mix(col, reflected, fresnel);
-    float sparkle = 0.6 + 0.45 * crestLit;
-    col += vec3(0.94, 0.98, 1.0) * specTight * (1.15 + 1.35 * fresnel) * sparkle;
-    col += mix(uOcean, uTurquoise, 0.65) * specBroad * (0.14 + 0.12 * crestLit);
-    col += mix(uTurquoise, vec3(0.95, 0.99, 1.0), 0.55) * transHighlight * 0.32;
-    col += uTurquoise * ndotv * 0.07;
+    col = mix(col, reflected * mix(0.35, 1.0, ndotl), fresnel);
+    col += mix(uOcean, uTurquoise, 0.4) * skyWrap * 0.04 * facing;
+    col += sunCol * sunCore * (0.7 + 1.15 * fresnel);
+    col += sunCol * crestPeak * (0.28 + 0.85 * fresnel) * mix(0.12, 1.0, ndotl);
+    col += sunCol * glitter * (0.18 + 0.95 * crestPeak + 0.45 * slope) *
+      (0.35 + 0.75 * aniso + 0.4 * stretch) * mix(0.15, 1.0, ndotl);
+    col += mix(uTurquoise, sunCol, 0.45) * transHighlight * 0.22 * facing;
+    col += uTurquoise * ndotv * 0.05 * facing;
 
     if (uQuality >= 1.0) {
-      vec3 L2 = normalize(vec3(-0.55, 0.45, 0.7));
-      vec3 H2 = normalize(L2 + V);
-      float spec2 = pow(clamp(dot(Nshade, H2), 0.0, 1.0), 240.0);
-      col += vec3(0.85, 0.96, 1.0) * spec2 * 0.55 * sparkle;
-      float rippleGlint = pow(max(crest, 0.0), 1.35) * (0.25 + 0.75 * fresnel);
-      col += uTurquoise * rippleGlint * 0.22;
-      float caustic = pow(abs(sin(R.x * 9.0 + R.z * 7.0 + uTime * 0.35)), 7.0);
-      col += uTurquoise * caustic * ndotv * 0.09;
-    } else {
-      float rippleGlint = pow(max(crest, 0.0), 1.35) * 0.4;
-      col += uTurquoise * rippleGlint * 0.24;
+      float caustic = pow(abs(sin(R.x * 9.0 + R.z * 7.0 + uTime * 0.35)), 6.0);
+      col += mix(uTurquoise, sunCol, 0.45) * caustic * ndotv * (0.08 + 0.22 * crestPeak);
+    }
+    if (uQuality >= 2.0) {
+      float twinkle = hash12(vWorldPos.xy * 9.0 + vWorldPos.z * 5.0 + uTime * 0.35);
+      float spark = smoothstep(0.62, 0.92, twinkle) * pow(nh, 14.0) * crestPeak;
+      col += sunCol * spark * 0.4;
+      float secondary = pow(clamp(dot(Nshade, normalize(H + T * 0.15)), 0.0, 1.0), 28.0);
+      col += sunCol * secondary * crestPeak * aniso * 0.42;
     }
 
-    col += mix(uOcean, uTurquoise, 0.55) * pow(1.0 - ndotv, 3.6) * (0.3 + 0.12 * crestLit);
+    col += mix(uOcean, uTurquoise, 0.55) * pow(1.0 - ndotv, 3.6) * (0.3 + 0.18 * crestLit);
 
     // Solid-enough body so the silhouette reads as a drop, not an aura.
     float alpha = mix(0.28, 0.78, fresnel);
     alpha += pow(1.0 - ndotv, 2.4) * 0.1;
-    alpha += crestLit * 0.025;
+    alpha += crestLit * 0.045;
     alpha = clamp(alpha, 0.24, 0.82);
 
     gl_FragColor = vec4(col * alpha, alpha);
@@ -345,7 +369,10 @@ function usePageVisible(): boolean {
   );
 }
 
-/** Typical laptop CSS viewport — baseline for blob size. */
+/** World Z of the cursor light plane — between the camera (4.2) and the blob (0). */
+const LIGHT_PLANE_Z = 1.85;
+const LIGHT_FOLLOW = 11;
+const DEFAULT_LIGHT_POS = new THREE.Vector3(0.32, 0.48, LIGHT_PLANE_Z);
 const LAPTOP_VIEWPORT = { width: 1440, height: 900 };
 /** World scale at the laptop baseline. */
 const BASE_SCALE = 0.68;
@@ -408,9 +435,12 @@ function WaterBlob({
   tracking,
   onSustainedSlowdown,
 }: WaterBlobProps) {
+  const { camera, gl } = useThree();
   const meshRef = useRef<THREE.Mesh>(null);
   const materialRef = useRef<THREE.ShaderMaterial>(null);
   const drift = useRef({ yaw: 0, pitch: 0, roll: 0, bob: 0 });
+  const lightTarget = useRef(DEFAULT_LIGHT_POS.clone());
+  const lightCurrent = useRef(DEFAULT_LIGHT_POS.clone());
   const fps = useRef({
     warmup: FPS_WARMUP_FRAMES,
     cooldown: 0,
@@ -428,13 +458,48 @@ function WaterBlob({
     () => ({
       uTime: { value: 0 },
       uQuality: { value: 0 },
-      uLightDir: { value: new THREE.Vector3(0.45, 0.85, 0.35).normalize() },
+      uLightPos: { value: DEFAULT_LIGHT_POS.clone() },
       uDeep: { value: new THREE.Vector3(...DEEP_OCEAN_RGB) },
       uOcean: { value: new THREE.Vector3(...OCEAN_RGB) },
       uTurquoise: { value: new THREE.Vector3(...TURQUOISE_RGB) },
     }),
     [],
   );
+
+  // Window listener: the canvas is pointer-events-none so the chat stays clickable.
+  useEffect(() => {
+    if (!tracking) {
+      return;
+    }
+    const canvas = gl.domElement;
+    const onMove = (event: PointerEvent) => {
+      if (event.pointerType === "touch") {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(rect.width, 1);
+      const h = Math.max(rect.height, 1);
+      const nx = THREE.MathUtils.clamp(
+        ((event.clientX - rect.left) / w) * 2 - 1,
+        -1.2,
+        1.2,
+      );
+      const ny = THREE.MathUtils.clamp(
+        -((event.clientY - rect.top) / h) * 2 + 1,
+        -1.2,
+        1.2,
+      );
+      const cam = camera as THREE.PerspectiveCamera;
+      const dist = Math.abs(cam.position.z - LIGHT_PLANE_Z);
+      const halfH = Math.tan(THREE.MathUtils.degToRad(cam.fov * 0.5)) * dist;
+      const halfW = halfH * (w / h);
+      lightTarget.current.set(nx * halfW, ny * halfH, LIGHT_PLANE_Z);
+    };
+    window.addEventListener("pointermove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+    };
+  }, [tracking, camera, gl]);
 
   useEffect(() => {
     fps.current = {
@@ -472,6 +537,11 @@ function WaterBlob({
 
     material.uniforms.uTime.value += dt;
     material.uniforms.uQuality.value = shaderQuality;
+    lightCurrent.current.lerp(
+      lightTarget.current,
+      1 - Math.exp(-dt * LIGHT_FOLLOW),
+    );
+    material.uniforms.uLightPos.value.copy(lightCurrent.current);
 
     const tracker = fps.current;
     if (tracker.warmup > 0) {

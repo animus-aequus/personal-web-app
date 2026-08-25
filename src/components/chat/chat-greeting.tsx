@@ -1,7 +1,14 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { GreetingBlob } from "@/components/visualizer/greeting-blob";
@@ -236,18 +243,22 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
 export function ChatGreeting({ visible }: ChatGreetingProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { i18n } = useTranslation();
-  const [wasVisible, setWasVisible] = useState(visible);
   /** WebGL first-frame (or fallback timer). Reduced-motion skips this gate. */
   const [textArmed, setTextArmed] = useState(false);
+  const visibleRef = useRef(visible);
 
-  if (visible !== wasVisible) {
-    setWasVisible(visible);
-    if (!visible) {
-      setTextArmed(false);
-    }
+  if (!visible && textArmed) {
+    setTextArmed(false);
   }
 
+  useLayoutEffect(() => {
+    visibleRef.current = visible;
+  }, [visible]);
+
   const armText = useCallback(() => {
+    if (!visibleRef.current) {
+      return;
+    }
     setTextArmed(true);
   }, []);
 
