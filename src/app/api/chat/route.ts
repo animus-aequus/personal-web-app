@@ -112,6 +112,7 @@ export async function POST(request: Request) {
               writer.write({
                 type: "data-otp",
                 id: event.bookingId,
+                transient: true,
                 data: {
                   bookingId: event.bookingId,
                   emailMasked: event.emailMasked,
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
               writer.write({
                 type: "data-direct-message",
                 id: event.formId,
+                transient: true,
                 data: {
                   formId: event.formId,
                   name: event.name,

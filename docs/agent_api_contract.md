@@ -170,7 +170,7 @@ data: {"type":"done"}
 data: {"type":"error","message":"…"}
 ```
 
-Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list, direct message) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → `data-otp`, `ui`/`meetings_list` → `data-meetings-list`, and `ui`/`direct_message` → `data-direct-message`; the agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
+Text deltas arrive token-by-token as the LLM generates them, including any short narration the assistant emits before calling a tool. UI frames (e.g. booking OTP, meetings list, direct message) are emitted when tools publish LangGraph custom stream events. The BFF (`/api/chat`) maps `delta` → AI SDK text parts, `ui`/`otp` → transient `data-otp`, `ui`/`meetings_list` → `data-meetings-list`, and `ui`/`direct_message` → transient `data-direct-message`. Transient parts reach `useChat({ onData })` without remaining on `message.parts`. The agent API never speaks the AI SDK wire protocol itself (it also serves voice channels).
 
 ### Booking confirm / cancel / pending + cancel confirmed meetings
 

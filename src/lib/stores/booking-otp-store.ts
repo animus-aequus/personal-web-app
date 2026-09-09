@@ -57,11 +57,8 @@ export const useBookingOtpStore = create<BookingOtpStore>((set) => ({
       if (state.dismissedBookingIds.has(payload.bookingId)) {
         return state;
       }
-      // Do not clobber success/error UI when a stale data-otp part reappears.
-      if (
-        state.active?.bookingId === payload.bookingId &&
-        state.active.status !== "pending"
-      ) {
+      // Same booking: keep current row (rehydrate extras, pending, or success/error).
+      if (state.active?.bookingId === payload.bookingId) {
         return state;
       }
       return {

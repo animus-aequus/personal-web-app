@@ -77,6 +77,7 @@ personal-website/                 # this repo
 | `lib/chat/chat-message-validation.ts` | Chat turn limits (`CHAT_MESSAGE_MAX` 1000, input ceiling 1500, body 10 KiB) |
 | `lib/chat/chat-message-errors.ts` | Message-too-long toast + BFF 400 handling |
 | `lib/chat/chat-user-text.ts` | Extract last user text from `useChat` messages for transport |
+| `lib/chat/apply-gen-ui-event.ts` | Widget ingest: text `onData` + LiveKit `ui_events` → Zustand |
 | `lib/utils.ts` | `cn()` and shared utilities |
 
 ## Where to add changes

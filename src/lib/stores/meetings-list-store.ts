@@ -24,6 +24,11 @@ export const useMeetingsListStore = create<MeetingsListStore>((set) => ({
   activeListId: null,
   activeMeetings: [],
   setActiveList: (listId, meetings) =>
-    set({ activeListId: listId, activeMeetings: meetings }),
+    set((state) => {
+      if (state.activeListId === listId) {
+        return state;
+      }
+      return { activeListId: listId, activeMeetings: meetings };
+    }),
   clear: () => set({ activeListId: null, activeMeetings: [] }),
 }));

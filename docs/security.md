@@ -162,13 +162,13 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **Routes:** thin proxies forwarding `X-Session-Secret` + client IP; precise booking RL is on the agent (Postgres action budget).
 
-**UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; rehydrated via `GET /api/bookings/pending` on bootstrap. LiveKit topic `ui_events`.
+**UI:** GenUI OTP card (shadcn `input-otp`) — inline in text chat, overlay in voice; opened by `useChat` `onData` / LiveKit `ui_events` → `applyGenUiEvent` (not a `messages` scan). Rehydrated via `GET /api/bookings/pending` on bootstrap.
 
 ### Meetings list + cancel OTP
 
 **Modules:** `meetings-list-card.tsx`, `booking-cancel-otp-card.tsx`, `meetings-list-store.ts`, `booking-cancel-otp-store.ts`, BFF `/api/bookings/cancel-request`, `/api/cancellations/*`, history `parts`
 
-**UI:** `meetings_list` GenUI is part of assistant message history (`parts`); Cancel buttons only while `activeListId` matches (Zustand, cleared on refresh). Cancel OTP cards are ephemeral (multi-stack), rehydrated via `GET /api/cancellations/pending`. Voice: scrollable overlay above chrome (list + cancel OTPs + confirm OTP). Cancel-request **409** `email_suppressed` → toast (OTP email blocked by agent SES suppress list).
+**UI:** `meetings_list` GenUI is part of assistant message history (`parts`); live ingest sets Zustand `activeListId` via `applyGenUiEvent` (`onData` / `ui_events`). Cancel buttons only while `activeListId` matches (cleared on refresh). Cancel OTP cards are ephemeral (multi-stack), rehydrated via `GET /api/cancellations/pending`. Voice: scrollable overlay above chrome (list + cancel OTPs + confirm OTP). Cancel-request **409** `email_suppressed` → toast (OTP email blocked by agent SES suppress list).
 
 ### Direct message GenUI
 
@@ -176,7 +176,7 @@ BFF still forwards client IP as `X-Forwarded-For` on agent REST calls (`agent-cl
 
 **Behaviour:**
 
-- Tool `open_direct_message_form` opens an ephemeral form (SSE `ui`/`direct_message` → `data-direct-message`, LiveKit `ui_events`). Not stored in history `parts`; no pending rehydrate.
+- Tool `open_direct_message_form` opens an ephemeral form (SSE `ui`/`direct_message` → transient `data-direct-message` → `onData`, LiveKit `ui_events` → `applyGenUiEvent`). Not stored in history `parts`; no pending rehydrate.
 - Send: FE+BE validation → agent dual-window DM limit (row counts on `direct_messages`) → Telegram notify + insert → system-note with name/email/message.
 - Cancel: agent action budget → system-note only (`Private message cancelled`).
 

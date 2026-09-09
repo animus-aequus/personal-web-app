@@ -26,6 +26,9 @@ export const useDirectMessageStore = create<DirectMessageStore>((set) => ({
       if (state.dismissedFormIds.has(payload.formId)) {
         return state;
       }
+      if (state.active?.formId === payload.formId) {
+        return state;
+      }
       return {
         active: {
           formId: payload.formId,

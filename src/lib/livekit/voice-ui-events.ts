@@ -4,12 +4,10 @@ import type { UseSessionReturn } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { useEffect } from "react";
 
+import { applyGenUiEvent } from "@/lib/chat/apply-gen-ui-event";
 import { showChatMessageTooLongToast } from "@/lib/chat/chat-message-errors";
 import { CHAT_MESSAGE_MAX } from "@/lib/chat/chat-message-validation";
-import { useBookingOtpStore } from "@/lib/stores/booking-otp-store";
 import { useChatStore } from "@/lib/stores/chat-store";
-import { useDirectMessageStore } from "@/lib/stores/direct-message-store";
-import { useMeetingsListStore } from "@/lib/stores/meetings-list-store";
 import { applyAssistantPaused } from "@/lib/stores/public-pause-store";
 import { useRateLimitStore } from "@/lib/stores/rate-limit-store";
 
@@ -164,9 +162,6 @@ function parseUiEvent(raw: Uint8Array): UiPayload | null {
 
 /** Subscribe to LiveKit `ui_events` (OTP, meetings list, direct message GenUI). */
 export function useVoiceUiEvents(session: UseSessionReturn) {
-  const setFromPayload = useBookingOtpStore((s) => s.setFromPayload);
-  const setActiveList = useMeetingsListStore((s) => s.setActiveList);
-  const setDirectMessage = useDirectMessageStore((s) => s.setFromPayload);
   const showRateLimit = useRateLimitStore((s) => s.show);
 
   useEffect(() => {
@@ -188,22 +183,12 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
       if (!event) {
         return;
       }
-      if (event.type === "booking_otp") {
-        setFromPayload({
-          bookingId: event.bookingId,
-          emailMasked: event.emailMasked,
-          expiresAt: event.expiresAt,
-          attemptsLeft: event.attemptsLeft ?? 5,
-        });
-        return;
-      }
-      if (event.type === "direct_message") {
-        setDirectMessage({
-          formId: event.formId,
-          name: event.name,
-          email: event.email,
-          phoneNumber: event.phoneNumber,
-        });
+      if (
+        event.type === "booking_otp" ||
+        event.type === "direct_message" ||
+        event.type === "meetings_list"
+      ) {
+        applyGenUiEvent(event);
         return;
       }
       if (event.type === "rate_limit") {
@@ -218,16 +203,12 @@ export function useVoiceUiEvents(session: UseSessionReturn) {
         void applyAssistantPaused(sessionType);
         return;
       }
-      if (event.type === "message_too_long") {
-        showChatMessageTooLongToast(event.maxChars);
-        return;
-      }
-      setActiveList(event.listId, event.meetings);
+      showChatMessageTooLongToast(event.maxChars);
     };
 
     room.on(RoomEvent.DataReceived, onDataReceived);
     return () => {
       room.off(RoomEvent.DataReceived, onDataReceived);
     };
-  }, [session.room, setFromPayload, setActiveList, setDirectMessage, showRateLimit]);
+  }, [session.room, showRateLimit]);
 }

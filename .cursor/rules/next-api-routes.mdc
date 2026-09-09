@@ -24,6 +24,7 @@ Shared client: `src/lib/agent-client.ts` (`AGENT_API_BASE_URL`, optional `WEB_AP
 - Reject empty / oversized `message` (max **1000** trimmed characters); optional early reject when `Content-Length` exceeds **10 KiB** (`CHAT_REQUEST_MAX_BODY_BYTES`)
 - Call `openAgentChatStream(sessionId, message)` — consume agent SSE and re-emit as AI SDK UI message stream
 - Forward each delta as `text-delta` inside `createUIMessageStream` (mapping to AI SDK protocol lives here, not in the agent)
+- Map agent `ui` frames to `data-otp` / `data-meetings-list` / `data-direct-message`; OTP and DM are `transient: true` so they hit `useChat({ onData })` without sticking on `message.parts`
 
 ## Session route pattern
 

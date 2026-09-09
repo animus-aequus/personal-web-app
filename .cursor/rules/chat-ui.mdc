@@ -43,6 +43,7 @@ new DefaultChatTransport({
 - Limits: **1000** chars per turn (`CHAT_MESSAGE_MAX`); paste soft-cap **1500** code points in control bar (`CHAT_MESSAGE_INPUT_CEILING`)
 - Map AI SDK `UIMessage` → `ChatMessage` with `source: "text"`
 - Loading state from `status === "submitted" | "streaming"`
+- GenUI (OTP, meetings list, DM): `onData` → `applyGenUiFromDataPart` (`src/lib/chat/apply-gen-ui-event.ts`). Voice uses the same `applyGenUiEvent` from LiveKit `ui_events`. Do **not** scan `messages.parts` in a `useEffect` to open widgets.
 
 ## Zustand store (`chat-store.ts`)
 
@@ -72,3 +73,4 @@ new DefaultChatTransport({
 - Use session transcriptions as persisted chat history
 - Create `useChat` before `sessionId` is known
 - Keep chat mounted in the `(site)` layout across `/chat` ↔ `/terms` / `/about-me`
+- Sync GenUI widgets from `useChat.messages` in a `useEffect` (use `onData` / `applyGenUiEvent`)

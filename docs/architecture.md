@@ -69,8 +69,9 @@ Mid-session pause (text **503** `assistant_paused`, voice `ui_events`) still use
 
 1. User sends via control bar → `useChat` with `DefaultChatTransport` → `/api/chat`, body `{ sessionId, message }` (last user turn only; agent checkpointer holds history). Limits: **1000 characters** per turn (`CHAT_MESSAGE_MAX`); textarea paste soft-cap **1500** code points (`CHAT_MESSAGE_INPUT_CEILING`); BFF rejects `Content-Length` **> 10 KiB** on the single-turn JSON body before parse. Live UI error + BFF **400** before agent proxy.
 2. Route Handler calls `openAgentChatStream()` → agent API `POST /api/v1/chat/stream`.
-3. Token deltas re-emitted as AI SDK SSE (`createUIMessageStream`) for `useChat`.
-4. Messages mapped with `source: "text"`.
+3. Token deltas re-emitted as AI SDK SSE (`createUIMessageStream`) for `useChat`. GenUI frames (`ui` / otp, meetings_list, direct_message) become `data-*` parts. OTP and direct-message parts are **transient** (delivered to `useChat({ onData })`, not kept on `message.parts`); meetings lists stay on the live assistant message for the bubble.
+4. `onData` calls `applyGenUiFromDataPart` → Zustand widget stores. LiveKit `ui_events` uses the same `applyGenUiEvent`. Do not scan `messages` in an effect to open cards.
+5. Messages mapped with `source: "text"`.
 
 ### Web voice (LiveKit)
 
@@ -127,6 +128,12 @@ Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` —
 **Decision:** `/api/chat` proxies agent API `POST /api/v1/chat/stream` and re-emits plain SSE deltas as the Vercel AI SDK UI message stream.
 
 **Why:** `useChat` expects the AI SDK transport shape; the agent API streams token-by-token over its own SSE protocol (see `agent_api_contract.md`).
+
+### GenUI widgets via event ingest
+
+**Decision:** Booking OTP, meetings list, and direct-message cards are opened by applying a widget event at the stream boundary (`useChat` `onData` for text, LiveKit `ui_events` for voice) through `applyGenUiEvent` in `src/lib/chat/apply-gen-ui-event.ts`. Pending booking OTP still rehydrates from `GET /api/bookings/pending` after session bootstrap.
+
+**Why:** AI SDK `data-*` parts are append-only on the live `messages` list. Widget lifecycle is shorter (dismiss after confirm/cancel). Scanning `messages` in a `useEffect` re-applied stale parts on every token and could resurrect a dismissed card.
 
 ### Background aura via a normalized activity phase
 

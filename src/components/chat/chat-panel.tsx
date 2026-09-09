@@ -27,6 +27,7 @@ import { RateLimitModal } from "@/components/chat/rate-limit-modal";
 import { Button } from "@/components/ui/button";
 import { AgentAura } from "@/components/visualizer/agent-aura";
 import { VoiceAuraBridge } from "@/components/visualizer/voice-aura-bridge";
+import { applyGenUiFromDataPart } from "@/lib/chat/apply-gen-ui-event";
 import { mergeMessagesById } from "@/lib/chat/history-api";
 import type { HistoryStatus } from "@/lib/chat/use-chat-history";
 import { useChatSession } from "@/lib/chat/use-chat-session";
@@ -442,6 +443,7 @@ function TextChatArea({
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
     transport,
+    onData: (part) => applyGenUiFromDataPart(part),
     onError: (error) => {
       if (
         error.message === "rate_limit_exceeded" ||
@@ -457,103 +459,11 @@ function TextChatArea({
     },
   });
 
-  const setOtpFromPayload = useBookingOtpStore((s) => s.setFromPayload);
   const bookingOtpActive = useBookingOtpStore((s) => s.active);
-  const setActiveList = useMeetingsListStore((s) => s.setActiveList);
   const activeListId = useMeetingsListStore((s) => s.activeListId);
   const activeMeetings = useMeetingsListStore((s) => s.activeMeetings);
   const cancelOtpItems = useBookingCancelOtpStore((s) => s.items);
-  const setDirectMessageFromPayload = useDirectMessageStore(
-    (s) => s.setFromPayload,
-  );
   const directMessageActive = useDirectMessageStore((s) => s.active);
-
-  useEffect(() => {
-    // Only the latest data-otp part matters; older parts stay in useChat history
-    // after confirm/cancel and must not resurrect a dismissed widget.
-    let latest: {
-      bookingId: string;
-      emailMasked: string;
-      expiresAt: string;
-      attemptsLeft?: number;
-    } | null = null;
-    let latestList: {
-      listId: string;
-      meetings: typeof activeMeetings;
-    } | null = null;
-    let latestDm: {
-      formId: string;
-      name?: string;
-      email?: string;
-      phoneNumber?: string;
-    } | null = null;
-
-    for (const message of messages) {
-      for (const part of message.parts) {
-        if (part.type === "data-otp") {
-          const data = part.data as {
-            bookingId?: string;
-            emailMasked?: string;
-            expiresAt?: string;
-            attemptsLeft?: number;
-          };
-          if (
-            typeof data.bookingId === "string" &&
-            typeof data.emailMasked === "string" &&
-            typeof data.expiresAt === "string"
-          ) {
-            latest = {
-              bookingId: data.bookingId,
-              emailMasked: data.emailMasked,
-              expiresAt: data.expiresAt,
-              attemptsLeft: data.attemptsLeft,
-            };
-          }
-        } else if (part.type === "data-meetings-list") {
-          const data = part.data as {
-            listId?: string;
-            meetings?: typeof activeMeetings;
-          };
-          if (typeof data.listId === "string" && Array.isArray(data.meetings)) {
-            latestList = { listId: data.listId, meetings: data.meetings };
-          }
-        } else if (part.type === "data-direct-message") {
-          const data = part.data as {
-            formId?: string;
-            name?: string;
-            email?: string;
-            phoneNumber?: string;
-          };
-          if (typeof data.formId === "string") {
-            latestDm = {
-              formId: data.formId,
-              name: typeof data.name === "string" ? data.name : undefined,
-              email: typeof data.email === "string" ? data.email : undefined,
-              phoneNumber:
-                typeof data.phoneNumber === "string"
-                  ? data.phoneNumber
-                  : undefined,
-            };
-          }
-        }
-      }
-    }
-
-    if (latest) {
-      setOtpFromPayload({
-        bookingId: latest.bookingId,
-        emailMasked: latest.emailMasked,
-        expiresAt: latest.expiresAt,
-        attemptsLeft: latest.attemptsLeft ?? 5,
-      });
-    }
-    if (latestList) {
-      setActiveList(latestList.listId, latestList.meetings);
-    }
-    if (latestDm) {
-      setDirectMessageFromPayload(latestDm);
-    }
-  }, [messages, setOtpFromPayload, setActiveList, setDirectMessageFromPayload]);
 
   const handleSend = useCallback(
     async (text: string) => {
