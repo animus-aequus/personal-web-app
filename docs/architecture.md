@@ -97,6 +97,10 @@ Each voice enable uses a **new room name** (see ADR below). Chat `sessionId` sta
 
 Live preview “Hearing: …” uses `useSessionMessages` / `userTranscript` — **not** the chat transcript list.
 
+**Stream render cost:** `useChat` gets `experimental_throttle` (50 ms) so token deltas do not clock the whole panel, and `TextChatArea` maps each `UIMessage` through a `WeakMap` cache (`stableChatMessage`) keyed on the source object plus its `trimEnd` flag. `useChat` replaces only the streaming message object per delta, so settled rows keep their `ChatMessage` identity and the memoized `MessageRow` bails out — a delta re-renders the live row only. Any new prop passed to `MessageRow` must therefore be referentially stable, or the bailout is lost for every row.
+
+**Stick-to-bottom:** `MessageList` latches auto-follow off when the user scrolls up, so `onScroll` must distinguish a gesture from layout. A shorter column clamps `scrollTop` down by itself — trailing whitespace trimmed at stream settle, or the control-bar chrome changing the bottom inset — so a decrease is only treated as “scrolled up” when `scrollHeight` did not shrink. Without that guard a single settle-trim permanently disabled auto-follow for the rest of the session.
+
 ## Architectural decisions
 
 ### BFF proxy for agent REST

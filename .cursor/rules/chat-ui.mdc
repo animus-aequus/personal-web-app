@@ -45,6 +45,13 @@ new DefaultChatTransport({
 - Loading state from `status === "submitted" | "streaming"`
 - GenUI (OTP, meetings list, DM): `onData` → `applyGenUiFromDataPart` (`src/lib/chat/apply-gen-ui-event.ts`). Voice uses the same `applyGenUiEvent` from LiveKit `ui_events`. Do **not** scan `messages.parts` in a `useEffect` to open widgets.
 
+## Stream render cost
+
+- `useChat` runs with `experimental_throttle: CHAT_STREAM_THROTTLE_MS` (50 ms); paced reveal (`use-smooth-text-reveal`) stays the visual clock
+- `UIMessage` → `ChatMessage` goes through the `stableChatMessage` `WeakMap` cache so settled rows keep their identity and memoized `MessageRow` bails out on a token delta
+- Every prop passed to `MessageRow` must be referentially stable (read `t` inside the row, hand it `useCallback` handlers) — one unstable prop re-renders the whole list per delta
+- `MessageList.onScroll` only treats a `scrollTop` decrease as “user scrolled up” when `scrollHeight` did not shrink; a shorter column (settle trim, chrome inset) clamps scroll on its own and must not disable auto-follow
+
 ## Zustand store (`chat-store.ts`)
 
 - Persist key: `personal-agent-chat`

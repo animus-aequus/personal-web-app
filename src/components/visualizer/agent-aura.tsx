@@ -1,7 +1,7 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
@@ -274,7 +274,9 @@ function AuraQuad({ reduceMotion }: { reduceMotion: boolean }) {
   );
 }
 
-export function AgentAura() {
+/** Memoized: takes no props and reads the aura phase from the store, so a chat
+ * panel re-render must not reconcile the WebGL canvas. */
+export const AgentAura = memo(function AgentAura() {
   const reduceMotion = usePrefersReducedMotion();
   const [active, setActive] = useState(false);
   const { glEpoch, onContextLost } = useWebGlRemountEpoch();
@@ -334,4 +336,4 @@ export function AgentAura() {
       </Canvas>
     </div>
   );
-}
+});

@@ -1,7 +1,14 @@
 "use client";
 
 import { CirclePause } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import { ChatLoadingSpinner } from "@/components/chat/chat-loading-spinner";
@@ -53,6 +60,121 @@ function isNearBottom(element: HTMLDivElement): boolean {
   return distance <= STICK_TO_BOTTOM_THRESHOLD_PX;
 }
 
+type MessageRowProps = {
+  message: ChatMessage;
+  sessionId?: string | null;
+  /** This row is the paced-reveal target (only ever the live text reply). */
+  smoothReveal: boolean;
+  isStreaming: boolean;
+  onRevealSettled: (messageId: string) => void;
+};
+
+/**
+ * Memoized so a token delta only re-renders the live row. Requires stable
+ * `ChatMessage` references from the parent (`stableChatMessage` in
+ * `chat-panel.tsx`); `t` is read here rather than passed so its identity
+ * cannot break the bailout.
+ */
+const MessageRow = memo(function MessageRow({
+  message,
+  sessionId,
+  smoothReveal,
+  isStreaming,
+  onRevealSettled,
+}: MessageRowProps) {
+  const { t } = useTranslation();
+
+  if (message.role === "system-note") {
+    return (
+      <div
+        role="status"
+        className="mx-auto rounded-full bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+      >
+        {formatSystemNoteText(t, {
+          kind: message.kind,
+          params: message.params,
+          fallback: message.content,
+        })}
+      </div>
+    );
+  }
+
+  const isInterruptedAssistant =
+    message.role === "assistant" && message.interrupted;
+  const isTruncatedUser = message.role === "user" && message.interrupted;
+  const useSmoothReveal =
+    smoothReveal &&
+    message.role === "assistant" &&
+    message.source === "text" &&
+    !message.interrupted &&
+    Boolean(message.content);
+
+  return (
+    <article
+      className={cn(
+        "text-sm leading-relaxed",
+        message.role === "user" &&
+          cn(
+            "ml-auto max-w-[85%] text-foreground",
+            !isTruncatedUser && "rounded-2xl bg-card px-4 py-3",
+          ),
+          // Fixed (not max-) width: this is a flex item in a column
+          // flex container, so an auto margin + auto width would
+          // shrink-to-fit its content instead of taking a stable
+          // width — that's what made GenUI cards vary in size.
+        message.role === "assistant" && "mr-auto w-[85%] text-foreground",
+      )}
+    >
+      {isTruncatedUser ? (
+        <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-8 dark:border-amber-500/15">
+          <MessageContent content={message.content} />
+          <VoiceTurnTruncatedBadge title={t("chat.lengthTruncated")} />
+        </div>
+      ) : isInterruptedAssistant ? (
+        <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-7 dark:border-amber-500/15">
+          <MessageContent content={message.content} />
+          <span
+            className="absolute -right-2.5 -top-2.5 flex items-center justify-center bg-background p-1 text-amber-600/55 dark:text-amber-500/50"
+            title={t("chat.interrupted")}
+            aria-label={t("chat.interrupted")}
+          >
+            <CirclePause className="size-3.5" aria-hidden />
+          </span>
+        </div>
+      ) : (
+        <>
+          {message.content ? (
+            useSmoothReveal ? (
+              <SmoothStreamingText
+                key={message.id}
+                messageId={message.id}
+                content={message.content}
+                isStreaming={isStreaming}
+                onSettled={() => onRevealSettled(message.id)}
+              />
+            ) : (
+              <MessageContent content={message.content} />
+            )
+          ) : null}
+          {message.parts?.map((part) => {
+            if (part.type !== "meetings_list" || !sessionId) {
+              return null;
+            }
+            return (
+              <MeetingsListCard
+                key={part.listId}
+                listId={part.listId}
+                meetings={part.meetings}
+                sessionId={sessionId}
+              />
+            );
+          })}
+        </>
+      )}
+    </article>
+  );
+});
+
 export function MessageList({
   messages,
   isLoading,
@@ -73,6 +195,7 @@ export function MessageList({
   const stickToBottomRef = useRef(true);
   const isInitialScrollRef = useRef(true);
   const lastScrollTopRef = useRef(0);
+  const lastScrollHeightRef = useRef(0);
   const programmaticScrollRef = useRef(false);
   const pendingPreserveRef = useRef<{ height: number; top: number } | null>(null);
   const prevFirstIdRef = useRef<string | undefined>(undefined);
@@ -138,13 +261,21 @@ export function MessageList({
     }
 
     const onScroll = () => {
+      // A shorter column clamps `scrollTop` down on its own — trailing
+      // whitespace trimmed at stream settle, or the control-bar chrome
+      // shrinking the bottom inset. That is layout, not a gesture, so it must
+      // not read as "user scrolled up" and latch auto-follow off.
+      const shrank = element.scrollHeight < lastScrollHeightRef.current;
+      lastScrollHeightRef.current = element.scrollHeight;
+
       if (programmaticScrollRef.current) {
         programmaticScrollRef.current = false;
         lastScrollTopRef.current = element.scrollTop;
         return;
       }
 
-      const scrolledUp = element.scrollTop < lastScrollTopRef.current - 1;
+      const scrolledUp =
+        !shrank && element.scrollTop < lastScrollTopRef.current - 1;
       lastScrollTopRef.current = element.scrollTop;
 
       if (scrolledUp) {
@@ -282,97 +413,16 @@ export function MessageList({
           </p>
         ) : null}
         {messages.map((message) => {
-          if (message.role === "system-note") {
-            return (
-              <div
-                key={message.id}
-                role="status"
-                className="mx-auto rounded-full bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
-              >
-                {formatSystemNoteText(t, {
-                  kind: message.kind,
-                  params: message.params,
-                  fallback: message.content,
-                })}
-              </div>
-            );
-          }
-
-          const isInterruptedAssistant =
-            message.role === "assistant" && message.interrupted;
-          const isTruncatedUser =
-            message.role === "user" && message.interrupted;
-          const useSmoothReveal =
-            message.id === smoothMessageId &&
-            message.role === "assistant" &&
-            message.source === "text" &&
-            !message.interrupted &&
-            Boolean(message.content);
-
+          const isSmoothTarget = message.id === smoothMessageId;
           return (
-            <article
+            <MessageRow
               key={message.id}
-              className={cn(
-                "text-sm leading-relaxed",
-                message.role === "user" &&
-                  cn(
-                    "ml-auto max-w-[85%] text-foreground",
-                    !isTruncatedUser && "rounded-2xl bg-card px-4 py-3",
-                  ),
-                  // Fixed (not max-) width: this is a flex item in a column
-                  // flex container, so an auto margin + auto width would
-                  // shrink-to-fit its content instead of taking a stable
-                  // width — that's what made GenUI cards vary in size.
-                message.role === "assistant" && "mr-auto w-[85%] text-foreground",
-              )}
-            >
-              {isTruncatedUser ? (
-                <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-8 dark:border-amber-500/15">
-                  <MessageContent content={message.content} />
-                  <VoiceTurnTruncatedBadge title={t("chat.lengthTruncated")} />
-                </div>
-              ) : isInterruptedAssistant ? (
-                <div className="relative rounded-xl border border-amber-500/20 px-4 py-3 pr-7 dark:border-amber-500/15">
-                  <MessageContent content={message.content} />
-                  <span
-                    className="absolute -right-2.5 -top-2.5 flex items-center justify-center bg-background p-1 text-amber-600/55 dark:text-amber-500/50"
-                    title={t("chat.interrupted")}
-                    aria-label={t("chat.interrupted")}
-                  >
-                    <CirclePause className="size-3.5" aria-hidden />
-                  </span>
-                </div>
-              ) : (
-                <>
-                  {message.content ? (
-                    useSmoothReveal ? (
-                      <SmoothStreamingText
-                        key={message.id}
-                        messageId={message.id}
-                        content={message.content}
-                        isStreaming={Boolean(isLoading)}
-                        onSettled={() => clearSmoothMessage(message.id)}
-                      />
-                    ) : (
-                      <MessageContent content={message.content} />
-                    )
-                  ) : null}
-                  {message.parts?.map((part) => {
-                    if (part.type !== "meetings_list" || !sessionId) {
-                      return null;
-                    }
-                    return (
-                      <MeetingsListCard
-                        key={part.listId}
-                        listId={part.listId}
-                        meetings={part.meetings}
-                        sessionId={sessionId}
-                      />
-                    );
-                  })}
-                </>
-              )}
-            </article>
+              message={message}
+              sessionId={sessionId}
+              smoothReveal={isSmoothTarget}
+              isStreaming={isSmoothTarget && Boolean(isLoading)}
+              onRevealSettled={clearSmoothMessage}
+            />
           );
         })}
         {showOtpInline && sessionId ? (

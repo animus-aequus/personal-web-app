@@ -85,6 +85,12 @@ const CHAT_FADE_MS = 350;
 const DEFAULT_CHROME_HEIGHT_PX = 96;
 /** Extra scroll padding so the last message clears the control bar visually. */
 const CHAT_MESSAGE_CHROME_GAP_PX = 24;
+/**
+ * Throttles `useChat` message notifications at the source, so token deltas do
+ * not clock the whole panel. `status` keeps its own unthrottled subscription,
+ * and paced reveal (`use-smooth-text-reveal`) stays the visual clock.
+ */
+const CHAT_STREAM_THROTTLE_MS = 50;
 
 /**
  * Must match `bg-background/70` on the chrome wash so the scroll fade lands on
@@ -175,6 +181,38 @@ function uiMessageToChatMessage(
     source: "text",
     parts: parts.length > 0 ? parts : undefined,
   };
+}
+
+/**
+ * Maps each `UIMessage` once per source object so settled rows keep their
+ * identity across token deltas and `MessageRow` can bail out of re-rendering.
+ *
+ * `useChat` replaces only the streaming message object per delta (settled ones
+ * are carried over by reference), which makes object identity a safe cache key.
+ * `trimEnd` is validated too: it flips for an otherwise unchanged message once
+ * the stream ends and paced reveal settles.
+ */
+const stableChatMessages = new WeakMap<
+  UIMessage,
+  { trimEnd: boolean; result: ChatMessage | null }
+>();
+
+function stableChatMessage(
+  sessionId: string,
+  message: UIMessage,
+  trimEnd: boolean,
+): ChatMessage | null {
+  const cached = stableChatMessages.get(message);
+  if (cached && cached.trimEnd === trimEnd) {
+    return cached.result;
+  }
+
+  const base = uiMessageToChatMessage(message, { trimEnd });
+  const result: ChatMessage | null = base
+    ? { ...base, timestamp: stableTextTimestamp(sessionId, message.id) }
+    : null;
+  stableChatMessages.set(message, { trimEnd, result });
+  return result;
 }
 
 type TextChatAreaProps = {
@@ -443,6 +481,7 @@ function TextChatArea({
   const { messages, sendMessage, status } = useChat({
     id: sessionId,
     transport,
+    experimental_throttle: CHAT_STREAM_THROTTLE_MS,
     onData: (part) => applyGenUiFromDataPart(part),
     onError: (error) => {
       if (
@@ -484,22 +523,16 @@ function TextChatArea({
         : undefined;
 
     const textMessages = messages
-      .map((message) => {
-        const base = uiMessageToChatMessage(message, {
+      .map((message) =>
+        stableChatMessage(
+          sessionId,
+          message,
           // Keep trailing whitespace while the live assistant reply is still
           // streaming or paced reveal is finishing so token boundaries stay stable.
-          trimEnd:
-            message.id !== liveAssistantId &&
+          message.id !== liveAssistantId &&
             message.id !== smoothRevealMessageId,
-        });
-        if (!base) {
-          return null;
-        }
-        return {
-          ...base,
-          timestamp: stableTextTimestamp(sessionId, message.id),
-        };
-      })
+        ),
+      )
       .filter((message): message is ChatMessage => message !== null);
 
     return mergeMessagesById(historyRows, textMessages);

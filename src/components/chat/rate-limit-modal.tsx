@@ -1,7 +1,7 @@
 "use client";
 
 import { Clock } from "lucide-react";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -100,7 +100,7 @@ function RateLimitModalContent({
   );
 }
 
-export function RateLimitModal() {
+export const RateLimitModal = memo(function RateLimitModal() {
   const open = useRateLimitStore((s) => s.open);
   const action = useRateLimitStore((s) => s.action);
   const retryAt = useRateLimitStore((s) => s.retryAt);
@@ -117,4 +117,4 @@ export function RateLimitModal() {
       onAcknowledge={dismiss}
     />
   );
-}
+});

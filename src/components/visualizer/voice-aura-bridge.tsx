@@ -5,7 +5,7 @@ import {
   useVoiceAssistant,
   type TrackReference,
 } from "@livekit/components-react";
-import { useEffect } from "react";
+import { memo, useEffect } from "react";
 
 import {
   type AuraPhase,
@@ -17,7 +17,11 @@ import {
  * aura phase while voice mode is active. Must render inside `SessionProvider`.
  * When inactive it yields control of the phase to the text-chat bridge.
  */
-export function VoiceAuraBridge({ active }: { active: boolean }) {
+export const VoiceAuraBridge = memo(function VoiceAuraBridge({
+  active,
+}: {
+  active: boolean;
+}) {
   const { state, audioTrack } = useVoiceAssistant();
   const volume = useTrackVolume(
     audioTrack as TrackReference,
@@ -52,4 +56,4 @@ export function VoiceAuraBridge({ active }: { active: boolean }) {
   }, [active, state, volume, setAudioLevel]);
 
   return null;
-}
+});

@@ -13,6 +13,7 @@ import { AnimatePresence, motion } from "motion/react";
 import {
   type FormEvent,
   type KeyboardEvent,
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -151,7 +152,7 @@ function primaryDisabled(state: VoiceChromeState | null, disabled: boolean): boo
   return state === "loading" || state === "thinking";
 }
 
-export function ChatControlBar({
+export const ChatControlBar = memo(function ChatControlBar({
   onSend,
   onVoiceToggle,
   onExitVoice,
@@ -732,4 +733,4 @@ export function ChatControlBar({
       </div>
     </div>
   );
-}
+});

@@ -1,7 +1,9 @@
+import { memo } from "react";
+
 /**
  * Non-interactive watermark shown while the agent is in beta.
  */
-export function AgentBetaBadge() {
+export const AgentBetaBadge = memo(function AgentBetaBadge() {
   return (
     <p
       aria-hidden
@@ -10,4 +12,4 @@ export function AgentBetaBadge() {
       BETA
     </p>
   );
-}
+});

@@ -8,7 +8,7 @@ import {
   ExternalLink,
   Video,
 } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -201,10 +201,10 @@ function BookingSuccessDialogInner({ active }: { active: BookingOtpState }) {
  * Success modal mounted once in ChatPanel (not inside BookingOtpCard) so text
  * and voice mounts do not create duplicate dialogs.
  */
-export function BookingSuccessDialog() {
+export const BookingSuccessDialog = memo(function BookingSuccessDialog() {
   const active = useBookingOtpStore((s) => s.active);
   if (!active || active.status !== "success") {
     return null;
   }
   return <BookingSuccessDialogInner active={active} />;
-}
+});

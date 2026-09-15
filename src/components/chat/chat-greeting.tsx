@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import {
+  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -240,7 +241,9 @@ function GreetingContent({ reducedMotion }: GreetingContentProps) {
   );
 }
 
-export function ChatGreeting({ visible }: ChatGreetingProps) {
+export const ChatGreeting = memo(function ChatGreeting({
+  visible,
+}: ChatGreetingProps) {
   const reducedMotion = usePrefersReducedMotion();
   const { i18n } = useTranslation();
   /** WebGL first-frame (or fallback timer). Reduced-motion skips this gate. */
@@ -297,4 +300,4 @@ export function ChatGreeting({ visible }: ChatGreetingProps) {
       ) : null}
     </motion.div>
   );
-}
+});
